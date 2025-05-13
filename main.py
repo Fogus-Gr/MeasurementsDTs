@@ -1,5 +1,6 @@
 import argparse
 from movenet_hpe import MoveNetHPE
+from alphapose_hpe import AlphaPoseHPE
 
 def main():
     parser = parse_arguments()
@@ -25,7 +26,7 @@ def get_hpe_method(args):
     if name == 'movenet':
         return MoveNetHPE(input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, show_image=args.show_image)
     elif name == 'alphapose':
-        raise ValueError(f"Method not implemented yet!")
+        return AlphaPoseHPE(input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, show_image=args.show_image)
     elif name == 'openpose':
         raise ValueError(f"Method not implemented yet!")
     else:

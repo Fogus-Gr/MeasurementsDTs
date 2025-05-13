@@ -1,4 +1,7 @@
 __pycache__/
 .vscode/
+models/MoveNet
+models/AlphaPose/pretrained_models/fast_res50_256x192.pth
+models/AlphaPose/detector/yolo/data/yolov3-spp.weights
 out/
 *.log

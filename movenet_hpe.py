@@ -45,14 +45,15 @@ class MoveNetHPE(BaseHPE):
 
         return self.pd_exec_net.infer_new_request({self.pd_input_blob: frame_nn})
     
-    def pd_postprocess(self, inference):
-        result = np.squeeze(inference[self.pd_kps]) # 6x56
+    def postprocess(self, predictions):
+        result = np.squeeze(predictions[self.pd_kps]) # 6x56
         bodies = []
+        
         for i in range(6):
             kps = result[i][:51].reshape(17,-1)
             bbox = result[i][51:55].reshape(2,2)          
             score = result[i][55]
-            if score > self.score_thresh:
+            if score > self.score_thresh:   # TODO - use seperate keypoint scores
                 ymin, xmin, ymax, xmax = (bbox * [self.padding.padded_h, self.padding.padded_w]).flatten().astype(int)
 
                 kp_xy =kps[:,[1,0]]

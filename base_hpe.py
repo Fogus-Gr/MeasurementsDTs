@@ -90,16 +90,15 @@ class BaseHPE(ABC):
     
     def main_loop(self):
         if self.input_type == "image":
-            self.run_inference(self.img)
+            self.process_frame(self.img)
 
-    def run_inference(self, frame):
+    def process_frame(self, frame):
         padded = self.pad_and_resize(frame)
-
-        inference = self.run_model(padded)
-        bodies = self.pd_postprocess(inference)
+        predictions = self.run_model(padded)
+        bodies = self.postprocess(predictions)
 
         if self.save_image or self.show_image:
-            self.pd_render(frame, bodies)
+            self.render(frame, bodies)
 
             if self.input_type == "image" or self.input_type == "directory":
                 if self.save_image:
@@ -108,14 +107,14 @@ class BaseHPE(ABC):
                     cv2.imwrite(filename, frame)
     
     @abstractmethod
-    def pd_postprocess(self, inference):
-        pass
-
-    @abstractmethod
     def run_model(self, padded):
         pass
 
-    def pd_render(self, frame, bodies):
+    @abstractmethod
+    def postprocess(self, predictions):
+        pass
+
+    def render(self, frame, bodies):
         thickness = 3 
         color_skeleton = (255, 180, 90)
         color_box = (0,255,255)
