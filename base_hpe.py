@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import os
 from collections import namedtuple
+import glob
 
 class Body:
     def __init__(self, score, xmin, ymin, xmax, ymax, keypoints_score, keypoints, keypoints_norm):
@@ -29,7 +30,7 @@ class BaseHPE(ABC):
                 output_dir=None,
                 enable_json=False,
                 save_image=False,
-                show_image=False,
+                save_video=False,
                 score_thresh=0.2,
                 show_scores = True,
                 show_bounding_box = True):
@@ -37,7 +38,7 @@ class BaseHPE(ABC):
 
         self.json = enable_json
         self.save_image = save_image
-        self.show_image = show_image
+        self.save_video = save_video
         self.score_thresh = score_thresh
         self.show_scores = show_scores
         self.show_bounding_box = show_bounding_box
@@ -48,7 +49,7 @@ class BaseHPE(ABC):
         self.pd_h = 256
         self.current_image_file = ""
 
-        if self.json or self.save_image:
+        if self.json or self.save_image or self.save_video:
             if output_dir is not None:
                 self.output_dir = output_dir
             else:
@@ -60,6 +61,7 @@ class BaseHPE(ABC):
         if os.path.isdir(input_src):
             self.input_type = "directory"
             self.img_dir = input_src
+            self.video_fps = 25
         elif input_src:
             if input_src.endswith('.jpg') or input_src.endswith('.png'):
                 self.input_type = "image"
@@ -75,6 +77,7 @@ class BaseHPE(ABC):
                 self.cap = cv2.VideoCapture(input_src)
                 self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
                 self.cap.set(cv2.CAP_PROP_FOCUS, 0)
+                self.video_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
                 self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                 self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                 
@@ -84,27 +87,73 @@ class BaseHPE(ABC):
             
         self.input_src = input_src  
 
+        if (self.input_type == "directory" or self.input_type == "image") and self.save_video:
+            raise ValueError("image input - video output not supported!")
+
+        if self.save_video:
+            fourcc = cv2.VideoWriter_fourcc(*"MJPG")
+            filename = os.path.join(self.output_dir, "video.avi")
+            self.output = cv2.VideoWriter(filename, fourcc, self.video_fps, (self.img_w, self.img_h))
+
     @abstractmethod
     def load_model(self):
         pass
     
     def main_loop(self):
-        if self.input_type == "image":
-            self.process_frame(self.img)
+        frame_number = 0
 
-    def process_frame(self, frame):
+        if self.input_type == "image":
+            self.process_frame(self.img, frame_number)
+
+        elif self.input_type == "directory":
+            # Get all image files from the directory
+            image_files = glob.glob(os.path.join(self.img_dir, '*.[pjg][np][ge]*'))
+            print(f"Found {len(image_files)} images in {self.img_dir}")
+
+            # Sort files to ensure they are in alphanumeric order
+            image_files = sorted(image_files)
+            
+            total_frames = len(image_files)
+            for image_file in image_files:
+                print(f"Processing {frame_number+1}/{total_frames}")
+                self.img = cv2.imread(image_file)
+                if self.img is None:
+                    print(f"Failed to load image: {image_file}")
+                    continue
+
+                self.img_h, self.img_w = self.img.shape[:2]
+                self.set_padding()
+                self.process_frame(self.img, frame_number)
+
+                frame_number += 1
+        
+        else:   # webcam or video
+            print("Starting processing video/webcam data. Press CTR+C to exit")
+            while True:
+                ok, frame = self.cap.read()
+                if not ok:
+                    break
+
+                self.process_frame(frame, frame_number)
+
+                frame_number += 1
+
+    def process_frame(self, frame, frame_number):
         padded = self.pad_and_resize(frame)
         predictions = self.run_model(padded)
         bodies = self.postprocess(predictions)
 
-        if self.save_image or self.show_image:
+        if self.save_image or self.save_video:
             self.render(frame, bodies)
 
-            if self.input_type == "image" or self.input_type == "directory":
-                if self.save_image:
-                    frame_id = 0
-                    filename = os.path.join(self.output_dir, f"frame_{frame_id:04d}.jpg")
-                    cv2.imwrite(filename, frame)
+            if self.save_video:
+                if not self.output.isOpened():
+                    raise ValueError("Failed to open the video writer")
+                self.output.write(frame)
+
+            elif self.save_image:
+                filename = os.path.join(self.output_dir, f"frame_{frame_number:04d}.jpg")
+                cv2.imwrite(filename, frame)
     
     @abstractmethod
     def run_model(self, padded):

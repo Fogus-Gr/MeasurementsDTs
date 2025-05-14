@@ -6,7 +6,7 @@ This project provides baseline implementations for three 2D Human Pose Estimatio
 
 - Ubuntu 20.04
 - Python 3.8+
-- OpenVINO
+- OpenVINO 2024.2
 
 ##  Getting Started
 
