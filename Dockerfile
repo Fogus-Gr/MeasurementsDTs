@@ -1,9 +1,10 @@
-FROM  openvino/ubuntu20_dev:latest
-# Set the working directory
+FROM openvino/ubuntu22_dev:latest
+
+USER root
+
 WORKDIR /app
-# Copy the current directory contents into the container at /app
 COPY . /app
-# Install any needed packages specified in requirements.txt
+
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
@@ -22,7 +23,8 @@ RUN pip3 install --no-cache-dir gdown
 RUN mkdir -p models/AlphaPose/pretrained_models && \
     mkdir -p models/AlphaPose/detector/yolo/data && \
     gdown --id 1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI -O models/AlphaPose/pretrained_models/fast_res50_256x192.pth && \
-    gdown --id 1k-9cUGcdH5ZFN1NcMvZrO0ApW241tboD -O models/AlphaPose/detector/yolo/data/yolov3-spp.weights
+    gdown --id 1k-9cUGcdH5ZFN1NcMvZrO0ApW241tboD -O models/AlphaPose/detector/yolo/data/yolov3-spp.weights \
+    gdown --id 15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr -O models/MoveNet/movenet_multipose_lightning_256x256_FP32.bin
 
 # Run app.py when the container launches
 CMD ["python3", "main.py", "--method", "alphapose", "--input", "testImage.jpg", "--save_image"]
