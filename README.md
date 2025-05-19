@@ -5,8 +5,19 @@ This project provides baseline implementations for three 2D Human Pose Estimatio
 ## Dependencies
 
 - Ubuntu 20.04
-- Python 3.8+
-- OpenVINO 2024.2
+- Python 3.8.10
+- OpenVINO 2024.2.0
+
+### Additional Packages
+opencv-python==4.10.0.84
+numpy==1.24.4
+torch==2.4.1
+torchvision==0.19.1
+scipy==1.10.1
+matplotlib==3.7.5
+tqdm==4.67.0
+PyYAML==6.0.2
+Cython==3.0.11
 
 ##  Getting Started
 
@@ -37,8 +48,8 @@ Download these required model files and place them in the specified locations:
 * Example usage with the sample image
 ```
 # For MoveNet
-python3 main.py --method movenet --input testImage.jpg --save_image
+python3 main.py --method movenet --input images/testImage.jpg --save_image
 
 # For AlphaPose
-python3 main.py --method alphapose --input testImage.jpg --save_image
+python3 main.py --method alphapose --input images/testImage.jpg --save_image
 ```

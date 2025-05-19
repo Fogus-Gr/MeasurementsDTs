@@ -49,7 +49,7 @@ class AlphaPoseHPE(BaseHPE):
         super().__init__(*args, **kwargs)
 
 
-    def load_model(self):
+    def load_model(self, *args, **kwargs):
         self.cfg = update_config(self.cfg)
         qsize = 1024
         
