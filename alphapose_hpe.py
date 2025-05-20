@@ -5,17 +5,14 @@ import torch
 from base_hpe import BaseHPE, Body
 from types import SimpleNamespace
 
-dir_path = os.path.dirname(os.path.realpath(__file__))
 try:
-	sys.path.append(os.path.join(dir_path, 'models/AlphaPose'))
-
-	from detector.apis import get_detector
-	from alphapose.models import builder
-	from alphapose.utils.config import update_config
-	from alphapose.utils.detector import DetectionLoader
-	from alphapose.utils.transforms import flip, flip_heatmap, get_func_heatmap_to_coord
-	from alphapose.utils.vis import getTime
-	from alphapose.utils.webcam_detector import WebCamDetectionLoader
+	from models.AlphaPose.detector.apis import get_detector
+	from models.AlphaPose.alphapose.models import builder
+	from models.AlphaPose.alphapose.utils.config import update_config
+	from models.AlphaPose.alphapose.utils.detector import DetectionLoader
+	from models.AlphaPose.alphapose.utils.transforms import flip, flip_heatmap, get_func_heatmap_to_coord
+	from models.AlphaPose.alphapose.utils.vis import getTime
+	from models.AlphaPose.alphapose.utils.webcam_detector import WebCamDetectionLoader
 except ImportError as e:
     print('AlphaPose import error!')
     raise e

@@ -9,8 +9,8 @@ import numpy as np
 import torch
 import torch.multiprocessing as mp
 
-from alphapose.utils.presets import SimpleTransform, SimpleTransform3DSMPL
-from alphapose.models import builder
+from ..utils.presets import SimpleTransform, SimpleTransform3DSMPL
+from ..models import builder
 
 # Global variable to keep track of the current file index
 current_file_index = 0

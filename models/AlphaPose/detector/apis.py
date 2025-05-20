@@ -9,24 +9,24 @@ from abc import ABC, abstractmethod
 
 def get_detector(opt=None):
     if opt.detector == 'yolo':
-        from detector.yolo_api import YOLODetector
-        from detector.yolo_cfg import cfg
+        from .yolo_api import YOLODetector
+        from .yolo_cfg import cfg
         return YOLODetector(cfg, opt)
     elif 'yolox' in opt.detector:
-        from detector.yolox_api import YOLOXDetector
-        from detector.yolox_cfg import cfg
+        from .yolox_api import YOLOXDetector
+        from .yolox_cfg import cfg
         if opt.detector.lower() == 'yolox':
             opt.detector = 'yolox-x'
         cfg.MODEL_NAME = opt.detector.lower()
         cfg.MODEL_WEIGHTS = f'detector/yolox/data/{opt.detector.lower().replace("-", "_")}.pth'
         return YOLOXDetector(cfg, opt)
     elif opt.detector == 'tracker':
-        from detector.tracker_api import Tracker
-        from detector.tracker_cfg import cfg
+        from .tracker_api import Tracker
+        from .tracker_cfg import cfg
         return Tracker(cfg, opt)
     elif opt.detector.startswith('efficientdet_d'):
-        from detector.effdet_api import EffDetDetector
-        from detector.effdet_cfg import cfg
+        from .effdet_api import EffDetDetector
+        from .effdet_cfg import cfg
         return EffDetDetector(cfg, opt)
     else:
         raise NotImplementedError

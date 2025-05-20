@@ -8,8 +8,8 @@ import numpy as np
 import torch
 import torch.multiprocessing as mp
 
-from alphapose.utils.transforms import get_func_heatmap_to_coord
-from alphapose.utils.pPose_nms import pose_nms, write_json
+from ..utils.transforms import get_func_heatmap_to_coord
+from ..utils.pPose_nms import pose_nms, write_json
 
 DEFAULT_VIDEO_SAVE_OPT = {
     'savepath': 'examples/res/1.mp4',
@@ -171,11 +171,11 @@ class DataWriter():
                 final_result.append(result)
                 if self.opt.save_img or self.save_video or self.opt.vis:
                     if hm_data.size()[1] == 49:
-                        from alphapose.utils.vis import vis_frame_dense as vis_frame
+                        from ..utils.vis import vis_frame_dense as vis_frame
                     elif self.opt.vis_fast:
-                        from alphapose.utils.vis import vis_frame_fast as vis_frame
+                        from ..utils.vis import vis_frame_fast as vis_frame
                     else:
-                        from alphapose.utils.vis import vis_frame
+                        from ..utils.vis import vis_frame
                     img = vis_frame(orig_img, result, self.opt, self.vis_thres)
                     self.write_image(img, im_name, stream=stream if self.save_video else None)
 

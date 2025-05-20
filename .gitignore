@@ -1,7 +1,20 @@
-__pycache__/
 .vscode/
 models/MoveNet
 models/AlphaPose/pretrained_models/fast_res50_256x192.pth
 models/AlphaPose/detector/yolo/data/yolov3-spp.weights
 out/
 *.log
+
+# Compiled Cython/C++ files
+*.cpp
+*.so
+*.cu
+*.c
+*.o
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Environment files
+test-env/

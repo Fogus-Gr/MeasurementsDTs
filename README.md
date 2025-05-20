@@ -43,6 +43,30 @@ Download these required model files and place them in the specified locations:
      wget "https://drive.google.com/uc?export=download&id=15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr" -O models/MoveNet/movenet_multipose_lightning_256x256_FP32.bin
      ```
 
+## Installation
+
+1. Clone the repository
+
+2. Add the downloaded pretrained models in the correct locations
+
+3. Uninstall previous AlphaPose installations (if any)
+```bash
+pip uninstall alphapose
+```
+
+4. Install
+```bash
+conda create -n hpe python=3.8.10 -y
+conda activate hpe
+conda install pytorch==2.4.1 torchvision==0.19.1 cpuonly -c pytorch
+conda install --file requirements.txt
+```
+
+5. Install AlphaPose
+```bash
+bash models/AlphaPose/build_extensions.sh
+```
+
 ### Executing program
 
 * Example usage with the sample image

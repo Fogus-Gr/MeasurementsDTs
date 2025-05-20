@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.multiprocessing as mp
 
-from alphapose.utils.pPose_nms import pose_nms, write_json
+from ..utils.pPose_nms import pose_nms, write_json
 
 DEFAULT_VIDEO_SAVE_OPT = {
     'savepath': 'examples/res/1.mp4',
@@ -149,10 +149,10 @@ class DataWriterSMPL():
 
                 final_result.append(result)
                 if self.opt.save_img or self.save_video or self.opt.vis:
-                    from alphapose.utils.vis import vis_frame_smpl
+                    from ..utils.vis import vis_frame_smpl
                     img = vis_frame_smpl(orig_img, result, smpl_output, self.opt, self.vis_thres)
                     if self.opt.show_skeleton:
-                        from alphapose.utils.vis import vis_frame_skeleton
+                        from ..utils.vis import vis_frame_skeleton
                         img = vis_frame_skeleton(img, result, smpl_output, self.opt, self.vis_thres)
                     self.write_image(img, im_name, stream=stream if self.save_video else None)
 

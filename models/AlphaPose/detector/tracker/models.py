@@ -5,7 +5,7 @@ import torch.nn as nn
 
 from tracker.utils.parse_config import *
 from tracker.utils.utils import *
-# from utils.syncbn import SyncBN
+# from ..utils.syncbn import SyncBN
 import time
 import math
 

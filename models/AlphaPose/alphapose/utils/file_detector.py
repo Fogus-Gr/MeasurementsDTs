@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import torch.multiprocessing as mp
 
-from alphapose.utils.presets import SimpleTransform, SimpleTransform3DSMPL
+from ..utils.presets import SimpleTransform, SimpleTransform3DSMPL
 
 
 class FileDetectionLoader():

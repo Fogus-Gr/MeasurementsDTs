@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.multiprocessing as mp
 
-from alphapose.utils.presets import SimpleTransform, SimpleTransform3DSMPL
+from ..utils.presets import SimpleTransform, SimpleTransform3DSMPL
 
 # Global variable to keep track of the current file index
 current_file_index = 0
