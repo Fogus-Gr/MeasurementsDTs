@@ -1,0 +1,97 @@
+    1  history -w
+    2  nvidia-smi
+    3  nvcc --version | grep "release"
+    4  apt install nvidia-cuda-toolkit
+    5  sudo apt install nvidia-cuda-toolkit
+    6  sudo apt updare
+    7  sudo apt update
+    8  sudo apt install nvidia-cuda-toolkit
+    9  nvcc --version | grep "release"
+   10  python3
+   11  nvidia-smi
+   12  nvcc --version
+   13  sudo apt upgrade
+   14  nvcc --version
+   15  pip list
+   16  exit
+   17  sudo restart
+   18  sudo reset
+   19  sudo shutdown --help
+   20  sudo shutdown -r
+   21  exit
+   22  ls
+   23  sudo apt install python3-venv
+   24  cd MeasurementsDTs/
+   25  python3 -m venv myenv
+   26  source myenv/bin/activate
+   27  pip install --help
+   28  pip install -r requirements.txt 
+   29  pip list
+   30  source myenv/bin/activate
+   31  pip list
+   32  pip install -r requirements.txt 
+   33  bash models/AlphaPose/build_extensions.sh
+   34  wget "https://drive.google.com/uc?export=download&id=1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI" -O models/AlphaPose/pretrained_models/fast_res50_256x192.pth
+   35  get "https://drive.google.com/uc?export=download&id=15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr" -O models/MoveNet/movenet_multipose_lightning_256x256_FP32.bin
+   36  wget "https://drive.google.com/uc?export=download&id=1k-9cUGcdH5ZFN1NcMvZrO0ApW241tboD" -O models/AlphaPose/detector/yolo/data/yolov3-spp.weights
+   37  mkdir -p models/AlphaPose/detector/yolo/data/
+   38  wget "https://drive.google.com/uc?export=download&id=1k-9cUGcdH5ZFN1NcMvZrO0ApW241tboD" -O models/AlphaPose/detector/yolo/data/yolov3-spp.weights
+   39  nvcc --version
+   40  sudo apt-get --purge remove "*cublas*" "cuda*"
+   41  sudo apt-get autoremove
+   42  sudo apt-get autoclean
+   43  wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+   44  cd
+   45  wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+   46  ll
+   47  sudo mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+   48  wget https://developer.download.nvidia.com/compute/cuda/12.1.0/local_installers/cuda-repo-ubuntu2004-12-1-local_12.1.0-530.30.02-1_amd64.deb
+   49  sudo dpkg -i cuda-repo-ubuntu2004-12-1-local_12.1.0-530.30.02-1_amd64.deb
+   50  sudo cp /var/cuda-repo-ubuntu2004-12-1-local/cuda-*-keyring.gpg /usr/share/keyrings/
+   51  sudo apt-get update
+   52  sudo apt-get -y install cuda
+   53  exit
+   54  nvcc --version
+   55  sudo apt upgrade
+   56  lscpu
+   57  lsblk
+   58  sudo fdisk -l
+   59  sudo mkdir -p /boot/efi
+   60  sudo mount /dev/vda2 /boot/efi
+   61  sudo dpkg --configure -a
+   62  sudo grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ubuntu --recheck
+   63  sudo dpkg --configure -a
+   64  sudo shutdown -r
+   65  exit
+   66  source myenv/bin/activate
+   67  nvcc --version
+   68  vim ~/.bashrc
+   69  source ~/.bashrc
+   70  nvcc --version
+   71  nvcc --version | grep "release"
+   72  nvidia-smi
+   73  env
+   74  python3 main.py --method alphapose --input images/testImage.jpg --save_image
+   75  source myenv/bin/activate
+   76  python3 main.py --method alphapose --input images/testImage.jpg --save_image
+   77  pip install openvino-dev
+   78  pip install openvino
+   79  python3 main.py --method alphapose --input images/testImage.jpg --save_image
+   80  pip install easydict
+   81  python3 main.py --method alphapose --input images/testImage.jpg --save_image
+   82  pip install pycocotools
+   83  python3 main.py --method alphapose --input images/testImage.jpg --save_image
+   84  rm models/AlphaPose/pretrained_models/fast_res50_256x192.pth
+   85  pip install gdown
+   86  gdown --id 1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI -O models/AlphaPose/pretrained_models/fast_res50_256x192.pth
+   87  head models/AlphaPose/pretrained_models/fast_res50_256x192.pth
+   88  python3 main.py --method alphapose --input images/testImage.jpg --save_image
+   89  rm models/AlphaPose/detector/yolo/data/yolov3-spp.weights
+   90  gdown --id 1k-9cUGcdH5ZFN1NcMvZrO0ApW241tboD -O models/AlphaPose/detector/yolo/data/yolov3-spp.weights
+   91  python3 main.py --method alphapose --input images/testImage.jpg --save_image
+   92  history
+   93  python3 main.py --method alphapose --input images/testImage.jpg --save_image
+   94  pip freeze -r requirment.txt
+   95  pip freeze -r requirments.txt
+   96  pip freeze -r requirements.txt
+   97  history > hist.txt

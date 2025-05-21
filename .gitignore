@@ -27,3 +27,4 @@ __pycache__/
 
 # Environment files
 test-env/
+/myenv/*
