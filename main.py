@@ -4,6 +4,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import argparse
 from movenet_hpe import MoveNetHPE
+from openpose_hpe import OpenPoseHPE
 from alphapose_hpe import AlphaPoseHPE
 
 def main():
@@ -32,7 +33,7 @@ def get_hpe_method(args):
     elif name == 'alphapose':
         return AlphaPoseHPE(input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
     elif name == 'openpose':
-        raise ValueError(f"Method not implemented yet!")
+        return OpenPoseHPE(input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
     else:
         raise ValueError(f"Unknown method: {name}")
 

@@ -8,17 +8,6 @@ This project provides baseline implementations for three 2D Human Pose Estimatio
 - Python 3.8.10
 - OpenVINO 2024.2.0
 
-### Additional Packages
-opencv-python==4.10.0.84
-numpy==1.24.4
-torch==2.4.1
-torchvision==0.19.1
-scipy==1.10.1
-matplotlib==3.7.5
-tqdm==4.67.0
-PyYAML==6.0.2
-Cython==3.0.11
-
 ##  Getting Started
 
 Clone the repository and make sure to download the required pre-trained models below.
@@ -58,7 +47,7 @@ pip uninstall alphapose
 ```bash
 conda create -n hpe python=3.8.10 -y
 conda activate hpe
-conda install pytorch==2.4.1 torchvision==0.19.1 cpuonly -c pytorch
+conda install pytorch==2.4.1 torchvision==0.19.1 -c pytorch
 conda install --file requirements.txt
 ```
 
