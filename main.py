@@ -6,6 +6,7 @@ import argparse
 from movenet_hpe import MoveNetHPE
 from openpose_hpe import OpenPoseHPE
 from alphapose_hpe import AlphaPoseHPE
+from hrnet_hpe import HigherHRNet_W32
 
 def main():
     parser = parse_arguments()
@@ -17,7 +18,7 @@ def main():
 
 def parse_arguments():
         parser = argparse.ArgumentParser()
-        parser.add_argument('--method', type=str, required=True, choices=['openpose', 'alphapose', 'movenet'])
+        parser.add_argument('--method', type=str, required=True, choices=['openpose', 'alphapose', 'movenet', 'hrnet'])
         parser.add_argument('--input', type=str, default='0', help="Path to video or image file to use as input (default=%(default)s)")
         parser.add_argument("--output_dir", type=str, help="Path to directory where output files will be saved")          
         parser.add_argument("--json", action="store_true", help="Enable export keypoints to a single json file")
@@ -34,6 +35,8 @@ def get_hpe_method(args):
         return AlphaPoseHPE(input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
     elif name == 'openpose':
         return OpenPoseHPE(input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
+    elif name == 'hrnet':
+        return HigherHRNet_W32(input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
     else:
         raise ValueError(f"Unknown method: {name}")
 

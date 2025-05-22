@@ -23,7 +23,7 @@
 #from .detr import DETR
 #from .ctpn import CTPN
 #from .faceboxes import FaceBoxes
-#from .hpe_associative_embedding import HpeAssociativeEmbedding
+from .hpe_associative_embedding import HpeAssociativeEmbedding
 from .image_model import ImageModel
 #from .instance_segmentation import MaskRCNNModel, YolactModel
 from .model import Model
@@ -48,7 +48,7 @@ __all__ = [
     'DetectionWithLandmarks',
     #'DETR',
     #'FaceBoxes',
-    #'HpeAssociativeEmbedding',
+    'HpeAssociativeEmbedding',
     #'ImageMattingWithBackground',
     'ImageModel',
     'InputTransform',

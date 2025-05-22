@@ -3,7 +3,7 @@ from openvino_base_hpe import OpenVINOBaseHPE
 from base_hpe import Body
 
 
-class OpenPoseHPE(OpenVINOBaseHPE):
+class HigherHRNet_W32(OpenVINOBaseHPE):
     LINES_BODY = [
         [4,2], [2,0], [0,1], [1,3],
         [10,8], [8,6], [6,5], [5,7], [7,9],
@@ -12,8 +12,9 @@ class OpenPoseHPE(OpenVINOBaseHPE):
     ]
 
     def load_model(self, device="CPU", **kwargs):
-        super().load_model(model_type="openpose", device=device, **kwargs)
+        super().load_model(model_type="higherhrnet", device=device, **kwargs)
 
+    
     def postprocess(self, poses):
         bodies = []
 

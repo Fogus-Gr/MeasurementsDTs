@@ -2,6 +2,9 @@
 models/MoveNet
 models/AlphaPose/pretrained_models/fast_res50_256x192.pth
 models/AlphaPose/detector/yolo/data/yolov3-spp.weights
+models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001.bin
+models/OpenVINO/pretrained_models/public/FP16/
+models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.bin
 out/
 *.log
 

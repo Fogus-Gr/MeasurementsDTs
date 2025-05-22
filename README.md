@@ -1,12 +1,18 @@
 # 2D Human Pose Estimation
 
-This project provides baseline implementations for three 2D Human Pose Estimation methods: **AlphaPose**, **OpenPose** and **MoveNet**.
+This project provides baseline implementations for three 2D Human Pose Estimation methods: **AlphaPose**, **OpenPose**, **HigherHRNet** and **MoveNet**.
 
 ## Dependencies
 
 - Ubuntu 20.04
 - Python 3.8.10
 - OpenVINO 2024.2.0
+
+### GPU & Drivers
+- GPU: NVIDIA
+- CUDA Toolkit: 12.6 (release 12.6, V12.6.77)
+- PyTorch CUDA: 12.1 (torch.version.cuda)
+- PyTorch version: 2.4.1+cu121
 
 ##  Getting Started
 
@@ -30,6 +36,18 @@ Download these required model files and place them in the specified locations:
    - movenet_multipose_lightning_256x256_FP32.bin (OpenVINO binaries):
      ```bash
      wget "https://drive.google.com/uc?export=download&id=15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr" -O models/MoveNet/movenet_multipose_lightning_256x256_FP32.bin
+     ```
+
+3. **OpenPose Model**:
+   - human-pose-estimation-0001.bin (OpenVINO binaries):
+     ```bash
+     wget "https://drive.google.com/uc?export=download&id=1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm" -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001.bin
+     ```
+
+4. **Higher HRNet Model**:
+   - higher-hrnet-w32-human-pose-estimation.bin (OpenVINO binaries):
+     ```bash
+     wget "https://drive.google.com/uc?export=download&id=1fko47eVczJZQb9wWA2X7eQ0TuF4PDXzs" -O models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.bin
      ```
 
 ## Installation
