@@ -15,17 +15,22 @@ class MoveNetHPE(BaseHPE):
         [12,14], [14,16], [11,13], [13,15]
     ]
 
-    def load_model(self, xml_path=DEFAULT_MODEL, device="CPU"):
+    def __init__(self, xml_path=DEFAULT_MODEL, device="CPU", **kwargs):
+        super().__init__(**kwargs)
+        self.xml_path = xml_path
+        self.device = device
+
+    def load_model(self):
         print("Loading MoveNetHPE model...")
         self.ie = Core()
         print("Device info:")
-        versions = self.ie.get_versions(device)
-        print("{}{}".format(" "*8, device))
+        versions = self.ie.get_versions(self.device)
+        print("{}{}".format(" "*8, self.device))
         for key, version in versions.items():
             print(f"{key}: version {version.major}.{version.minor}, build {version.build_number}")
 
         print("Reading network")
-        self.pd_net = self.ie.read_model(model=xml_path)
+        self.pd_net = self.ie.read_model(model=self.xml_path)
         input_tensor = self.pd_net.inputs[0]
         print(f"Input info: {self.pd_net.inputs}")
         print(f"Output info: {self.pd_net.outputs}")
@@ -38,7 +43,7 @@ class MoveNetHPE(BaseHPE):
 
         self.pd_kps = "Identity"
         print("Loading pose detection model into the plugin")
-        self.pd_exec_net = self.ie.compile_model(model=self.pd_net, device_name=device)
+        self.pd_exec_net = self.ie.compile_model(model=self.pd_net, device_name=self.device)
 
     def run_model(self, padded):
         frame_nn = cv2.cvtColor(padded, cv2.COLOR_BGR2RGB).transpose(2,0,1).astype(np.float32)[None,] 

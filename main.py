@@ -4,9 +4,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import argparse
 from movenet_hpe import MoveNetHPE
-from openpose_hpe import OpenPoseHPE
+from openvino_base_hpe import OpenVINOBaseHPE
 from alphapose_hpe import AlphaPoseHPE
-from hrnet_hpe import HigherHRNet_W32
 
 def main():
     parser = parse_arguments()
@@ -34,9 +33,9 @@ def get_hpe_method(args):
     elif name == 'alphapose':
         return AlphaPoseHPE(input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
     elif name == 'openpose':
-        return OpenPoseHPE(input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
+        return OpenVINOBaseHPE(model_type='openpose', input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
     elif name == 'hrnet':
-        return HigherHRNet_W32(input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
+        return OpenVINOBaseHPE(model_type='higherhrnet', input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
     else:
         raise ValueError(f"Unknown method: {name}")
 

@@ -1,6 +1,7 @@
 from pathlib import Path
 from base_hpe import BaseHPE
-from abc import abstractmethod
+import numpy as np
+from base_hpe import Body
 
 from models.OpenVINO.model_api.models import ImageModel
 from models.OpenVINO.model_api.adapters import create_core, OpenvinoAdapter
@@ -27,16 +28,21 @@ class OpenVINOBaseHPE(BaseHPE):
         [12,14], [14,16], [11,13], [13,15]
     ]
 
-    def load_model(self, model_type, device="CPU", **kwargs):
-        print(f"Loading {model_type} model...")
+    def __init__(self, model_type, device="CPU", **kwargs):
+        super().__init__(**kwargs)
+        self.model_type = model_type
+        self.device = device
 
-        if model_type not in model_map:
-            raise ValueError(f"Unsupported model type: {model_type}. Choose from: {list(model_map.keys())}")
+    def load_model(self):
+        print(f"Loading {self.model_type} model...")
 
-        xml_path = model_map[model_type]
+        if self.model_type not in model_map:
+            raise ValueError(f"Unsupported model type: {self.model_type}. Choose from: {list(model_map.keys())}")
 
-        plugin_config = get_user_config(device, '', None)
-        model_adapter = OpenvinoAdapter(create_core(), xml_path, device=device, plugin_config=plugin_config,
+        xml_path = model_map[self.model_type]
+
+        plugin_config = get_user_config(self.device, '', None)
+        model_adapter = OpenvinoAdapter(create_core(), xml_path, device=self.device, plugin_config=plugin_config,
                                         max_num_requests=0, model_parameters = {'input_layouts': 0})
 
         # Default to 1.0 aspect ratio if dimensions aren't known at load time
@@ -46,10 +52,10 @@ class OpenVINOBaseHPE(BaseHPE):
             'target_size': None,
             'aspect_ratio': aspect_ratio,
             'confidence_threshold': 0.2,
-            'padding_mode': 'center' if model_type == 'higherhrnet' else None, # the 'higherhrnet' and 'ae' specific
-            'delta': 0.5 if model_type == 'higherhrnet' else None, # the 'higherhrnet' and 'ae' specific
+            'padding_mode': 'center' if self.model_type == 'higherhrnet' else None, # the 'higherhrnet' and 'ae' specific
+            'delta': 0.5 if self.model_type == 'higherhrnet' else None, # the 'higherhrnet' and 'ae' specific
         }
-        self.model = ImageModel.create_model(ARCHITECTURES[model_type], model_adapter, config)
+        self.model = ImageModel.create_model(ARCHITECTURES[self.model_type], model_adapter, config)
         self.model.log_layers_info()
         self.model.load()
 
@@ -65,6 +71,46 @@ class OpenVINOBaseHPE(BaseHPE):
 
         return poses
     
-    @abstractmethod
-    def postprocess(self, predictions):
-        pass
+    def postprocess(self, poses):
+        bodies = []
+
+        for pose in poses:
+            keypoints_xy = pose[:, :2]  # Shape: (17, 2)
+            keypoints_scores = pose[:, 2]  # Shape: (17,)
+
+            # Use average keypoint confidence as pose score
+            score = np.mean(keypoints_scores)
+
+            if score > self.score_thresh:
+                # Depad & rescale keypoints to original image size
+                keypoints_xy_orig = keypoints_xy.copy()
+
+                # Undo resizing from 256x256 to original + padding
+                unpadded_w = self.img_w + self.padding.w
+                unpadded_h = self.img_h + self.padding.h
+                keypoints_xy_orig[:, 0] = keypoints_xy_orig[:, 0] * (unpadded_w / self.pd_w)
+                keypoints_xy_orig[:, 1] = keypoints_xy_orig[:, 1] * (unpadded_h / self.pd_h)
+
+                # Calculate bounding box (tight box around visible keypoints)
+                visible_kps = keypoints_xy_orig[keypoints_scores > 0.1]
+                if len(visible_kps) == 0:
+                    continue
+
+                xmin = int(np.min(visible_kps[:, 0]))
+                xmax = int(np.max(visible_kps[:, 0]))
+                ymin = int(np.min(visible_kps[:, 1]))
+                ymax = int(np.max(visible_kps[:, 1]))
+
+                body = Body(
+                    score=score,
+                    xmin=xmin,
+                    ymin=ymin,
+                    xmax=xmax,
+                    ymax=ymax,
+                    keypoints_score=keypoints_scores,
+                    keypoints=keypoints_xy_orig.astype(float),
+                    keypoints_norm=keypoints_xy_orig / np.array([self.img_w, self.img_h])
+                )
+                bodies.append(body)
+
+        return bodies

@@ -76,11 +76,14 @@ bash models/AlphaPose/build_extensions.sh
 
 ### Executing program
 
-* Example usage with the sample image
+* Example usage
 ```
-# For MoveNet
+# For MoveNet single image
 python3 main.py --method movenet --input images/testImage.jpg --save_image
 
-# For AlphaPose
-python3 main.py --method alphapose --input images/testImage.jpg --save_image
+# For AlphaPose whole directory
+python3 main.py --method alphapose --input images/ --save_image
+
+# For detailed options
+python3 main.py --help
 ```

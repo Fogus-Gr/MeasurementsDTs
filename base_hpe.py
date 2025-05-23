@@ -96,7 +96,7 @@ class BaseHPE(ABC):
             self.output = cv2.VideoWriter(filename, fourcc, self.video_fps, (self.img_w, self.img_h))
 
     @abstractmethod
-    def load_model(self, *args, **kwargs):
+    def load_model(self):
         pass
     
     def main_loop(self):
