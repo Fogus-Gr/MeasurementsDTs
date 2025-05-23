@@ -1,18 +1,20 @@
 from abc import ABC, abstractmethod
 import cv2
-import numpy as np
 import os
 from collections import namedtuple
 import glob
 
+from utils.visualizer import render
+from utils.evaluator import append_COCO_format, save_COCO_format_json
+
 class Body:
     def __init__(self, score, xmin, ymin, xmax, ymax, keypoints_score, keypoints, keypoints_norm):
-        self.score = score # global score - TODO -> not used
+        self.score = score # global/mean score 
         self.xmin = xmin
         self.ymin = ymin
         self.xmax = xmax
         self.ymax = ymax
-        self.keypoints_score = keypoints_score # scores of the keypoints
+        self.keypoints_score = keypoints_score # individual scores of the keypoints
         self.keypoints_norm = keypoints_norm # keypoints normalized ([0,1]) coordinates (x,y) in the input image
         self.keypoints = keypoints # keypoints coordinates (x,y) in pixels in the input image
 
@@ -138,13 +140,23 @@ class BaseHPE(ABC):
 
                 frame_number += 1
 
+        if self.json:
+            save_COCO_format_json(os.path.join(self.output_dir, "COCOformat.json"))
+
     def process_frame(self, frame, frame_number):
         padded = self.pad_and_resize(frame)
         predictions = self.run_model(padded)
         bodies = self.postprocess(predictions)
 
+        if self.json:
+            append_COCO_format(bodies, self.score_thresh, frame_number)
+
         if self.save_image or self.save_video:
-            self.render(frame, bodies)
+            # Ensure that LINES_BODY is defined in the child class
+            if not hasattr(self, 'LINES_BODY'):
+                raise ValueError("LINES_BODY is not defined in the child class.")
+            
+            render(frame, bodies, self.LINES_BODY, self.score_thresh, self.show_scores, self.show_bounding_box)
 
             if self.save_video:
                 if not self.output.isOpened():
@@ -162,57 +174,6 @@ class BaseHPE(ABC):
     @abstractmethod
     def postprocess(self, predictions):
         pass
-
-    def render(self, frame, bodies):
-        thickness = 3 
-        color_skeleton = (255, 180, 90)
-        color_box = (0,255,255)
-
-        # Ensure that LINES_BODY is defined in the child class
-        if not hasattr(self, 'LINES_BODY'):
-            raise ValueError("LINES_BODY is not defined in the child class.")
-
-        for body in bodies:                
-            # Draw skeleton lines
-            lines = []
-            for line in self.LINES_BODY:
-                # Check if keypoints in line exist and have valid scores
-                if (len(body.keypoints) > line[0] and len(body.keypoints) > line[1] and 
-                    len(body.keypoints_score) > line[0] and len(body.keypoints_score) > line[1] and 
-                    body.keypoints_score[line[0]] > self.score_thresh and 
-                    body.keypoints_score[line[1]] > self.score_thresh):
-                    
-                    # Map keypoint positions to integer coordinates for drawing
-                    point_coords = [list(map(int, body.keypoints[point])) for point in line]
-                    lines.append(np.array(point_coords))
-            
-            # Draw all valid skeleton lines
-            cv2.polylines(frame, lines, False, color_skeleton, 2, cv2.LINE_AA)
-            
-            # TODO - I think coloring works correctly only for Movenet
-            for i,x_y in enumerate(body.keypoints):
-                if body.keypoints_score[i] > self.score_thresh:
-                    if i % 2 == 1:
-                        color = (0,255,0) 
-                    elif i == 0:
-                        color = (0,255,255)
-                    else:
-                        color = (0,0,255)
-                    cv2.circle(frame, (int(x_y[0]), int(x_y[1])), 4, color, -11)
-
-                    if self.show_scores:
-                        score_text = f"{body.keypoints_score[i]:.1f}"
-                        cv2.putText(frame, 
-                                score_text, 
-                                (int(x_y[0]) + 5, int(x_y[1]) - 5),  # Offset slightly from the circle
-                                cv2.FONT_HERSHEY_SIMPLEX, 
-                                0.4,  # Font scale
-                                color,  # Use the same color as the keypoint
-                                1,  # Thickness
-                                cv2.LINE_AA)
-
-            if self.show_bounding_box:
-                cv2.rectangle(frame, (body.xmin, body.ymin), (body.xmax, body.ymax), color_box, thickness)
 
     # Define the padding
     # Note we don't center the source image. The padding is applied

@@ -1,6 +1,6 @@
 # 2D Human Pose Estimation
 
-This project provides baseline implementations for three 2D Human Pose Estimation methods: **AlphaPose**, **OpenPose**, **HigherHRNet**, **EfficientHRNet** and **MoveNet**.
+This project provides baseline implementations for a few 2D Human Pose Estimation methods: **AlphaPose**, **OpenPose**, **HigherHRNet**, **EfficientHRNet** and **MoveNet**.
 
 ## Dependencies
 
@@ -97,10 +97,13 @@ bash models/AlphaPose/build_extensions.sh
 * Example usage
 ```
 # For MoveNet single image
-python3 main.py --method movenet --input images/testImage.jpg --save_image
+python3 main.py --method movenet --input unit_tests/images/testImage.jpg --save_image
 
 # For AlphaPose whole directory
-python3 main.py --method alphapose --input images/ --save_image
+python3 main.py --method alphapose --input unit_tests/images/ --json
+
+# For EfficientHRNet1 video
+python3 main.py --method ae1 --input unit_tests/video/giphy.gif --save_video
 
 # For detailed options
 python3 main.py --help
