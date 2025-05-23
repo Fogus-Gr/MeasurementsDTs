@@ -1,6 +1,6 @@
 # 2D Human Pose Estimation
 
-This project provides baseline implementations for three 2D Human Pose Estimation methods: **AlphaPose**, **OpenPose**, **HigherHRNet** and **MoveNet**.
+This project provides baseline implementations for three 2D Human Pose Estimation methods: **AlphaPose**, **OpenPose**, **HigherHRNet**, **EfficientHRNet** and **MoveNet**.
 
 ## Dependencies
 
@@ -41,13 +41,31 @@ Download these required model files and place them in the specified locations:
 3. **OpenPose Model**:
    - human-pose-estimation-0001.bin (OpenVINO binaries):
      ```bash
-     wget "https://drive.google.com/uc?export=download&id=1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm" -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001.bin
+     wget "https://drive.google.com/uc?export=download&id=1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm" -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.bin
      ```
 
 4. **Higher HRNet Model**:
    - higher-hrnet-w32-human-pose-estimation.bin (OpenVINO binaries):
      ```bash
      wget "https://drive.google.com/uc?export=download&id=1fko47eVczJZQb9wWA2X7eQ0TuF4PDXzs" -O models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.bin
+     ```
+
+5. **Efficient HRNet1**:
+   - human-pose-estimation-0005.bin.bin (OpenVINO binaries):
+     ```bash
+     wget "https://drive.google.com/uc?export=download&id=1lEUFqQnWHVymQoZvaXuDFcnOyEEKsexP" -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
+     ```
+
+6. **Efficient HRNet2**:
+   - human-pose-estimation-0006.bin.bin (OpenVINO binaries):
+     ```bash
+     wget "https://drive.google.com/uc?export=download&id=1d8pGQrM9vEfz_oAIey0qRr7Gxp6dS2UE" -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0006/FP32/human-pose-estimation-0006.bin
+     ```
+
+7. **Efficient HRNet3**:
+   - human-pose-estimation-0007.bin.bin (OpenVINO binaries):
+     ```bash
+     wget "https://drive.google.com/uc?export=download&id=1ZSdsqgD4zUO4gyHMYBfxq3m4UMyQ187j" -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
      ```
 
 ## Installation

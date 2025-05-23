@@ -10,12 +10,17 @@ from models.OpenVINO.model_api.pipelines import get_user_config
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 model_map = {
-            "openpose": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001.xml",
-            'higherhrnet': SCRIPT_DIR / "models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.xml"
+            "openpose": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.xml",
+            "efficienthrnet1": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP32/human-pose-estimation-0005.xml",
+            "efficienthrnet2": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0006/FP32/human-pose-estimation-0006.xml",
+            "efficienthrnet3": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0007/FP32/human-pose-estimation-0007.xml",
+            'higherhrnet': SCRIPT_DIR / "models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.xml" # Try FP16 also
         }
 
 ARCHITECTURES = {
-    'ae': 'HPE-assosiative-embedding',
+    'efficienthrnet1': 'HPE-assosiative-embedding',
+    'efficienthrnet2': 'HPE-assosiative-embedding',
+    'efficienthrnet3': 'HPE-assosiative-embedding',
     'higherhrnet': 'HPE-assosiative-embedding',
     'openpose': 'openpose'
 }
@@ -51,13 +56,14 @@ class OpenVINOBaseHPE(BaseHPE):
         config = {
             'target_size': None,
             'aspect_ratio': aspect_ratio,
-            'confidence_threshold': 0.2,
+            'confidence_threshold': self.score_thresh,
             'padding_mode': 'center' if self.model_type == 'higherhrnet' else None, # the 'higherhrnet' and 'ae' specific
             'delta': 0.5 if self.model_type == 'higherhrnet' else None, # the 'higherhrnet' and 'ae' specific
         }
         self.model = ImageModel.create_model(ARCHITECTURES[self.model_type], model_adapter, config)
         self.model.log_layers_info()
         self.model.load()
+        print("Loading completed")
 
     def run_model(self, padded):
         inputs, preprocessing_meta = self.model.preprocess(padded)

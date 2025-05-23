@@ -17,7 +17,7 @@ def main():
 
 def parse_arguments():
         parser = argparse.ArgumentParser()
-        parser.add_argument('--method', type=str, required=True, choices=['openpose', 'alphapose', 'movenet', 'hrnet'])
+        parser.add_argument('--method', type=str, required=True, choices=['openpose', 'alphapose', 'movenet', 'hrnet', 'ae1', 'ae2', 'ae3'])
         parser.add_argument('--input', type=str, default='0', help="Path to video or image file to use as input (default=%(default)s)")
         parser.add_argument("--output_dir", type=str, help="Path to directory where output files will be saved")          
         parser.add_argument("--json", action="store_true", help="Enable export keypoints to a single json file")
@@ -36,6 +36,12 @@ def get_hpe_method(args):
         return OpenVINOBaseHPE(model_type='openpose', input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
     elif name == 'hrnet':
         return OpenVINOBaseHPE(model_type='higherhrnet', input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
+    elif name == 'ae1':
+        return OpenVINOBaseHPE(model_type='efficienthrnet1', input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
+    elif name == 'ae2':
+        return OpenVINOBaseHPE(model_type='efficienthrnet2', input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
+    elif name == 'ae3':
+        return OpenVINOBaseHPE(model_type='efficienthrnet3', input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
     else:
         raise ValueError(f"Unknown method: {name}")
 
