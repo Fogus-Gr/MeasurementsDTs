@@ -53,14 +53,6 @@
    53  exit
    54  nvcc --version
    55  sudo apt upgrade
-   56  lscpu
-   57  lsblk
-   58  sudo fdisk -l
-   59  sudo mkdir -p /boot/efi
-   60  sudo mount /dev/vda2 /boot/efi
-   61  sudo dpkg --configure -a
-   62  sudo grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ubuntu --recheck
-   63  sudo dpkg --configure -a
    64  sudo shutdown -r
    65  exit
    66  source myenv/bin/activate
