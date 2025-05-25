@@ -1,0 +1,37 @@
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-devel
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+COPY . /app
+
+RUN apt-get update && apt-get install -y \
+    gcc-9 g++-9 \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libgomp1 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libfontconfig1 \
+    libice6 \
+    python3-tk \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir gdown
+
+ENV TORCH_CUDA_ARCH_LIST=8.6
+
+# Download models
+RUN mkdir -p models/AlphaPose/pretrained_models && \
+    mkdir -p models/AlphaPose/detector/yolo/data && \
+    gdown --id 1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI -O models/AlphaPose/pretrained_models/fast_res50_256x192.pth && \
+    gdown --id 1k-9cUGcdH5ZFN1NcMvZrO0ApW241tboD -O models/AlphaPose/detector/yolo/data/yolov3-spp.weights && \
+    gdown --id 15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr -O models/MoveNet/movenet_multipose_lightning_256x256_FP32.bin
+
+# Build C/C++/CUDA extensions
+RUN bash models/AlphaPose/build_extensions.sh
+
+CMD sh -c "python3 main.py --method alphapose --input images/testImage.jpg --save_image && \
+           if [ -f /app/out/frame_0000.jpg ]; then echo '✅ Output image found!'; else echo '❌ Output image NOT found!'; exit 1; fi"
