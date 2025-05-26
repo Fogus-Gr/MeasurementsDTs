@@ -39,6 +39,8 @@ class AlphaPoseHPE(BaseHPE):
         self.checkpoint = checkpoint
         self.sp = sp
 
+        self.model_type = "alphapose"
+
         if not self.sp:
             torch.multiprocessing.set_start_method('forkserver', force=True)
             torch.multiprocessing.set_sharing_strategy('file_system')

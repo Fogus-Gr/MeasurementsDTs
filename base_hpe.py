@@ -3,9 +3,10 @@ import cv2
 import os
 from collections import namedtuple
 import glob
+import time
 
 from utils.visualizer import render
-from utils.evaluator import append_COCO_format, save_COCO_format_json
+from utils.evaluator import append_COCO_format_json, append_COCO_format_csv, save_COCO_format_json, save_COCO_format_csv
 
 class Body:
     def __init__(self, score, xmin, ymin, xmax, ymax, keypoints_score, keypoints, keypoints_norm):
@@ -31,6 +32,7 @@ class BaseHPE(ABC):
     def __init__(self, input_src=None,
                 output_dir=None,
                 enable_json=False,
+                enable_csv=False,
                 save_image=False,
                 save_video=False,
                 score_thresh=0.2,
@@ -39,6 +41,7 @@ class BaseHPE(ABC):
         super().__init__()
 
         self.json = enable_json
+        self.csv = enable_csv
         self.save_image = save_image
         self.save_video = save_video
         self.score_thresh = score_thresh
@@ -50,6 +53,9 @@ class BaseHPE(ABC):
         self.pd_w = 256
         self.pd_h = 256
         self.current_image_file = ""
+
+        self.start_time_of_experiment = time.time()
+        self.input_file = os.path.basename(os.path.normpath(input_src))
 
         if self.json or self.save_image or self.save_video:
             if output_dir is not None:
@@ -142,14 +148,20 @@ class BaseHPE(ABC):
 
         if self.json:
             save_COCO_format_json(os.path.join(self.output_dir, "COCOformat.json"))
+        if self.csv:
+            save_COCO_format_csv(os.path.join(self.output_dir, f"{self.model_type}-{self.start_time_of_experiment}-{self.input_file}.csv"))
 
     def process_frame(self, frame, frame_number):
+        timestamp = time.time()
+
         padded = self.pad_and_resize(frame)
         predictions = self.run_model(padded)
         bodies = self.postprocess(predictions)
 
         if self.json:
-            append_COCO_format(bodies, self.score_thresh, frame_number)
+            append_COCO_format_json(bodies, self.score_thresh, frame_number)
+        if self.csv:
+            append_COCO_format_csv(bodies, self.score_thresh, frame_number, timestamp)
 
         if self.save_image or self.save_video:
             # Ensure that LINES_BODY is defined in the child class

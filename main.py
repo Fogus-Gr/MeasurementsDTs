@@ -21,29 +21,43 @@ def parse_arguments():
         parser.add_argument('--input', type=str, default='0', help="Path to video or image file to use as input (default=%(default)s)")
         parser.add_argument("--output_dir", type=str, help="Path to directory where output files will be saved")          
         parser.add_argument("--json", action="store_true", help="Enable export keypoints to a single json file")
+        parser.add_argument("--csv", action="store_true", help="Enable export keypoints to a single csv file")
         parser.add_argument("--save_video", action="store_true", help="Save resutls into a video file")
         parser.add_argument("--save_image", action="store_true", help="Save image with keypoints")
         
         return parser
 
 def get_hpe_method(args):
+    method_map = {
+        'movenet': lambda args: MoveNetHPE(**base_args(args)),
+        'alphapose': lambda args: AlphaPoseHPE(**base_args(args)),
+        'openpose': lambda args: OpenVINOBaseHPE(model_type='openpose', **base_args(args)),
+        'hrnet': lambda args: OpenVINOBaseHPE(model_type='higherhrnet', **base_args(args)),
+        'ae1': lambda args: OpenVINOBaseHPE(model_type='efficienthrnet1', **base_args(args)),
+        'ae2': lambda args: OpenVINOBaseHPE(model_type='efficienthrnet2', **base_args(args)),
+        'ae3': lambda args: OpenVINOBaseHPE(model_type='efficienthrnet3', **base_args(args)),
+    }
+
     name = args.method.lower()
-    if name == 'movenet':
-        return MoveNetHPE(input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
-    elif name == 'alphapose':
-        return AlphaPoseHPE(input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
-    elif name == 'openpose':
-        return OpenVINOBaseHPE(model_type='openpose', input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
-    elif name == 'hrnet':
-        return OpenVINOBaseHPE(model_type='higherhrnet', input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
-    elif name == 'ae1':
-        return OpenVINOBaseHPE(model_type='efficienthrnet1', input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
-    elif name == 'ae2':
-        return OpenVINOBaseHPE(model_type='efficienthrnet2', input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
-    elif name == 'ae3':
-        return OpenVINOBaseHPE(model_type='efficienthrnet3', input_src = args.input, output_dir=args.output_dir, enable_json=args.json, save_image=args.save_image, save_video=args.save_video)
-    else:
+
+    if name not in method_map:
         raise ValueError(f"Unknown method: {name}")
+
+    if callable(method_map[name]):
+        return method_map[name](args)
+    else:
+        return method_map[name](**base_args(args))
+
+def base_args(args):
+    return {
+        "input_src": args.input,
+        "output_dir": args.output_dir,
+        "enable_json": args.json,
+        "enable_csv": args.csv,
+        "save_image": args.save_image,
+        "save_video": args.save_video
+    }
+
 
 if __name__ == "__main__":
     main()

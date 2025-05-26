@@ -19,6 +19,7 @@ class MoveNetHPE(BaseHPE):
         super().__init__(**kwargs)
         self.xml_path = xml_path
         self.device = device
+        self.model_type = "movenet"
 
     def load_model(self):
         print("Loading MoveNetHPE model...")
