@@ -118,6 +118,8 @@ class AlphaPoseHPE(BaseHPE):
                 orig_h, orig_w = orig_img.shape[:2]
                 
                 # Pose Estimation
+                if inps is None:
+                    raise ValueError("Input tensor 'inps' is None. Check the data loading or preprocessing steps.")
                 inps = inps.to(self.device)
                 datalen = inps.size(0)
                 leftover = 0

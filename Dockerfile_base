@@ -28,10 +28,13 @@ RUN mkdir -p models/AlphaPose/pretrained_models && \
     mkdir -p models/AlphaPose/detector/yolo/data && \
     gdown --id 1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI -O models/AlphaPose/pretrained_models/fast_res50_256x192.pth && \
     gdown --id 1k-9cUGcdH5ZFN1NcMvZrO0ApW241tboD -O models/AlphaPose/detector/yolo/data/yolov3-spp.weights && \
-    gdown --id 15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr -O models/MoveNet/movenet_multipose_lightning_256x256_FP32.bin
+    gdown --id 15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr -O models/MoveNet/movenet_multipose_lightning_256x256_FP32.bin && \
+    gdown --id 1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.bin && \
+    gdown --id 1ZSdsqgD4zUO4gyHMYBfxq3m4UMyQ187j -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin && \
+    gdown --id 1d8pGQrM9vEfz_oAIey0qRr7Gxp6dS2UE -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0006/FP32/human-pose-estimation-0006.bin && \
+    gdown --id 1lEUFqQnWHVymQoZvaXuDFcnOyEEKsexP -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
 
 # Build C/C++/CUDA extensions
 RUN bash models/AlphaPose/build_extensions.sh
-
-CMD sh -c "python3 main.py --method alphapose --input images/testImage.jpg --save_image && \
-           if [ -f /app/out/frame_0000.jpg ]; then echo '✅ Output image found!'; else echo '❌ Output image NOT found!'; exit 1; fi"
+# CMD ["python3", "main.py"]
+CMD ["python3", "main.py", "--method", "alphapose", "--input", "unit_tests/video/giphy.gif", "--save_image", "--json"]
