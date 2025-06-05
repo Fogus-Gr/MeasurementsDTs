@@ -1,8 +1,7 @@
 import os
-import sys
 import numpy as np
 import torch
-from base_hpe import BaseHPE, Body
+from base_hpe import BaseHPE, Body, Padding
 from types import SimpleNamespace
 
 try:
@@ -44,6 +43,10 @@ class AlphaPoseHPE(BaseHPE):
         if not self.sp:
             torch.multiprocessing.set_start_method('forkserver', force=True)
             torch.multiprocessing.set_sharing_strategy('file_system')
+
+        # No preprocessing needed - resizing/padding handled from the model (frame_preprocess)
+        kwargs['pd_w'] = 0
+        kwargs['pd_h'] = 0
 
         super().__init__(*args, **kwargs)
 
@@ -194,3 +197,12 @@ class AlphaPoseHPE(BaseHPE):
                 bodies.append(body)
 
         return bodies
+    
+    # AlphaPose expects original resolution inputs
+    # Override - No padding, no resizing
+    def set_padding(self):
+       
+        self.padding = Padding(0, 0, self.img_w, self.img_h)
+    
+    def pad_and_resize(self, frame):
+        return frame

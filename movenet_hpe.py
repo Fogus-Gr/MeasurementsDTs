@@ -16,6 +16,8 @@ class MoveNetHPE(BaseHPE):
     ]
 
     def __init__(self, xml_path=DEFAULT_MODEL, device="CPU", **kwargs):
+        kwargs['pd_w'] = 256
+        kwargs['pd_h'] = 256
         super().__init__(**kwargs)
         self.xml_path = xml_path
         self.device = device

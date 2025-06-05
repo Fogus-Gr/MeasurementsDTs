@@ -17,6 +17,15 @@ model_map = {
             'higherhrnet': SCRIPT_DIR / "models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.xml" # Try FP16 also
         }
 
+# Adjust pd_w / pd_h here dynamically per model type
+model_input_sizes = {
+            "openpose": (456, 256),
+            "higherhrnet": (512, 512),
+            "efficienthrnet1": (288, 288),
+            "efficienthrnet2": (352, 352),
+            "efficienthrnet3": (448, 448),
+        }
+
 ARCHITECTURES = {
     'efficienthrnet1': 'HPE-assosiative-embedding',
     'efficienthrnet2': 'HPE-assosiative-embedding',
@@ -34,9 +43,15 @@ class OpenVINOBaseHPE(BaseHPE):
     ]
 
     def __init__(self, model_type, device="CPU", **kwargs):
-        super().__init__(**kwargs)
         self.model_type = model_type
         self.device = device
+
+        if self.model_type in model_input_sizes:
+            self.pd_w, self.pd_h = model_input_sizes[self.model_type]
+        else:
+            raise ValueError(f"Unknown model type: {self.model_type}")
+
+        super().__init__(**kwargs)
 
     def load_model(self):
         print(f"Loading {self.model_type} model...")

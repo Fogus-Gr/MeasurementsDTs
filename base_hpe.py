@@ -37,7 +37,9 @@ class BaseHPE(ABC):
                 save_video=False,
                 score_thresh=0.2,
                 show_scores = True,
-                show_bounding_box = True):
+                show_bounding_box = True,
+                pd_w = 256,
+                pd_h = 256):
         super().__init__()
 
         self.json = enable_json
@@ -50,8 +52,8 @@ class BaseHPE(ABC):
         
         self.img_w = 0
         self.img_h = 0
-        self.pd_w = 256
-        self.pd_h = 256
+        self.pd_w = pd_w
+        self.pd_h = pd_h
         self.current_image_file = ""
 
         self.start_time_of_experiment = time.time()
@@ -108,7 +110,7 @@ class BaseHPE(ABC):
         pass
     
     def main_loop(self):
-        frame_number = 0
+        frame_number = 0    # TODO - For COCO not sure what to put
 
         if self.input_type == "image":
             self.process_frame(self.img, frame_number)
