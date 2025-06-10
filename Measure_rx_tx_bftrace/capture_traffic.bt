@@ -1,0 +1,49 @@
+#!/usr/bin/bpftrace
+
+BEGIN {
+    printf("Starting accurate network traffic monitoring (iperf3 only)...\n");
+}
+
+// Track receive traffic on return for iperf3
+kretprobe:sock_recvmsg
+/comm == "iperf3"/
+{
+    $ns = nsecs;
+    $sec = $ns / 1000000000;
+    $nsec = $ns % 1000000000;
+
+    if (retval > 0) {
+        printf("%s.%09d,%s,%d,%s,%d\n", 
+            strftime("%Y-%m-%d %H:%M:%S", $sec),
+            $nsec,
+            "RX",
+            pid,
+            comm,
+            retval
+        );
+    }
+}
+
+// Track send traffic on return for iperf3
+kretprobe:sock_sendmsg
+/comm == "iperf3"/
+{
+    $ns = nsecs;
+    $sec = $ns / 1000000000;
+    $nsec = $ns % 1000000000;
+
+    if (retval > 0) {
+        printf("%s.%09d,%s,%d,%s,%d\n", 
+            strftime("%Y-%m-%d %H:%M:%S", $sec),
+            $nsec,
+            "TX",
+            pid,
+            comm,
+            retval
+        );
+    }
+}
+
+END {
+    printf("Monitoring stopped.\n");
+}

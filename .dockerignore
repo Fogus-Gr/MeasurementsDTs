@@ -23,5 +23,7 @@ dist/
 .vscode/
 notebooks/
 out/
+iperf-test/
+*.csv
 
 

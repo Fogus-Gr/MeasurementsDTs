@@ -12,7 +12,9 @@ models/OpenVINO/pretrained_models/intel/human-pose-estimation-0007/FP32/human-po
 models/OpenVINO/pretrained_models/public/FP16/
 models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.bin
 out/
+iperf-test/pcap/*
 *.log
+*.csv
 
 # Compiled Cython/C++ files
 *.cpp
