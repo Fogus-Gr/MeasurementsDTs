@@ -78,6 +78,29 @@ class BaseHPE(ABC):
                 self.img = cv2.imread(input_src)
                 self.img_h, self.img_w = self.img.shape[:2]
                 self.current_image_file = os.path.basename(input_src)
+            elif input_src.startswith("http"):
+                self.input_type = "ip_stream"
+                
+                print(f"Attempting to connect to IP stream at {input_src}...")
+
+                # e.g. 60 tries * 1s = 60 seconds timeout
+                max_retries = 60
+                for attempt in range(max_retries):
+                    self.cap = cv2.VideoCapture(input_src)
+                    if self.cap.isOpened():
+                        break
+                    print(f"[{attempt+1}/{max_retries}] Stream not available, retrying in 1s...")
+                    time.sleep(1)
+
+                if not self.cap.isOpened():
+                    raise ValueError(f"Failed to connect to video stream after {max_retries} attempts: {input_src}")
+
+                # Give OpenCV a small buffer time to fetch metadata
+                time.sleep(0.5)
+
+                self.video_fps = int(self.cap.get(cv2.CAP_PROP_FPS)) or 25
+                self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             else:
                 if not input_src.isdigit():
                     self.input_type = "video"
@@ -110,7 +133,7 @@ class BaseHPE(ABC):
         pass
     
     def main_loop(self):
-        frame_number = 0    # TODO - For COCO not sure what to put
+        frame_number = 0
 
         if self.input_type == "image":
             self.process_frame(self.img, frame_number)
@@ -137,7 +160,7 @@ class BaseHPE(ABC):
 
                 frame_number += 1
         
-        else:   # webcam or video
+        else:   # webcam, video or stream
             print("Starting processing video/webcam data. Press CTR+C to exit")
             while True:
                 ok, frame = self.cap.read()

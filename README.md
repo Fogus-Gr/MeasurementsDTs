@@ -94,7 +94,7 @@ bash models/AlphaPose/build_extensions.sh
 
 ### Executing program
 
-* Example usage
+Example usage
 ```
 # For MoveNet single image
 python3 main.py --method movenet --input unit_tests/images/testImage.jpg --save_image
@@ -108,3 +108,14 @@ python3 main.py --method ae1 --input unit_tests/video/giphy.gif --save_video
 # For detailed options
 python3 main.py --help
 ```
+
+### Developer Utilities
+
+For development or testing purposes, you can use helper tools found in the `dev_tools/` directory.
+
+```bash
+# To simulate an IP camera stream using a local test video:
+python3 dev_tools/stream_video_server.py
+```
+
+This will start a local Flask server streaming video from `unit_tests/video/giphy.gif` at `http://<your-ip>:8080/video_feed`
