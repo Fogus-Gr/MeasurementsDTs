@@ -22,6 +22,7 @@ def parse_arguments():
         parser.add_argument("--output_dir", type=str, help="Path to directory where output files will be saved")          
         parser.add_argument("--json", action="store_true", help="Enable export keypoints to a single json file")
         parser.add_argument("--csv", action="store_true", help="Enable export keypoints to a single csv file")
+        parser.add_argument("--measurement_interval_ms", type=int, default=100, help="Interval in ms for measuring transmitted data volume per interval")
         parser.add_argument("--save_video", action="store_true", help="Save resutls into a video file")
         parser.add_argument("--save_image", action="store_true", help="Save image with keypoints")
         parser.add_argument('--device', type=str, default="GPU", choices=['GPU', 'CPU'], help="Device to run inference on. Options: CPU, GPU")
@@ -55,6 +56,7 @@ def base_args(args):
         "output_dir": args.output_dir,
         "enable_json": args.json,
         "enable_csv": args.csv,
+        "measurement_interval_ms": args.measurement_interval_ms,
         "save_image": args.save_image,
         "save_video": args.save_video
     }

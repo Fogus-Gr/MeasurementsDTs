@@ -6,7 +6,7 @@ import glob
 import time
 
 from utils.visualizer import render
-from utils.evaluator import append_COCO_format_json, append_COCO_format_csv, save_COCO_format_json, save_COCO_format_csv
+from utils.evaluator import append_COCO_format_json, append_COCO_format_csv, save_COCO_format_json, save_COCO_format_csv, save_Tx_csv_data
 
 class Body:
     def __init__(self, score, xmin, ymin, xmax, ymax, keypoints_score, keypoints, keypoints_norm):
@@ -33,6 +33,7 @@ class BaseHPE(ABC):
                 output_dir=None,
                 enable_json=False,
                 enable_csv=False,
+                measurement_interval_ms=100,
                 save_image=False,
                 save_video=False,
                 score_thresh=0.2,
@@ -44,6 +45,7 @@ class BaseHPE(ABC):
 
         self.json = enable_json
         self.csv = enable_csv
+        self.measurement_interval_ms = measurement_interval_ms
         self.save_image = save_image
         self.save_video = save_video
         self.score_thresh = score_thresh
@@ -174,7 +176,8 @@ class BaseHPE(ABC):
         if self.json:
             save_COCO_format_json(os.path.join(self.output_dir, "COCOformat.json"))
         if self.csv:
-            save_COCO_format_csv(os.path.join(self.output_dir, f"{self.model_type}-{self.start_time_of_experiment}-{self.input_file}.csv"))
+            save_COCO_format_csv(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_JSON.csv"))
+            save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
 
     def process_frame(self, frame, frame_number):
         timestamp = time.time()
@@ -186,7 +189,7 @@ class BaseHPE(ABC):
         if self.json:
             append_COCO_format_json(bodies, self.score_thresh, frame_number)
         if self.csv:
-            append_COCO_format_csv(bodies, self.score_thresh, frame_number, timestamp)
+            append_COCO_format_csv(bodies, self.score_thresh, frame_number, timestamp, self.measurement_interval_ms)
 
         if self.save_image or self.save_video:
             # Ensure that LINES_BODY is defined in the child class
