@@ -19,6 +19,12 @@ except ImportError as e:
 DEFAULT_CFG        = "models/AlphaPose/pretrained_models/256x192_res50_lr1e-3_1x.yaml"
 DEFAULT_CHECKPOINT = "models/AlphaPose/pretrained_models/fast_res50_256x192.pth"
 
+# Note: current input handles max 1 gpu - so no option fo gpus = "0,1" for example
+DEVICE_TO_GPU = {
+            "GPU": "0",
+            "CPU": "-1"
+        }
+
 class AlphaPoseHPE(BaseHPE):
     LINES_BODY = [ 
         [4,2], [2,0], [0,1], [1,3],
@@ -27,8 +33,9 @@ class AlphaPoseHPE(BaseHPE):
         [12,14], [14,16], [11,13], [13,15]
     ]
 
-    def __init__(self, cfg = DEFAULT_CFG, gpus = "0", detbatch = 1, posebatch = 32, detector = "yolo", 
+    def __init__(self, cfg = DEFAULT_CFG, device = "GPU", detbatch = 1, posebatch = 32, detector = "yolo", 
                  checkpoint = DEFAULT_CHECKPOINT, sp = True, *args, **kwargs):
+        gpus = DEVICE_TO_GPU.get(device, "-1")
         self.cfg = cfg
         self.gpus = [int(i) for i in gpus.split(',')] if torch.cuda.device_count() >= 1 else [-1]
         self.device = torch.device("cuda:" + str(self.gpus[0]) if self.gpus[0] >= 0 else "cpu")
@@ -39,6 +46,7 @@ class AlphaPoseHPE(BaseHPE):
         self.sp = sp
 
         self.model_type = "alphapose"
+        print(f"[INFO] Running AlphaPose on {self.device}")
 
         if not self.sp:
             torch.multiprocessing.set_start_method('forkserver', force=True)

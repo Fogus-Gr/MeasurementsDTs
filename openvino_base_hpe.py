@@ -9,29 +9,37 @@ from models.OpenVINO.model_api.pipelines import get_user_config
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-model_map = {
-            "openpose": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.xml",
-            "efficienthrnet1": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP32/human-pose-estimation-0005.xml",
-            "efficienthrnet2": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0006/FP32/human-pose-estimation-0006.xml",
-            "efficienthrnet3": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0007/FP32/human-pose-estimation-0007.xml",
-            'higherhrnet': SCRIPT_DIR / "models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.xml" # Try FP16 also
-        }
-
-# Adjust pd_w / pd_h here dynamically per model type
-model_input_sizes = {
-            "openpose": (456, 256),
-            "higherhrnet": (512, 512),
-            "efficienthrnet1": (288, 288),
-            "efficienthrnet2": (352, 352),
-            "efficienthrnet3": (448, 448),
-        }
-
-ARCHITECTURES = {
-    'efficienthrnet1': 'HPE-assosiative-embedding',
-    'efficienthrnet2': 'HPE-assosiative-embedding',
-    'efficienthrnet3': 'HPE-assosiative-embedding',
-    'higherhrnet': 'HPE-assosiative-embedding',
-    'openpose': 'openpose'
+MODEL_CONFIGS = {
+    "openpose": {
+        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.xml",
+        "input_size": (456, 256),
+        "architecture": "openpose",
+        "gpu_supported": True,
+    },
+    "efficienthrnet1": {
+        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP32/human-pose-estimation-0005.xml",
+        "input_size": (288, 288),
+        "architecture": "HPE-associative-embedding",
+        "gpu_supported": True,
+    },
+    "efficienthrnet2": {
+        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0006/FP32/human-pose-estimation-0006.xml",
+        "input_size": (352, 352),
+        "architecture": "HPE-associative-embedding",
+        "gpu_supported": True,
+    },
+    "efficienthrnet3": {
+        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0007/FP32/human-pose-estimation-0007.xml",
+        "input_size": (448, 448),
+        "architecture": "HPE-associative-embedding",
+        "gpu_supported": True,
+    },
+    "higherhrnet": {
+        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.xml", # Try FP16 also
+        "input_size": (512, 512),
+        "architecture": "HPE-associative-embedding",
+        "gpu_supported": False,
+    }
 }
 
 class OpenVINOBaseHPE(BaseHPE):
@@ -43,23 +51,25 @@ class OpenVINOBaseHPE(BaseHPE):
     ]
 
     def __init__(self, model_type, device="CPU", **kwargs):
+        if model_type not in MODEL_CONFIGS:
+            raise ValueError(f"Unsupported model type: {self.model_type}. Choose from: {list(MODEL_CONFIGS.keys())}")
+
         self.model_type = model_type
+        self.model_cfg = MODEL_CONFIGS[self.model_type]
         self.device = device
 
-        if self.model_type in model_input_sizes:
-            self.pd_w, self.pd_h = model_input_sizes[self.model_type]
-        else:
-            raise ValueError(f"Unknown model type: {self.model_type}")
+        if self.device == "GPU" and not self.model_cfg["gpu_supported"]:
+            print(f"[INFO] Model '{self.model_type}' is not supported on GPU. Falling back to CPU.")
+            self.device = "CPU"
+
+        self.pd_w, self.pd_h = self.model_cfg["input_size"]
 
         super().__init__(**kwargs)
 
     def load_model(self):
         print(f"Loading {self.model_type} model...")
 
-        if self.model_type not in model_map:
-            raise ValueError(f"Unsupported model type: {self.model_type}. Choose from: {list(model_map.keys())}")
-
-        xml_path = model_map[self.model_type]
+        xml_path = self.model_cfg["path"]
 
         plugin_config = get_user_config(self.device, '', None)
         model_adapter = OpenvinoAdapter(create_core(), xml_path, device=self.device, plugin_config=plugin_config,
@@ -75,7 +85,8 @@ class OpenVINOBaseHPE(BaseHPE):
             'padding_mode': 'center' if self.model_type == 'higherhrnet' else None, # the 'higherhrnet' and 'ae' specific
             'delta': 0.5 if self.model_type == 'higherhrnet' else None, # the 'higherhrnet' and 'ae' specific
         }
-        self.model = ImageModel.create_model(ARCHITECTURES[self.model_type], model_adapter, config)
+        architecture = self.model_cfg["architecture"]
+        self.model = ImageModel.create_model(architecture, model_adapter, config)
         self.model.log_layers_info()
         self.model.load()
         print("Loading completed")

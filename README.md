@@ -113,8 +113,12 @@ python3 main.py --help
 
 For development or testing purposes, you can use helper tools found in the `dev_tools/` directory.
 
+Example usage
 ```bash
-# To simulate an IP camera stream using a local test video:
+# Replace <your-ip> with the output of hostname -I:
+python3 main.py --method movenet --input http://<your-ip>:8080/video_feed --save_video
+ 
+# In another terminal window, start the video stream server:
 python3 dev_tools/stream_video_server.py
 ```
 
