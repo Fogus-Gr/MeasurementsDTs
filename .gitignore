@@ -32,3 +32,7 @@ test-env/
 /myenv/*
 results/
 timestamps.txt
+recent-dash/results_dash_*
+recent-dash/results
+recent-dash/pids
+recent-dash/dash_proxy_traffic_analysis_*
