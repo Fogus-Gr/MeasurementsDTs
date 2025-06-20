@@ -36,3 +36,5 @@ recent-dash/results_dash_*
 recent-dash/results
 recent-dash/pids
 recent-dash/dash_proxy_traffic_analysis_*
+monitor/results_*
+Measure_rx_tx_bftrace/results_*
