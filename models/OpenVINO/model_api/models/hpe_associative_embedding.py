@@ -25,7 +25,7 @@ from .utils import resize_image
 
 
 class HpeAssociativeEmbedding(ImageModel):
-    __model__ = 'HPE-assosiative-embedding'
+    __model__ = 'HPE-associative-embedding'
 
     def __init__(self, model_adapter, configuration=None, preload=False):
         super().__init__(model_adapter, configuration, preload=False)

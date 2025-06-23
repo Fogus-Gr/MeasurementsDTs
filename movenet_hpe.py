@@ -1,3 +1,5 @@
+# Based on https://github.com/geaxgx/openvino_movenet_multipose/tree/main
+
 from openvino.runtime import Core
 import numpy as np
 import cv2
@@ -16,9 +18,16 @@ class MoveNetHPE(BaseHPE):
     ]
 
     def __init__(self, xml_path=DEFAULT_MODEL, device="CPU", **kwargs):
+        kwargs['pd_w'] = 256
+        kwargs['pd_h'] = 256
         super().__init__(**kwargs)
         self.xml_path = xml_path
         self.device = device
+        self.model_type = "movenet"
+
+        if self.device == "GPU":
+            print(f"[INFO] Model '{self.model_type}' is not supported on GPU. Falling back to CPU.")
+            self.device = "CPU"
 
     def load_model(self):
         print("Loading MoveNetHPE model...")

@@ -3,9 +3,10 @@ import cv2
 import os
 from collections import namedtuple
 import glob
+import time
 
 from utils.visualizer import render
-from utils.evaluator import append_COCO_format, save_COCO_format_json
+from utils.evaluator import append_COCO_format_json, append_COCO_format_csv, save_COCO_format_json, save_COCO_format_csv, save_Tx_csv_data
 
 class Body:
     def __init__(self, score, xmin, ymin, xmax, ymax, keypoints_score, keypoints, keypoints_norm):
@@ -31,14 +32,20 @@ class BaseHPE(ABC):
     def __init__(self, input_src=None,
                 output_dir=None,
                 enable_json=False,
+                enable_csv=False,
+                measurement_interval_ms=100,
                 save_image=False,
                 save_video=False,
                 score_thresh=0.2,
                 show_scores = True,
-                show_bounding_box = True):
+                show_bounding_box = True,
+                pd_w = 256,
+                pd_h = 256):
         super().__init__()
 
         self.json = enable_json
+        self.csv = enable_csv
+        self.measurement_interval_ms = measurement_interval_ms
         self.save_image = save_image
         self.save_video = save_video
         self.score_thresh = score_thresh
@@ -47,9 +54,12 @@ class BaseHPE(ABC):
         
         self.img_w = 0
         self.img_h = 0
-        self.pd_w = 256
-        self.pd_h = 256
+        self.pd_w = pd_w
+        self.pd_h = pd_h
         self.current_image_file = ""
+
+        self.start_time_of_experiment = time.time()
+        self.input_file = os.path.basename(os.path.normpath(input_src))
 
         if self.json or self.save_image or self.save_video:
             if output_dir is not None:
@@ -70,6 +80,29 @@ class BaseHPE(ABC):
                 self.img = cv2.imread(input_src)
                 self.img_h, self.img_w = self.img.shape[:2]
                 self.current_image_file = os.path.basename(input_src)
+            elif input_src.startswith("http"):
+                self.input_type = "ip_stream"
+                
+                print(f"Attempting to connect to IP stream at {input_src}...")
+
+                # e.g. 60 tries * 1s = 60 seconds timeout
+                max_retries = 60
+                for attempt in range(max_retries):
+                    self.cap = cv2.VideoCapture(input_src)
+                    if self.cap.isOpened():
+                        break
+                    print(f"[{attempt+1}/{max_retries}] Stream not available, retrying in 1s...")
+                    time.sleep(1)
+
+                if not self.cap.isOpened():
+                    raise ValueError(f"Failed to connect to video stream after {max_retries} attempts: {input_src}")
+
+                # Give OpenCV a small buffer time to fetch metadata
+                time.sleep(0.5)
+
+                self.video_fps = int(self.cap.get(cv2.CAP_PROP_FPS)) or 25
+                self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             else:
                 if not input_src.isdigit():
                     self.input_type = "video"
@@ -129,7 +162,7 @@ class BaseHPE(ABC):
 
                 frame_number += 1
         
-        else:   # webcam or video
+        else:   # webcam, video or stream
             print("Starting processing video/webcam data. Press CTR+C to exit")
             while True:
                 ok, frame = self.cap.read()
@@ -142,14 +175,21 @@ class BaseHPE(ABC):
 
         if self.json:
             save_COCO_format_json(os.path.join(self.output_dir, "COCOformat.json"))
+        if self.csv:
+            save_COCO_format_csv(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_JSON.csv"))
+            save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
 
     def process_frame(self, frame, frame_number):
+        timestamp = time.time()
+
         padded = self.pad_and_resize(frame)
         predictions = self.run_model(padded)
         bodies = self.postprocess(predictions)
 
         if self.json:
-            append_COCO_format(bodies, self.score_thresh, frame_number)
+            append_COCO_format_json(bodies, self.score_thresh, frame_number)
+        if self.csv:
+            append_COCO_format_csv(bodies, self.score_thresh, frame_number, timestamp, self.measurement_interval_ms)
 
         if self.save_image or self.save_video:
             # Ensure that LINES_BODY is defined in the child class
