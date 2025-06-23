@@ -42,3 +42,4 @@ Measure_rx_tx_bftrace/results_*
 segments/
 captures/
 results_dash_*/
+videos/*
