@@ -38,3 +38,7 @@ recent-dash/pids
 recent-dash/dash_proxy_traffic_analysis_*
 monitor/results_*
 Measure_rx_tx_bftrace/results_*
+/.DS_Store
+segments/
+captures/
+results_dash_*/
