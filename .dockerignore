@@ -23,7 +23,11 @@ dist/
 .vscode/
 notebooks/
 out/
-iperf-test/
 *.csv
+docker-compose*
+monitor/
+Measure_*/
+measurement_containers/
+
 
 

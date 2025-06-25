@@ -9,7 +9,7 @@ from flask import Flask, Response
 import cv2
 
 app = Flask(__name__)
-video_path = "unit_tests/video/giphy.gif"  # Replace with your video path
+video_path = "videos/ultimatum/hd_00_00.mp4"  # Replace with your video path
 cap = cv2.VideoCapture(video_path)
 
 def generate_frames():
@@ -19,7 +19,7 @@ def generate_frames():
         if not success:
             print("[INFO] Video ended. Replaying from start...")
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Loop video
-            continue
+            break
 
         if first_time:
             print("[INFO] Starting video stream...")

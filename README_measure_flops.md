@@ -94,6 +94,8 @@ sudo apt-get clean
 sudo update-initramfs -u
 sudo reboot
 
+udo ubuntu-drivers devices
+
 sudo apt-get update
 sudo apt-get install -y nvidia-container-toolkit
 sudo systemctl restart docker

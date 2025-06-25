@@ -1,0 +1,38 @@
+version: '3'
+
+services:
+  hpe:
+    build:
+      context: ..
+      dockerfile: Dockerfile_base
+    entrypoint: [/app/entrypoint.sh]
+    command: [python3, main.py, --method, movenet, --input, video.mp4]
+    pid: "host"
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+    volumes:
+      - ./pids:/pids:rw
+      - ./results:/output:rw
+    environment:
+      - PID_FILE=/pids/hpe.pid
+
+  monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.perf
+    volumes:
+      - ./pids:/pids:rw
+      - ./results:/output:rw
+    environment:
+      - TARGET_PID_FILE=/pids/hpe.pid
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
+      - IPC_LOCK
+    pid: "host"
+    security_opt:
+      - seccomp=unconfined
+    privileged: true
+    command: /monitor_pid.sh
