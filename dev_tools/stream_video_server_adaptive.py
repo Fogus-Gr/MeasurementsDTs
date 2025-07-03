@@ -1,8 +1,6 @@
 """
-Development-only script for simulating an IP video stream using Flask.
-Used for local testing of IP-stream-based HPE input.
-
-Do NOT deploy in production.
+Adaptive Flask video streaming server for H.264 MP4 files.
+Streams at original frame rate and resolution, with JPEG quality based on video.
 """
 
 from flask import Flask, Response
@@ -12,15 +10,10 @@ import time
 import numpy as np
 import argparse
 
-# Get script directory for relative paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
 app = Flask(__name__)
 
-# Default to a relative path from the script directory
 video_path = os.path.join(SCRIPT_DIR, "videos/ultimatum/hd_00_00.mp4")
-
-# Add these global variables at the top (after video_path)
 video_info = {
     "resolution": "N/A",
     "fps": "N/A",
@@ -28,66 +21,70 @@ video_info = {
 }
 
 def generate_test_pattern():
-    """Generate a test pattern when no video is available"""
-    # Create a 640x480 test pattern
     img = np.zeros((480, 640, 3), dtype=np.uint8)
-    
-    # Add colored rectangles
-    img[50:150, 50:250] = [0, 0, 255]  # Red
-    img[50:150, 280:480] = [0, 255, 0]  # Green
-    img[200:300, 50:250] = [255, 0, 0]  # Blue
-    img[200:300, 280:480] = [255, 255, 0]  # Yellow
-    
-    # Add text
+    img[50:150, 50:250] = [0, 0, 255]
+    img[50:150, 280:480] = [0, 255, 0]
+    img[200:300, 50:250] = [255, 0, 0]
+    img[200:300, 280:480] = [255, 255, 0]
     font = cv2.FONT_HERSHEY_SIMPLEX
     cv2.putText(img, 'Test Pattern', (180, 400), font, 1.5, (255, 255, 255), 2)
     cv2.putText(img, f'Video file not found at:', (120, 430), font, 0.6, (255, 255, 255), 1)
     cv2.putText(img, f'{video_path}', (50, 460), font, 0.5, (255, 255, 255), 1)
+    return img
+
+def get_jpeg_quality(width, height):
+    # Use higher JPEG quality for HD, lower for VGA
+    if width >= 1280 or height >= 720:
+        return 90
+    else:
+        return 80
+
+def generate_end_frame():
+    """Generate an end frame when video finishes"""
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    # Add gradient background
+    for i in range(480):
+        img[i, :] = [40, 40, 40 + (i // 3)]
     
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(img, 'End of Video', (180, 200), font, 1.5, (255, 255, 255), 2)
+    cv2.putText(img, f'Video has finished playing:', (120, 260), font, 0.7, (255, 255, 255), 1)
+    cv2.putText(img, f'{os.path.basename(video_path)}', (120, 300), font, 0.7, (200, 200, 255), 1)
+    cv2.putText(img, f'Refresh browser to replay', (160, 400), font, 0.7, (180, 180, 180), 1)
     return img
 
 def generate_frames():
     global video_path, video_info
-    
-    # Print debug info
-    print(f"[DEBUG] Script directory: {SCRIPT_DIR}")
-    print(f"[DEBUG] Current working directory: {os.getcwd()}")
-    print(f"[DEBUG] Looking for video at: {video_path}")
-    
-    # Check if file exists
+
     if not os.path.exists(video_path):
         print(f"[ERROR] Video file not found: {video_path}")
-        # Generate test pattern frames
         while True:
             test_frame = generate_test_pattern()
-            ret, buffer = cv2.imencode('.jpg', test_frame)
+            ret, buffer = cv2.imencode('.jpg', test_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
             frame = buffer.tobytes()
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-            time.sleep(0.5)  # Update twice per second
+            time.sleep(0.5)
     else:
         print(f"[INFO] Opening video from: {video_path}")
         cap = cv2.VideoCapture(video_path)
-        
         if not cap.isOpened():
             print("[ERROR] Failed to open video file")
-            # Generate test pattern frames
             while True:
                 test_frame = generate_test_pattern()
-                ret, buffer = cv2.imencode('.jpg', test_frame)
+                ret, buffer = cv2.imencode('.jpg', test_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
                 frame = buffer.tobytes()
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-                time.sleep(0.5)  # Update twice per second
+                time.sleep(0.5)
         else:
-            # Get video info
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = cap.get(cv2.CAP_PROP_FPS)
             frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
             if width <= 0 or height <= 0:
-                width, height = 640, 480  # or whatever your default is
+                width, height = 640, 480
             if fps <= 0:
                 print("[WARNING] FPS not found or invalid. Defaulting to 30 FPS.")
                 fps = 30
@@ -98,41 +95,61 @@ def generate_frames():
             video_info["fps"] = f"{fps:.2f}"
             video_info["frame_count"] = str(frame_count)
 
+            jpeg_quality = get_jpeg_quality(width, height)
+            print(f"[INFO] Streaming at {fps} FPS, {width}x{height}, JPEG quality {jpeg_quality}")
+
+            # For HD videos, consider downscaling for better performance
+            downscale = width > 1280  # Only downscale HD videos
+            target_width = 1280 if downscale else width
+            target_height = int(height * (target_width / width)) if downscale else height
+            
+            print(f"[INFO] Original: {width}x{height}, Streaming: {target_width}x{target_height}")
+            
+            # Simpler frame delivery with minimal overhead
             first_time = True
             frame_counter = 0
+            video_ended = False
             
             while True:
-                success, frame = cap.read()
-                
-                if not success:
-                    print(f"[INFO] Video ended after {frame_counter} frames. Reopening file...")
-                    cap.release()
-                    time.sleep(0.1)  # Small delay to ensure file is properly released
-                    cap = cv2.VideoCapture(video_path)
-                    frame_counter = 0
-                    if not cap.isOpened():
-                        print("[ERROR] Failed to reopen video file")
-                        break
+                # Show end frame if video ended
+                if video_ended:
+                    end_frame = generate_end_frame()
+                    ret, buffer = cv2.imencode('.jpg', end_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+                    time.sleep(1)
                     continue
-                    
-                frame_counter += 1
                 
+                # Start time measurement for this frame
+                start_time = time.time()
+                
+                # Read frame
+                success, frame = cap.read()
+                if not success:
+                    print(f"[INFO] Video ended after {frame_counter} frames. Not looping.")
+                    video_ended = True
+                    continue
+                
+                frame_counter += 1
                 if first_time:
                     print("[INFO] Starting video stream...")
                     first_time = False
-        
-                ret, buffer = cv2.imencode('.jpg', frame)
-                frame = buffer.tobytes()
-        
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
                 
-                # Add a small delay to control frame rate
-                time.sleep(1 / fps)
+                # Resize if needed (for HD videos)
+                if downscale:
+                    frame = cv2.resize(frame, (target_width, target_height))
+                
+                # Encode with moderate quality (balance between speed and quality)
+                ret, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+                
+                # Send frame
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+                
+                # No timing control - run at maximum speed
 
 @app.route('/')
 def index():
-    """Serve a simple page with the video stream embedded"""
     return f'''
     <!DOCTYPE html>
     <html>
@@ -148,7 +165,6 @@ def index():
         <div class="container">
           <h1>Video Stream</h1>
           <img src="/video_feed" width="640" height="480" />
-          
           <div class="debug">
             <h3>Debug Information</h3>
             <p><strong>Video path:</strong> {video_path}</p>
@@ -169,16 +185,11 @@ def video_feed():
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == "__main__":
-    # Parse command line arguments
     parser = argparse.ArgumentParser(description='Video streaming server')
     parser.add_argument('--video', type=str, help='Path to video file')
     args = parser.parse_args()
-    
-    # Update video path if provided via command line
     if args.video:
         video_path = args.video
         print(f"[INFO] Using video path from command line: {video_path}")
-    
     print(f"[INFO] Starting server with video: {video_path}")
-    print(cv2.getBuildInformation())
     app.run(host="0.0.0.0", port=8089, threaded=True)

@@ -1,0 +1,4 @@
+Container Instantiation Timing:
+Container hpe instantiation time: .800765631 seconds
+Container perf_monitor instantiation time: 1.461565448 seconds
+Container trace_container instantiation time: 1.577231809 seconds

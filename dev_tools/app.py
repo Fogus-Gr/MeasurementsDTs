@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 
 # Get video path from environment variable with fallback
-video_path = os.environ.get("VIDEO_PATH", "videos/ultimatum/hd_00_00.mp4")
+video_path = os.environ.get("VIDEO_PATH", "/home/user/MeasurementsDTs/videos/ultimatum/hd_00_00.mp4")
 logging.info(f"Using video path: {video_path}")
 
 # Log path information for debugging
@@ -77,11 +77,16 @@ def video_feed():
 
 @app.route('/')
 def index():
-    """Route for main page"""
-    logging.info(f"Client connected to main page")
-    return '<h2>Video Stream Server</h2><img src="/video_feed" width="640">'
+    return '''
+    <html>
+      <body>
+        <h2>Video Stream Server</h2>
+        <img src="/video_feed" width="640" />
+      </body>
+    </html>
+    '''
 
 if __name__ == '__main__':
     logging.info("Starting Flask server...")
     # Add explicit threading (key improvement #3)
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), threaded=True)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8089)), threaded=True)

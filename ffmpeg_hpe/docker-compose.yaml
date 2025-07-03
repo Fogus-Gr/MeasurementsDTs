@@ -1,0 +1,134 @@
+services:
+  h264-streaming-server:
+    build:
+      context: ../rtsp-ipcam
+      dockerfile: Dockerfile
+    container_name: h264-streaming-server
+    restart: unless-stopped
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./results:/output
+      - ../rtsp-ipcam/config:/app/config:ro
+      - /home/user/MeasurementsDTs/videos/rangeOfMotion/hd_00_00.mp4:/app/videos/hd_00_00.mp4:ro
+    environment:
+      - SERVER_PORT=8089
+      - VIDEO_FILE=/app/videos/hd_00_00.mp4
+    networks:
+      - streaming-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/8089 || exit 1"]
+      interval: 10s
+      timeout: 10s  # Increase from 5s to 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 500M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=1000m
+
+  hpe:
+    image: ffmpeg_hpe:latest
+    # build:
+    #   context: ..
+    #   dockerfile: ffmpeg_hpe/Dockerfile_base
+    # command: python3 main.py --method movenet --input /videos/${VIDEO_FILE:-ultimatum/hd_00_00.mp4}
+    # The command will be injected dynamically by the experiment script
+    pid: "host"
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+    volumes:
+      - ./results:/output
+      - ../videos:/videos:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - streaming-network
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "python.*main.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'  # Adjust based on your needs
+          memory: 8G    # Adjust based on your model requirements
+
+
+  gpu-metrics:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu_metrics
+    container_name: gpu-metrics
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ./results:/output
+    networks:
+      - streaming-network
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "nvidia-smi"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  perf_monitor:
+    build:
+      context: ../recent-dash/perf_monitor
+      dockerfile: Dockerfile
+    volumes:
+      - ./results:/output:rw
+      - ./pids:/pids:ro
+    environment:
+      - OUTPUT_DIR=/output
+      - EXPERIMENT_TYPE=ffmpeg_hpe   # Optional, for script logic
+    pid: host
+    cap_add:
+      - SYS_ADMIN
+      - SYS_NICE
+      - IPC_LOCK
+      - SYS_PTRACE
+    privileged: true
+    user: root
+    networks:
+      - streaming-network
+
+  trace_container:
+    image: video-bpftrace:latest
+    build:
+      context: ./bpftrace-tracer
+      dockerfile: Dockerfile
+    privileged: true
+    pid: host
+    network_mode: "host"
+    environment:
+      - NETIF=eth0
+      - TARGET_PORT=8089
+    volumes:
+      - /sys/kernel/debug:/sys/kernel/debug
+      - /lib/modules:/lib/modules:ro
+      - ./traces:/opt/tracer/output
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /sys:/sys:ro
+    working_dir: /opt/tracer
+    entrypoint: ["/bin/bash", "-c"]
+    command: ./trace_video_traffic.sh
+
+networks:
+  streaming-network:
+    driver: bridge

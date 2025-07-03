@@ -1,0 +1,25 @@
+FROM nvidia/cuda:12.2.0-base-ubuntu20.04
+
+# Install required system packages
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    nvidia-utils-535 \
+    coreutils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create output directory
+RUN mkdir -p /output
+
+WORKDIR /app
+
+# Copy the script
+COPY run_nvidia_dcgm.sh .
+RUN chmod +x run_nvidia_dcgm.sh
+
+# Set environment variables
+ENV METRICS_OUTPUT_DIR=/output \
+    METRICS_INTERVAL=0.5 \
+    METRICS_DURATION=0
+
+# Set the entrypoint
+ENTRYPOINT ["/app/run_nvidia_dcgm.sh"]

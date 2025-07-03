@@ -1,0 +1,8 @@
+pids/
+results/
+*.pyc
+__pycache__/
+*.log
+*.csv
+*.png
+ssl/
