@@ -10,10 +10,14 @@ fi
 measure_container_startup() {
   local container_name=$1
   local start_time=$2
-  local container_id=$(docker ps -qf "name=${container_name}")
+  
+  # Try exact name first, then pattern match as fallback
+  local container_id=$(docker ps -q --filter "name=^/${container_name}$" 2>/dev/null)
+  if [ -z "$container_id" ]; then
+    container_id=$(docker ps -qf "name=.*${container_name}.*")
+  fi
+  
   if [ -n "$container_id" ]; then
-    local created_at=$(docker inspect --format='{{.Created}}' $container_id)
-    local started_at=$(docker inspect --format='{{.State.StartedAt}}' $container_id)
     local current_time=$(date +%s.%N)
     local time_diff=$(echo "$current_time - $start_time" | bc)
     echo "Container $container_name instantiation time: $time_diff seconds" >> "$results_dir/container_timing.txt"
@@ -21,6 +25,25 @@ measure_container_startup() {
   else
     echo "[WARNING] Could not find container $container_name to measure startup time"
   fi
+}
+
+# Add after measure_container_startup() function (around line 27)
+
+capture_diagnostics() {
+  echo "[DEBUG] ===== CAPTURING DIAGNOSTICS ====="
+  echo "[DEBUG] NVIDIA GPU Status:"
+  nvidia-smi || echo "nvidia-smi failed - no GPU or driver issue"
+  
+  echo "[DEBUG] Docker containers:"
+  docker ps -a
+  
+  echo "[DEBUG] HPE container logs:"
+  docker logs $(docker ps -a -qf "name=hpe" --last 1) 2>&1 || echo "No logs available"
+  
+  echo "[DEBUG] Video stream availability:"
+  curl -I "$STREAM_URL" 2>&1 || echo "Stream not accessible"
+  
+  echo "[DEBUG] ===== END DIAGNOSTICS ====="
 }
 
 # Get current timestamp and CPU info for results directory
@@ -63,32 +86,69 @@ docker compose -f $COMPOSE_FILE up -d --force-recreate h264-streaming-server
 echo "[DEBUG] H264_CONTAINER_NAME=$H264_CONTAINER_NAME"
 echo "[DEBUG] Health status: $(docker inspect --format='{{.State.Health.Status}}' h264-streaming-server 2>/dev/null)"
 
-# Wait for healthcheck to pass
+# Wait for healthcheck to pass - add timeout
+wait_start=$(date +%s)
+wait_timeout=60  # 60 seconds max to wait for streaming server
 while [[ $(docker inspect --format='{{.State.Health.Status}}' $H264_CONTAINER_NAME 2>/dev/null) != "healthy" ]]; do
   echo "Waiting for h264-streaming-server to become healthy..."
+  
+  # Check if we've waited too long
+  current=$(date +%s)
+  if [ $((current - wait_start)) -gt $wait_timeout ]; then
+    echo "[WARNING] Streaming server healthcheck timed out, continuing anyway..."
+    break
+  fi
+  
   sleep 2
 done
 
-# Extract the stream URL from logs and replace localhost with container name
-STREAM_URL=$(docker logs $H264_CONTAINER_NAME 2>&1 | grep "Test with VLC:" | tail -1 | awk -F': ' '{print $2}' | sed 's/localhost/h264-streaming-server/')
-echo "[DEBUG] Original stream URL: $(docker logs $H264_CONTAINER_NAME 2>&1 | grep "Test with VLC:" | tail -1 | awk -F': ' '{print $2}')"
-echo "[DEBUG] Modified stream URL: $STREAM_URL"
+# Get streaming server IP directly
+STREAM_SERVER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $H264_CONTAINER_NAME)
+STREAM_URL="http://${STREAM_SERVER_IP}:8089/stream.h264"
+echo "[DEBUG] Using direct IP for stream: $STREAM_URL"
 
 # Start hpe container with the detected URL as input
 hpe_start=$(date +%s.%N)
 echo "Building and starting hpe container with stream input..."
-docker compose -f $COMPOSE_FILE run -d --name hpe --rm hpe python3 main.py --method movenet --input "$STREAM_URL"
+
+# Check if method is GPU-based (alphapose or openpose)
+if [[ "$1" == "alphapose" || "$arguments" == *"--method alphapose"* || 
+      "$1" == "openpose" || "$arguments" == *"--method openpose"* ]]; then
+  echo "[DEBUG] Using GPU-accelerated method (alphapose or openpose)"
+  # No GPU flags here - they're in docker-compose.yaml
+  docker compose -f $COMPOSE_FILE run -d --name hpe --rm \
+    hpe python3 main.py --method "$1" --input "$STREAM_URL" --save_image --device GPU
+else
+  echo "[DEBUG] Using CPU-based method (movenet)"
+  docker compose -f $COMPOSE_FILE run -d --name hpe --rm \
+    hpe python3 main.py --method movenet --input "$STREAM_URL"
+fi
+
 measure_container_startup "$HPE_SERVICE" "$hpe_start"
+
+# Capture initial logs immediately after starting
+echo "[DEBUG] Capturing initial HPE container logs..."
+sleep 2  # Give container a moment to start logging
+docker logs $(docker ps -qf "name=hpe") > "$results_dir/logs/hpe_startup.log" 2>&1
+echo "[DEBUG] HPE startup logs:"
+tail -n 20 "$results_dir/logs/hpe_startup.log"
+
+# Capture more frequent logs to catch any error messages
+docker logs $(docker ps -qf "name=hpe") | tee "$results_dir/logs/hpe_startup_full.log"
 
 # Start and measure perf_monitor container
 perf_monitor_start=$(date +%s.%N)
 echo "[DEBUG] Starting performance monitoring..."
 docker compose -f $COMPOSE_FILE up -d perf_monitor
 docker compose -f $COMPOSE_FILE up -d trace_container
+# Add GPU metrics monitoring
+docker compose -f $COMPOSE_FILE up -d gpu-metrics
 PERF_MONITOR_CONTAINER=$(docker ps -qf "name=perf_monitor")
 TRACE_CONTAINER=$(docker ps -qf "name=.*trace_container.*")
+GPU_METRICS_CONTAINER=$(docker ps -qf "name=gpu-metrics")
 measure_container_startup "perf_monitor" "$perf_monitor_start"
 measure_container_startup "trace_container" "$perf_monitor_start"
+measure_container_startup "gpu-metrics" "$perf_monitor_start"
 
 # Create pids directory if it doesn't exist
 mkdir -p ./pids
@@ -97,43 +157,65 @@ mkdir -p ./pids
 echo "[DEBUG] Getting all PIDs inside the hpe container..."
 HPE_CONTAINER=$(docker ps -qf "name=.*hpe.*")
 if [ -n "$HPE_CONTAINER" ]; then
-  # Ensure proper command format for docker exec
-  HPE_PIDS=$(docker exec $HPE_CONTAINER sh -c "ps aux | awk '{print \$2}' | grep -v PID")
-  if [ $? -eq 0 ]; then
-    echo "$HPE_PIDS" | sort -u > ./pids/hpe.pid
-    echo "[DEBUG] Updated hpe.pid contents:"
-    cat ./pids/hpe.pid
-  else
-    echo "[WARNING] Failed to get PIDs from container"
-    touch ./pids/hpe.pid  # Create empty file so perf_monitor doesn't fail
-  fi
-else
-  echo "[WARNING] HPE container not found, skipping PID collection."
-  touch ./pids/hpe.pid  # Create empty file so perf_monitor doesn't fail
+  for attempt in {1..3}; do
+    echo "[DEBUG] PID collection attempt $attempt..."
+    # Fixed command syntax - ensure 'ps -ef' is executed inside the container
+    if docker exec $HPE_CONTAINER ps -ef > ./pids/hpe.pid 2>/dev/null; then
+      echo "[DEBUG] Updated hpe.pid contents:"
+      cat ./pids/hpe.pid
+      break
+    else
+      echo "[WARNING] Attempt $attempt failed, waiting 2s before retry"
+      sleep 2
+    fi
+  done
 fi
 
 # Replace the user input section with automatic HPE container monitoring
 echo "Waiting for HPE container to complete processing..."
 HPE_RUNNING=true
 HPE_MONITOR_START=$(date +%s)
-MAX_WAIT_TIME=300  # 5 minutes timeout
+MAX_WAIT_TIME=307  # 5 minutes timeout
+
+# Increase timeout for AlphaPose which takes longer to initialize
+if [[ "$1" == "alphapose" ]]; then
+  MAX_WAIT_TIME=600  # 10 minutes for AlphaPose
+fi
 
 while $HPE_RUNNING; do
-  # More reliable container detection
-  if ! docker ps | grep -q "hpe"; then
-    echo "[DEBUG] HPE container has exited, ending experiment..."
+  # Check if container exists
+  if ! docker ps -q --filter name=hpe > /dev/null 2>&1; then
+    echo "[DEBUG] HPE container no longer running, ending experiment..."
+    capture_diagnostics  # <-- Add this line
     HPE_RUNNING=false
-  else
-    echo "HPE container still running... waiting (5s)"
-    sleep 5
-    
-    # Add timeout safety
-    CURRENT_TIME=$(date +%s)
-    ELAPSED_TIME=$((CURRENT_TIME - HPE_MONITOR_START))
-    if [ $ELAPSED_TIME -gt $MAX_WAIT_TIME ]; then
-      echo "[WARNING] Reached maximum wait time of ${MAX_WAIT_TIME}s, forcing experiment end"
-      HPE_RUNNING=false
-    fi
+    break
+  fi
+  
+  # Check container status
+  CONTAINER_STATUS=$(docker inspect --format='{{.State.Status}}' $HPE_CONTAINER 2>/dev/null || echo "exited")
+  echo "HPE container status: $CONTAINER_STATUS"
+  
+  if [[ "$CONTAINER_STATUS" != "running" ]]; then
+    echo "[WARNING] HPE container has stopped with status: $CONTAINER_STATUS"
+    capture_diagnostics  # <-- Add this line
+    HPE_RUNNING=false
+    break
+  fi
+  
+  # Capture logs during monitoring (add before the sleep line)
+  echo "[DEBUG] Current HPE logs (last 5 lines):"
+  docker logs --tail 5 $HPE_CONTAINER 2>&1 || echo "[WARNING] Failed to get logs"
+  
+  echo "Container still running, waiting (5s)"
+  sleep 5
+  
+  # Check timeout
+  CURRENT_TIME=$(date +%s)
+  ELAPSED_TIME=$((CURRENT_TIME - HPE_MONITOR_START))
+  if [ $ELAPSED_TIME -gt $MAX_WAIT_TIME ]; then
+    echo "[WARNING] Reached maximum wait time of ${MAX_WAIT_TIME}s, forcing experiment end"
+    docker stop $HPE_CONTAINER >/dev/null 2>&1 || true
+    HPE_RUNNING=false
   fi
 done
 
@@ -166,7 +248,7 @@ fi
 
 # Collect container logs before stopping
 echo "[DEBUG] Collecting container logs..."
-container_list=("hpe" "perf_monitor" "trace_container")
+container_list=("hpe" "perf_monitor" "trace_container" "gpu-metrics")
 for container in "${container_list[@]}"
 do
   # More flexible pattern matching to find the container ID
@@ -187,6 +269,19 @@ if compgen -G "./results/*.csv" > /dev/null; then
   echo "Copied hpe output CSVs to $results_dir/"
 else
   echo "[DEBUG] No hpe output CSVs found in ./results."
+fi
+
+# After collecting performance data
+# Collect GPU metrics data
+if [ -n "$GPU_METRICS_CONTAINER" ]; then
+  if docker exec $GPU_METRICS_CONTAINER ls -la /output/gpu_metrics.csv 2>/dev/null; then
+    echo "[DEBUG] Found gpu_metrics.csv, copying GPU monitoring data..."
+    docker cp "$GPU_METRICS_CONTAINER:/output/gpu_metrics.csv" "$results_dir/perf/gpu_metrics.csv"
+    chmod -R u+rw "$results_dir"
+    echo "Copied GPU metrics to $results_dir/perf/gpu_metrics.csv"
+  else
+    echo "[WARNING] Could not find gpu_metrics.csv in gpu-metrics container."
+  fi
 fi
 
 echo "[DEBUG] Stopping and cleaning up containers..."

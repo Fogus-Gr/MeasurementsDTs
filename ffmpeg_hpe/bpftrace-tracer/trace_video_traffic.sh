@@ -17,8 +17,39 @@ BT_SCRIPT=$(mktemp /tmp/trace_video_XXXX.bt)
 trap "rm -f $BT_SCRIPT" EXIT
 
 cat > "$BT_SCRIPT" <<'EOF'
-// Using same probes as the working script
+// Track TCP port 8089 traffic without needing skbuff.h
+kprobe:tcp_v4_rcv
+{
+  // Count all TCP receives, we'll look at port in user space
+  @rx_all += args->size;
+}
 
+interval:ms:10
+{
+  $ts = EPOCH_MS_VALUE + (nsecs / 1000000);
+  printf("%llu,%llu\n", $ts, @rx_all);
+  clear(@rx_all);
+}
+EOF
+
+# Replace placeholders
+sed -i "s/EPOCH_MS_VALUE/$EPOCH_MS/g" "$BT_SCRIPT"
+
+echo "bpftrace script written to $BT_SCRIPT" >&2
+
+# Run bpftrace and write output to trace.csv
+mkdir -p /opt/tracer/output
+echo "timestamp_ms,rx_video_bytes" > /opt/tracer/output/trace.csv
+echo "Starting bpftrace..." >&2
+
+if ! bpftrace "$BT_SCRIPT" >> /opt/tracer/output/trace.csv; then
+  echo "ERROR: bpftrace failed to run properly" >&2
+  
+  # Fallback to a simpler version without packet filtering if the complex one fails
+  echo "Trying fallback approach without detailed packet inspection..." >&2
+  
+  cat > "$BT_SCRIPT" <<'EOF'
+// Simple version that at least captures interface traffic
 tracepoint:net:netif_receive_skb
 /str(args->name) == "NETIF_VALUE"/
 {
@@ -33,20 +64,13 @@ interval:ms:10
 }
 EOF
 
-# Replace placeholders
-sed -i "s/NETIF_VALUE/$NETIF/g" "$BT_SCRIPT"
-sed -i "s/EPOCH_MS_VALUE/$EPOCH_MS/g" "$BT_SCRIPT"
-
-echo "bpftrace script written to $BT_SCRIPT" >&2
-
-# Run bpftrace and write output to trace.csv
-mkdir -p /opt/tracer/output
-echo "timestamp_ms,rx_video_bytes" > /opt/tracer/output/trace.csv
-echo "Starting bpftrace..." >&2
-
-if ! bpftrace "$BT_SCRIPT" >> /opt/tracer/output/trace.csv; then
-  echo "ERROR: bpftrace failed to run properly" >&2
-  exit 1
+  sed -i "s/NETIF_VALUE/$NETIF/g" "$BT_SCRIPT"
+  sed -i "s/EPOCH_MS_VALUE/$EPOCH_MS/g" "$BT_SCRIPT"
+  
+  if ! bpftrace "$BT_SCRIPT" >> /opt/tracer/output/trace.csv; then
+    echo "ERROR: Fallback bpftrace also failed to run properly" >&2
+    exit 1
+  fi
 fi
 
 echo "bpftrace finished, trace written to /opt/tracer/output/trace.csv" >&2

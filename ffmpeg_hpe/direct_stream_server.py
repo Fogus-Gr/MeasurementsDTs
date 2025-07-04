@@ -79,6 +79,7 @@ class H264StreamHandler(BaseHTTPRequestHandler):
                     '-re',
                     '-i', self.video_path,
                     '-c:v', 'copy',
+                    '-c:a', 'copy',  # Include audio streams if available
                     # If you want to re-encode, use the following line instead:
                     # '-c:v', 'libx264',
                     '-preset', 'ultrafast',

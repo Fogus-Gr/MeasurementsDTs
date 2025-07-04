@@ -37,24 +37,21 @@ services:
       - /tmp:noexec,nosuid,size=1000m
 
   hpe:
-    image: ffmpeg_hpe:latest
-    # build:
-    #   context: ..
-    #   dockerfile: ffmpeg_hpe/Dockerfile_base
-    # command: python3 main.py --method movenet --input /videos/${VIDEO_FILE:-ultimatum/hd_00_00.mp4}
-    # The command will be injected dynamically by the experiment script
-    pid: "host"
-    cap_add:
-      - SYS_PTRACE
-    security_opt:
-      - seccomp=unconfined
+    build:
+      context: /home/user/MeasurementsDTs
+      dockerfile: Dockerfile_base
+    # Add these lines for GPU support
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONUNBUFFERED=1
+      - WAIT_HOSTS=h264-streaming-server:8089
+      - WAIT_HOSTS_TIMEOUT=30
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32
     volumes:
       - ./results:/output
       - ../videos:/videos:ro
-    environment:
-      - PYTHONUNBUFFERED=1
-    networks:
-      - streaming-network
     healthcheck:
       test: ["CMD", "pgrep", "-f", "python.*main.py"]
       interval: 30s
@@ -66,7 +63,16 @@ services:
         limits:
           cpus: '4.0'  # Adjust based on your needs
           memory: 8G    # Adjust based on your model requirements
-
+    container_name: hpe
+    depends_on:
+      h264-streaming-server:
+        condition: service_healthy
+    networks:
+      - streaming-network
+    # Add explicit DNS configuration
+    dns_search: .
+    extra_hosts:
+      - "h264-streaming-server:172.17.0.2"  # Use docker inspect to get actual IP
 
   gpu-metrics:
     build:

@@ -11,6 +11,7 @@ RUN apt-get update && \
         iproute2 \
         procps \
         net-tools \
+        build-essential \
         linux-headers-generic && \
         apt-get clean && \
         rm -rf /var/lib/apt/lists/*

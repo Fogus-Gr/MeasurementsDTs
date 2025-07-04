@@ -1,9 +1,11 @@
 #!/bin/bash
 # Containerized GPU metrics logger
 
+set -e
+
 # Set default values
 OUTPUT_DIR=${METRICS_OUTPUT_DIR:-/output}
-OUTPUT_FILE="${OUTPUT_DIR}/gpu_stats.csv"
+OUTPUT_FILE="${OUTPUT_DIR}/gpu_metrics.csv"
 SLEEP_INTERVAL=${METRICS_INTERVAL:-0.5}
 DURATION=${METRICS_DURATION:-0}  # 0 means run indefinitely
 
@@ -25,9 +27,8 @@ cleanup() {
 # Set up trap to catch termination signals
 trap cleanup INT TERM
 
-# Write CSV header
-# Note: timestamp is now in Unix epoch format (seconds since 1970-01-01 00:00:00 UTC)
-HEADER="timestamp_epoch,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used"
+# Create header for CSV
+HEADER="timestamp,gpu_id,gpu_utilization,mem_utilization,temperature,power_usage"
 echo "${HEADER}" > "${OUTPUT_FILE}"
 
 # Check if nvidia-smi is available
@@ -54,15 +55,20 @@ echo "  Interval: ${SLEEP_INTERVAL} seconds"
             fi
         fi
         
-        # Get GPU stats and process the output to convert timestamp to epoch
-        nvidia-smi \
-            --query-gpu=timestamp,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used \
-            --format=csv,noheader,nounits 2>/dev/null | while IFS=, read -r timestamp rest; do
-            # Convert timestamp to Unix epoch (seconds since 1970-01-01 00:00:00 UTC)
-            # Using date command to parse the timestamp and convert to epoch
-            epoch_time=$(date -d "${timestamp}" +%s 2>/dev/null || date +%s)
-            echo "${epoch_time},${rest}"
-        done >> "${OUTPUT_FILE}" || break
+        timestamp=$(date +%s.%N)
+        
+        # Get GPU stats with nvidia-smi
+        nvidia-smi --query-gpu=index,utilization.gpu,utilization.memory,temperature.gpu,power.draw --format=csv,noheader,nounits | while read -r line; do
+            # Process each GPU
+            gpu_id=$(echo "$line" | awk -F, '{print $1}' | xargs)
+            gpu_util=$(echo "$line" | awk -F, '{print $2}' | xargs)
+            mem_util=$(echo "$line" | awk -F, '{print $3}' | xargs)
+            temp=$(echo "$line" | awk -F, '{print $4}' | xargs)
+            power=$(echo "$line" | awk -F, '{print $5}' | xargs)
+            
+            # Write to CSV
+            echo "$timestamp,$gpu_id,$gpu_util,$mem_util,$temp,$power" >> "$OUTPUT_FILE"
+        done || break
             
         sleep "${SLEEP_INTERVAL}"
     done
