@@ -17,10 +17,12 @@ current_file_index = 0
 
 class DetectionLoader():
     def __init__(self, input_source, cap, detector, cfg, opt, mode='image', batchSize=1, queueSize=128):
+        self.datalen = 0
         self.cfg = cfg
         self.opt = opt
         self.mode = mode
         self.device = opt.device
+        
 
         if mode == 'image':
             self.img_dir = opt.inputpath
@@ -36,9 +38,13 @@ class DetectionLoader():
             self.imglist.sort()  # Optional: Sort for consistent order
             self.datalen = len(self.imglist)
         elif mode == 'video':
-            stream = cap
-            assert stream.isOpened(), 'Cannot capture source'
             self.path = input_source
+            stream = cap
+            if isinstance(self.path, str) and self.path == 'pipe:0':
+                print("[INFO] Using stdin pipe as input source")
+                # Skip the assertion for pipe input
+            else:
+                assert stream.isOpened(), 'Cannot capture source'
             self.datalen = int(stream.get(cv2.CAP_PROP_FRAME_COUNT))
             self.fourcc = int(stream.get(cv2.CAP_PROP_FOURCC))
             self.fps = stream.get(cv2.CAP_PROP_FPS)

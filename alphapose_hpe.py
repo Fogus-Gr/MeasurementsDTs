@@ -81,6 +81,17 @@ class AlphaPoseHPE(BaseHPE):
                 self.cap = ""
                 inputpath = os.path.join(inputpath, self.img_dir)
             elif self.input_type == "video":
+                self.path = self.input_src
+                stream = self.cap
+                if isinstance(self.path, str) and self.path == 'pipe:0':
+                    print("[INFO] Using stdin pipe as input source")
+                    self.datalen = 10000  # Set a default for pipe input
+                else:
+                    if not stream or not stream.isOpened():
+                        print("[WARNING] Video stream could not be opened, setting datalen=10000")
+                        self.datalen = 10000
+                    else:
+                        self.datalen = int(stream.get(cv2.CAP_PROP_FRAME_COUNT))
                 input_src_dir = os.path.dirname(self.input_src)
                 inputpath = os.path.join(inputpath, input_src_dir)
                 self.input_src = os.path.basename(self.input_src)
@@ -118,12 +129,20 @@ class AlphaPoseHPE(BaseHPE):
         orig_h = 0
         orig_w = 0
 
+        # Print only padded shape since that's the only variable defined so far
+        # print(f"Debug - padded shape: {padded.shape if padded is not None else None}")
+
         # Specific inference for AlphaPose
         batchSize = self.posebatch
         if flip:
             batchSize = int(batchSize / 2)
         with torch.no_grad():
+                # This creates the variables inps, boxes, etc.
                 (inps, orig_img, im_name, boxes, scores, ids, cropped_boxes) = self.det_loader.frame_preprocess(padded)
+                
+                # # NOW you can debug these variables
+                # print(f"Debug - detections: {len(boxes) if boxes is not None else None}")
+                # print(f"Debug - inps before device: {type(inps)}")
                 
                 if orig_img is None:
                     return []
@@ -132,8 +151,16 @@ class AlphaPoseHPE(BaseHPE):
                 
                 # Pose Estimation
                 if inps is None:
-                    raise ValueError("Input tensor 'inps' is None. Check the data loading or preprocessing steps.")
-                inps = inps.to(self.device)
+                    #print("Warning: Input is None, skipping inference")
+                    return []  # or appropriate empty result
+
+                try:
+                    #print(f"Debug - inps shape: {inps.shape if inps is not None else None}")
+                    inps = inps.to(self.device)
+                except Exception as e:
+                    print(f"Error moving tensor to device: {e}")
+                    return []
+                
                 datalen = inps.size(0)
                 leftover = 0
                 if (datalen) % batchSize:
