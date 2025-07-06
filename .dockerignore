@@ -1,4 +1,4 @@
-myenv/
+# Ignore Python cache and environment files
 __pycache__/
 *.pyc
 *.pyo
@@ -10,24 +10,49 @@ __pycache__/
 *.log
 .DS_Store
 .env
-Dockerfile*
-results/
-hist.txt
+
+# Ignore local virtual environments
+myenv/
+
+# Ignore build and distribution artifacts
 *.egg-info/
 .eggs/
 build/
 dist/
 .cache/
+
+# Ignore version control and editor files
 .git/
 .gitignore
 .vscode/
-notebooks/
-out/
+
+# Ignore output, results, and large data
+results/
 *.csv
+out/
+notebooks/
+
+# Ignore Docker and Compose files not needed in image
+Dockerfile*
 docker-compose*
+
+# Ignore experiment/monitoring/measurement folders not needed in image
 monitor/
 Measure_*/
 measurement_containers/
 
+# Add any other project-specific folders/files you do NOT want in the image below
+# (leave models/, scripts/, and source code included)
+bug.md
+hist.txt
+README.md
+prometheus.yml
+README_measure_flops.md
+README.md
+videos/*
+Measure_plot_cpu_perf/*
+Measure_Flops/*
+ffmpeg_hpe/*
+recent-dash/*
 
 

@@ -24,6 +24,9 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     libfontconfig1 \
     libice6 \
+    curl \
+    iputils-ping \
+    dnsutils \
     python3-tk \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 

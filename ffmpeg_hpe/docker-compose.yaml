@@ -73,6 +73,8 @@ services:
     dns_search: .
     extra_hosts:
       - "h264-streaming-server:172.17.0.2"  # Use docker inspect to get actual IP
+    command: >
+      python3 main.py --method ${HPE_METHOD} --input ${HPE_INPUT} --csv --device ${HPE_DEVICE}
 
   gpu-metrics:
     build:
@@ -86,6 +88,9 @@ services:
       - ./results:/output
     networks:
       - streaming-network
+    depends_on:
+      - h264-streaming-server
+      - hpe
     healthcheck:
       test: ["CMD", "pgrep", "-f", "nvidia-smi"]
       interval: 30s
@@ -103,6 +108,10 @@ services:
     environment:
       - OUTPUT_DIR=/output
       - EXPERIMENT_TYPE=ffmpeg_hpe   # Optional, for script logic
+    depends_on:
+      - h264-streaming-server
+      - hpe
+    # Use host PID namespace to monitor processes in the host 
     pid: host
     cap_add:
       - SYS_ADMIN
@@ -125,6 +134,10 @@ services:
     environment:
       - NETIF=eth0
       - TARGET_PORT=8089
+    depends_on:
+      - h264-streaming-server
+      - hpe
+      - perf_monitor
     volumes:
       - /sys/kernel/debug:/sys/kernel/debug
       - /lib/modules:/lib/modules:ro

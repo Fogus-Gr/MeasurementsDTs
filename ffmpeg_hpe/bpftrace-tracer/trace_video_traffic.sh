@@ -42,8 +42,8 @@ mkdir -p /opt/tracer/output
 echo "timestamp_ms,rx_video_bytes" > /opt/tracer/output/trace.csv
 echo "Starting bpftrace..." >&2
 
-if ! bpftrace "$BT_SCRIPT" >> /opt/tracer/output/trace.csv; then
-  echo "ERROR: bpftrace failed to run properly" >&2
+if ! bpftrace "$BT_SCRIPT" >> /opt/tracer/output/trace.csv 2>> /opt/tracer/output/error.log; then
+  echo "ERROR: bpftrace failed to run properly. See error.log for details." >&2
   
   # Fallback to a simpler version without packet filtering if the complex one fails
   echo "Trying fallback approach without detailed packet inspection..." >&2
@@ -67,8 +67,8 @@ EOF
   sed -i "s/NETIF_VALUE/$NETIF/g" "$BT_SCRIPT"
   sed -i "s/EPOCH_MS_VALUE/$EPOCH_MS/g" "$BT_SCRIPT"
   
-  if ! bpftrace "$BT_SCRIPT" >> /opt/tracer/output/trace.csv; then
-    echo "ERROR: Fallback bpftrace also failed to run properly" >&2
+  if ! bpftrace "$BT_SCRIPT" >> /opt/tracer/output/trace.csv 2>> /opt/tracer/output/error.log; then
+    echo "ERROR: Fallback bpftrace also failed to run properly. See error.log for details." >&2
     exit 1
   fi
 fi
