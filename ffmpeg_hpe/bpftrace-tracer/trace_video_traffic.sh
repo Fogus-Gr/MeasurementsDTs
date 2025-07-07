@@ -4,9 +4,23 @@ echo "Video traffic tracer started, monitoring HTTP stream traffic" >&2
 set -ex
 
 # Get network information from environment variables
-NETIF=${NETIF:-"eth0"}  # Default to eth0 if not specified
-TARGET_PORT=${TARGET_PORT:-"8089"}  # Default to the streaming port
+NETIF=${NETIF:-"eth0"}
+TARGET_PORT=${TARGET_PORT:-"8089"}
 echo "Monitoring interface: $NETIF for traffic on port $TARGET_PORT" >&2
+
+# Start tcpdump in the background to capture port 8089 traffic
+TCPDUMP_FILE="/opt/tracer/output/tcpdump_8089.log"
+echo "Starting tcpdump to capture port $TARGET_PORT traffic on interface $NETIF (or all if NETIF=any)..." >&2
+tcpdump -i any tcp port "$TARGET_PORT" -nn -tt > "$TCPDUMP_FILE" 2>&1 &
+TCPDUMP_PID=$!
+
+# Ensure tcpdump is killed on script exit
+cleanup() {
+  kill $TCPDUMP_PID 2>/dev/null || true
+
+  rm -f "$BT_SCRIPT"
+}
+trap cleanup EXIT
 
 # Calculate UNIX epoch offset in ms
 EPOCH_MS=$(($(date +%s%3N) - $(cat /proc/uptime | awk '{print int($1)*1000 }')))
@@ -48,7 +62,7 @@ if ! bpftrace "$BT_SCRIPT" >> /opt/tracer/output/trace.csv 2>> /opt/tracer/outpu
   # Fallback to a simpler version without packet filtering if the complex one fails
   echo "Trying fallback approach without detailed packet inspection..." >&2
   
-  cat > "$BT_SCRIPT" <<'EOF'
+cat > "$BT_SCRIPT" <<'EOF'
 // Simple version that at least captures interface traffic
 tracepoint:net:netif_receive_skb
 /str(args->name) == "NETIF_VALUE"/
@@ -64,8 +78,8 @@ interval:ms:10
 }
 EOF
 
-  sed -i "s/NETIF_VALUE/$NETIF/g" "$BT_SCRIPT"
-  sed -i "s/EPOCH_MS_VALUE/$EPOCH_MS/g" "$BT_SCRIPT"
+sed -i "s/NETIF_VALUE/$NETIF/g" "$BT_SCRIPT"
+sed -i "s/EPOCH_MS_VALUE/$EPOCH_MS/g" "$BT_SCRIPT"
   
   if ! bpftrace "$BT_SCRIPT" >> /opt/tracer/output/trace.csv 2>> /opt/tracer/output/error.log; then
     echo "ERROR: Fallback bpftrace also failed to run properly. See error.log for details." >&2
@@ -78,6 +92,14 @@ echo "bpftrace finished, trace written to /opt/tracer/output/trace.csv" >&2
 # Check if the trace file has data
 if [ "$(wc -l < "/opt/tracer/output/trace.csv")" -le 1 ]; then
   echo "[WARNING] Trace file appears to be empty (only header)" >&2
+fi
+
+# Summarize tcpdump results for comparison
+if [ -f "$TCPDUMP_FILE" ]; then
+  TCPDUMP_BYTES=$(grep 'length' "$TCPDUMP_FILE" | awk '{for(i=1;i<=NF;i++) if($i=="length") sum+=$(i+1);} END{print sum+0}')
+  echo "[TCPDUMP] Total bytes captured on port $TARGET_PORT: $TCPDUMP_BYTES" >&2
+else
+  echo "[TCPDUMP] No tcpdump log found at $TCPDUMP_FILE" >&2
 fi
 
 # Keep container running until stopped

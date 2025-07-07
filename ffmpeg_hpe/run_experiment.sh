@@ -66,7 +66,7 @@ H264_CONTAINER_NAME="h264-streaming-server"
 
 # Step 7: Stop and remove any existing containers from previous runs
 echo "Stopping and removing existing containers..."
-docker compose -f $docker_compose_file down --remove-orphans
+docker compose -f $docker_compose_file down -v --remove-orphans
 # Remove hpe container by name in case it lingers
 docker rm -f hpe 2>/dev/null || true
 
@@ -206,7 +206,7 @@ fi
 container_list=("hpe" "perf_monitor" "trace_container" "gpu-metrics")
 for container in "${container_list[@]}"
 do
-  container_id=$(docker ps -qf "name=^/${container}$")
+  container_id=$(docker ps -aqf "name=^/${container}$")
   if [ -n "$container_id" ]; then
     docker logs $container_id > "$results_dir/logs/$container.log" 2>&1
     echo "Saved logs for $container to $results_dir/logs/$container.log"
@@ -215,26 +215,30 @@ do
   fi
 done
 
-# Step 21: Copy all CSVs produced by hpe service (in ./results) to the results_dir
-if compgen -G "./results/*.csv" > /dev/null; then
-  cp ./results/*.csv "$results_dir/"
+# Step 21: List files inside HPE container before cleanup (if it exists)
+HPE_CONTAINER_ID=$(docker ps -aqf "name=^/hpe$")
+if [ -n "$HPE_CONTAINER_ID" ]; then
+  echo "[DEBUG] Listing files inside HPE container before cleanup:"
+  docker exec $HPE_CONTAINER_ID ls -lh /output || echo "Could not list /output in HPE container"
+fi
+
+# Step 22: Copy GPU metrics to results_dir/gpu/gpu_metrics.csv
+mkdir -p "$results_dir/gpu"
+if [ -f ./results/gpu_metrics.csv ]; then
+  cp ./results/gpu_metrics.csv "$results_dir/gpu/gpu_metrics.csv"
+  echo "Copied GPU metrics to $results_dir/gpu/gpu_metrics.csv"
+else
+  echo "[WARNING] gpu_metrics.csv not found in ./results"
+fi
+
+if compgen -G "./csv/*.csv" > /dev/null; then
+  cp ./csv/*.csv "$results_dir/"
   echo "Copied hpe output CSVs to $results_dir/"
 else
-  echo "[DEBUG] No hpe output CSVs found in ./results."
+  echo "[DEBUG] No hpe output CSVs found in ./csv."
 fi
 
-# Step 22: Collect GPU metrics data
-if [ -n "$GPU_METRICS_CONTAINER" ]; then
-  if docker exec $GPU_METRICS_CONTAINER ls -la /output/gpu_metrics.csv 2>/dev/null; then
-    docker cp "$GPU_METRICS_CONTAINER:/output/gpu_metrics.csv" "$results_dir/perf/gpu_metrics.csv"
-    chmod -R u+rw "$results_dir"
-    echo "Copied GPU metrics to $results_dir/perf/gpu_metrics.csv"
-  else
-    echo "[WARNING] Could not find gpu_metrics.csv in gpu-metrics container."
-  fi
-fi
-
-# Step 23: Stop and clean up all containers and resources
+# Now stop and clean up containers and resources
 echo "[DEBUG] Stopping and cleaning up containers..."
 docker compose -f $docker_compose_file down --remove-orphans --volumes
 docker rm -f hpe h264-streaming-server gpu-metrics perf_monitor trace_container 2>/dev/null || true
