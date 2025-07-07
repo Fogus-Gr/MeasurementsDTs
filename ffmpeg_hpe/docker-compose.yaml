@@ -50,7 +50,7 @@ services:
       - WAIT_HOSTS_TIMEOUT=30
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32
     volumes:
-      - ./results:/output
+      - ./csv:/output
       - ../videos:/videos:ro
     healthcheck:
       test: ["CMD", "pgrep", "-f", "python.*main.py"]
@@ -74,7 +74,7 @@ services:
     extra_hosts:
       - "h264-streaming-server:172.17.0.2"  # Use docker inspect to get actual IP
     command: >
-      python3 main.py --method ${HPE_METHOD} --input ${HPE_INPUT} --csv --device ${HPE_DEVICE}
+      python3 main.py --method ${HPE_METHOD} --input ${HPE_INPUT} --csv --output_dir /output/ --device ${HPE_DEVICE}
 
   gpu-metrics:
     build:
