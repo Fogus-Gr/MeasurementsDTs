@@ -27,6 +27,7 @@ measure_container_startup() {
 
 # Step 3: Function to capture diagnostics for debugging
 capture_diagnostics() {
+  echo "[DEBUG] ===== START DIAGNOSTICS ====="
   echo "[DEBUG] Docker containers:"
   docker ps -a
   echo "[DEBUG] HPE container logs:"
@@ -74,7 +75,9 @@ echo "Container Instantiation Timing:" > "$results_dir/container_timing.txt"
 
 # Step 8: Start the streaming server and wait for it to become healthy
 echo "Starting h264-streaming-server with force-recreate..."
-docker compose -f $docker_compose_file up -d --force-recreate h264-streaming-server
+docker compose -f $docker_compose_file up -d h264-streaming-server
+#docker compose -f $docker_compose_file up -d --force-recreate h264-streaming-server
+
 
 # Wait for healthcheck to pass (max 60s)
 wait_start=$(date +%s)
@@ -143,13 +146,9 @@ if [ -n "$HPE_CONTAINER" ]; then
   done
 fi
 
-# Step 16: Monitor hpe container until it exits or timeout is reached
+# Step 16: Monitor hpe container until it exits (no timeout)
 # The loop checks every 5s if the hpe container is still running
 HPE_MONITOR_START=$(date +%s)
-MAX_WAIT_TIME=307  # Default max wait time (can be increased for alphapose)
-if [[ "$1" == "alphapose" ]]; then
-  MAX_WAIT_TIME=307
-fi
 while true; do
   HPE_CONTAINER=$(docker ps -q --filter "name=^/hpe$")
   if [ -z "$HPE_CONTAINER" ]; then
@@ -167,13 +166,6 @@ while true; do
   echo "[DEBUG] Current HPE logs (last 5 lines):"
   docker logs --tail 5 $HPE_CONTAINER 2>&1 || echo "[WARNING] Failed to get logs"
   sleep 5
-  CURRENT_TIME=$(date +%s)
-  ELAPSED_TIME=$((CURRENT_TIME - HPE_MONITOR_START))
-  if [ $ELAPSED_TIME -gt $MAX_WAIT_TIME ]; then
-    echo "[WARNING] Reached maximum wait time of ${MAX_WAIT_TIME}s, forcing experiment end"
-    docker stop $HPE_CONTAINER >/dev/null 2>&1 || true
-    break
-  fi
 done
 
 echo "[DEBUG] Ending the experiment..."
