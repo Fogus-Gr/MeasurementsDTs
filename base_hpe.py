@@ -61,7 +61,7 @@ class BaseHPE(ABC):
         self.start_time_of_experiment = time.time()
         self.input_file = os.path.basename(os.path.normpath(input_src))
 
-        if self.json or self.save_image or self.save_video:
+        if self.json or self.csv or self.save_image or self.save_video:
             if output_dir is not None:
                 self.output_dir = output_dir
             else:
