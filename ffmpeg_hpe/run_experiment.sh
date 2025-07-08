@@ -231,12 +231,12 @@ else
   echo "[WARNING] gpu_metrics.csv not found in ./results"
 fi
 
-if compgen -G "./csv/*.csv" > /dev/null; then
-  cp ./csv/*.csv "$results_dir/"
-  echo "Copied hpe output CSVs to $results_dir/"
-else
-  echo "[DEBUG] No hpe output CSVs found in ./csv."
-fi
+# if compgen -G "./csv/*.csv" > /dev/null; then
+#   cp ./csv/*.csv "$results_dir/"
+#   echo "Copied hpe output CSVs to $results_dir/"
+# else
+#   echo "[DEBUG] No hpe output CSVs found in ./csv."
+# fi
 
 # Now stop and clean up containers and resources
 echo "[DEBUG] Stopping and cleaning up containers..."

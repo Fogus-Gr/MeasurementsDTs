@@ -26,28 +26,33 @@ trap cleanup EXIT
 EPOCH_MS=$(($(date +%s%3N) - $(cat /proc/uptime | awk '{print int($1)*1000 }')))
 echo "EPOCH_MS calculated as $EPOCH_MS" >&2
 
-# Create bpftrace script
+# Create bpftrace script for RX bytes on a specific TCP port every 10ms
 BT_SCRIPT=$(mktemp /tmp/trace_video_XXXX.bt)
 trap "rm -f $BT_SCRIPT" EXIT
 
-cat > "$BT_SCRIPT" <<'EOF'
-// Track TCP port 8089 traffic without needing skbuff.h
+cat > "$BT_SCRIPT" <<EOF
+#include <linux/socket.h>
+#include <linux/net.h>
+#include <linux/inet.h>
+
 kprobe:tcp_v4_rcv
 {
-  // Count all TCP receives, we'll look at port in user space
-  @rx_all += args->size;
+  $sk = (struct sock *)arg0;
+  $dport = ((ntohs(((struct inet_sock *)$sk)->inet_dport)));
+  if ($dport == $TARGET_PORT) {
+    @rx_bytes += ((struct sk_buff *)arg1)->len;
+  }
 }
 
 interval:ms:10
 {
-  $ts = EPOCH_MS_VALUE + (nsecs / 1000000);
-  printf("%llu,%llu\n", $ts, @rx_all);
-  clear(@rx_all);
+  printf("%llu,%d\n", nsecs/1000000, @rx_bytes);
+  clear(@rx_bytes);
 }
 EOF
 
-# Replace placeholders
-sed -i "s/EPOCH_MS_VALUE/$EPOCH_MS/g" "$BT_SCRIPT"
+# Replace $TARGET_PORT in the script with the actual port number
+sed -i "s/\$TARGET_PORT/$TARGET_PORT/g" "$BT_SCRIPT"
 
 echo "bpftrace script written to $BT_SCRIPT" >&2
 
@@ -58,33 +63,7 @@ echo "Starting bpftrace..." >&2
 
 if ! bpftrace "$BT_SCRIPT" >> /opt/tracer/output/trace.csv 2>> /opt/tracer/output/error.log; then
   echo "ERROR: bpftrace failed to run properly. See error.log for details." >&2
-  
-  # Fallback to a simpler version without packet filtering if the complex one fails
-  echo "Trying fallback approach without detailed packet inspection..." >&2
-  
-cat > "$BT_SCRIPT" <<'EOF'
-// Simple version that at least captures interface traffic
-tracepoint:net:netif_receive_skb
-/str(args->name) == "NETIF_VALUE"/
-{
-  @rx += args->len;
-}
-
-interval:ms:10
-{
-  $ts = EPOCH_MS_VALUE + (nsecs / 1000000);  // Add epoch offset
-  printf("%llu,%llu\n", $ts, @rx);
-  clear(@rx);
-}
-EOF
-
-sed -i "s/NETIF_VALUE/$NETIF/g" "$BT_SCRIPT"
-sed -i "s/EPOCH_MS_VALUE/$EPOCH_MS/g" "$BT_SCRIPT"
-  
-  if ! bpftrace "$BT_SCRIPT" >> /opt/tracer/output/trace.csv 2>> /opt/tracer/output/error.log; then
-    echo "ERROR: Fallback bpftrace also failed to run properly. See error.log for details." >&2
-    exit 1
-  fi
+  exit 1
 fi
 
 echo "bpftrace finished, trace written to /opt/tracer/output/trace.csv" >&2
