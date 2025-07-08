@@ -56,6 +56,7 @@ mkdir -p "$results_dir/logs" "$results_dir/traces" "$results_dir/perf"
 
 # Step 5: Clean up old CSV files before starting a new experiment
 rm -f ./results/*.csv ./traces/*.csv ./perf_monitor/output/*.csv 2>/dev/null || true
+rm -f ./csv/*.csv 2>/dev/null || true
 
 echo "Preparing results directory: $results_dir"
 
