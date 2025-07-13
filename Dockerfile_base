@@ -28,17 +28,23 @@ RUN apt-get update && apt-get install -y \
     iputils-ping \
     dnsutils \
     python3-tk \
+    ffmpeg \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --no-cache-dir -r requirements.txt
 RUN pip3 install --no-cache-dir gdown
 
+# Install OpenVINO with GPU (NVIDIA) support
+RUN pip install --no-cache-dir openvino-dev[onnx,tensorflow2,pytorch,caffe]==2024.2.0
+
 ENV TORCH_CUDA_ARCH_LIST=8.6
+# (Optional) Set OpenVINO environment variables
 
 # Create all necessary directories
 RUN mkdir -p models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32 && \
     mkdir -p models/OpenVINO/pretrained_models/public/human-pose-estimation-0006/FP32 && \
-    mkdir -p models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32
+    mkdir -p models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32 && \
+    mkdir -p models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001
 
 # Download models
 RUN gdown --id 1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI -O models/AlphaPose/pretrained_models/fast_res50_256x192.pth && \
@@ -47,8 +53,8 @@ RUN gdown --id 1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI -O models/AlphaPose/pretrained_
     gdown --id 1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.bin && \
     gdown --id 1ZSdsqgD4zUO4gyHMYBfxq3m4UMyQ187j -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin && \
     gdown --id 1d8pGQrM9vEfz_oAIey0qRr7Gxp6dS2UE -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0006/FP32/human-pose-estimation-0006.bin && \
-    gdown --id 1lEUFqQnWHVymQoZvaXuDFcnOyEEKsexP -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
-
+    gdown --id 1lEUFqQnWHVymQoZvaXuDFcnOyEEKsexP -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin && \
+    gdown --id 1fko47eVczJZQb9wWA2X7eQ0TuF4PDXzs -O models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.bin
 # Build C/C++/CUDA extensions
 RUN bash models/AlphaPose/build_extensions.sh
 
