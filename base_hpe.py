@@ -88,8 +88,17 @@ class BaseHPE(ABC):
                 # e.g. 60 tries * 1s = 60 seconds timeout
                 max_retries = 60
                 for attempt in range(max_retries):
-                    self.cap = cv2.VideoCapture(input_src)
-                    if self.cap.isOpened():
+                    self.cap = cv2.VideoCapture()
+                    try:
+                        self.cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 60000)
+                        self.cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 60000)
+                    except AttributeError:
+                        pass  # OpenCV build may not support these properties
+                    opened = self.cap.open(
+                        input_src,
+                        apiPreference=cv2.CAP_FFMPEG
+                    )
+                    if opened and self.cap.isOpened():
                         break
                     print(f"[{attempt+1}/{max_retries}] Stream not available, retrying in 1s...")
                     time.sleep(1)

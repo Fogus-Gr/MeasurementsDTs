@@ -1,4 +1,5 @@
 import os
+import cv2
 import numpy as np
 import torch
 from base_hpe import BaseHPE, Body, Padding
