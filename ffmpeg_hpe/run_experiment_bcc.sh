@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+timestamp=$(date +%Y%m%d_%H%M%S)
+cpu_threads=$(lscpu | awk '/^CPU\(s\):/ {print $2; exit}')
+
 # Step 1: Ensure bc is installed (for floating point math)
 if ! command -v bc &> /dev/null; then
   echo "Installing bc (required for timestamp alignment)..."
@@ -51,14 +54,34 @@ capture_diagnostics() {
 }
 
 # Step 4: Prepare results directory with BCC subdirectory
-timestamp=$(date +%Y%m%d_%H%M%S)
-cpu_model=$(lscpu | grep "Model name" | sed 's/.*: *//g' | sed 's/ with [0-9]\+ [Cc]ores//' | tr -s ' ' '_' | tr -d ',()/')
-cpu_threads=$(lscpu | awk '/^CPU\(s\):/ {print $2; exit}')
-cpu_model="${cpu_model}_${cpu_threads}"
-start_time=$(date +%s)
-container_type=${1:-hpe}
-arguments=${2:-""}
-results_dir="results_${container_type}_${cpu_model}_${timestamp}"
+# Use HPE_METHOD as container_type for results dir naming
+container_type="$1"
+
+# Load VIDEO_FILE from .env if not set
+if [[ -z "$VIDEO_FILE" ]]; then
+  if [ -f .env ]; then
+    export $(grep -E '^VIDEO_FILE=' .env | xargs)
+  fi
+fi
+
+# Require VIDEO_FILE to be set, else exit with error
+if [[ -z "$VIDEO_FILE" ]]; then
+  echo "[ERROR] VIDEO_FILE environment variable is not set. Please set it in your environment or in the .env file."
+  exit 1
+fi
+
+VIDEO_FILE_BASENAME=$(basename "$VIDEO_FILE")
+if [[ "$VIDEO_FILE_BASENAME" == "" || "$VIDEO_FILE_BASENAME" == "." || "$VIDEO_FILE_BASENAME" == "/" ]]; then
+  VIDEO_FILE_BASENAME="unknown"
+fi
+
+# Add device type to results dir (GPU or CPU)
+device_type="${HPE_DEVICE:-CPU}"
+if [[ -z "$device_type" ]]; then
+  device_type="CPU"
+fi
+
+results_dir="results_${container_type}_${cpu_threads}cores_${device_type}_${VIDEO_FILE_BASENAME}_${timestamp}"
 mkdir -p "$results_dir/logs" "$results_dir/traces/bcc" "$results_dir/perf"
 
 # Step 5: Enhanced cleanup including BCC tracer outputs
@@ -114,6 +137,8 @@ if [[ "$1" == "alphapose" || "$arguments" == *"--method alphapose"* ]]; then
 elif [[ "$1" == "hrnetet" || "$arguments" == *"--method hrnetet"* ]]; then
   export HPE_DEVICE="CPU"
 elif [[ "$1" == "openpose" || "$arguments" == *"--method openpose"* ]]; then
+  export HPE_DEVICE="CPU"
+elif [[ "$1" == "movenet" || "$arguments" == *"--method movenet"* ]]; then
   export HPE_DEVICE="CPU"
 elif [[ "$arguments" == *"--device GPU"* ]]; then
   export HPE_DEVICE="GPU"
