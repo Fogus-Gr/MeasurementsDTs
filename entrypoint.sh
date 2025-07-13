@@ -24,13 +24,9 @@ for i in {1..5}; do
   sleep 2
 done
 
+
 # Show command that will be executed
 echo "About to execute: $@"
 
-if [ "$1" = "nc-proxy" ]; then
-  # Run the nc proxy command
-  nc -p 12345 h264-streaming-server 8089 | tee /dev/stdout
-else
-  # Execute the command passed to docker run
-  exec "$@"
-fi
+# Execute the command passed to docker run
+exec "$@"
