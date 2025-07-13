@@ -1,0 +1,49 @@
+FROM ubuntu:22.04
+
+# Install all dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-dev \
+    build-essential \
+    cmake \
+    flex \
+    bison \
+    libelf-dev \
+    zlib1g-dev \
+    llvm \
+    clang \
+    libclang-dev \
+    git \
+    tcpdump \
+    iproute2 \
+    net-tools \
+    netcat \
+    dnsutils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install BCC from source with kernel header support
+RUN git clone --depth 1 --branch v0.25.0 https://github.com/iovisor/bcc.git && \
+    mkdir bcc/build && \
+    cd bcc/build && \
+    cmake .. -DCMAKE_INSTALL_PREFIX=/usr && \
+    make && \
+    make install && \
+    cd / && \
+    rm -rf bcc
+
+# Install Python requirements
+COPY requirements.txt /app/requirements.txt
+RUN pip3 install --no-cache-dir -r /app/requirements.txt
+
+# Copy application files
+COPY bcc_rx_bytes.py /app/bcc_rx_bytes.py
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Create output directory structure
+RUN mkdir -p /opt/tracer/output/logs
+
+WORKDIR /app
+ENTRYPOINT ["/entrypoint.sh"]
