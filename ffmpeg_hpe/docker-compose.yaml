@@ -10,18 +10,18 @@ services:
     volumes:
       - ./results:/output
       - ../rtsp-ipcam/config:/app/config:ro
-      - /home/user/MeasurementsDTs/videos/rangeOfMotion/hd_00_00.mp4:/app/videos/hd_00_00.mp4:ro
+      - ../videos:/app/videos:ro
     environment:
       - SERVER_PORT=8089
-      - VIDEO_FILE=/app/videos/hd_00_00.mp4
+      - VIDEO_FILE=${VIDEO_FILE}
     networks:
       - streaming-network
     healthcheck:
       test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/8089 || exit 1"]
-      interval: 10s
-      timeout: 10s  # Increase from 5s to 10s
-      retries: 3
-      start_period: 10s
+      interval: 5s
+      timeout: 10s
+      retries: 6
+      start_period: 20s
     deploy:
       resources:
         limits:
@@ -49,6 +49,9 @@ services:
       - WAIT_HOSTS=h264-streaming-server:8089
       - WAIT_HOSTS_TIMEOUT=30
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32
+      # - HPE_INPUT=http://h264-streaming-server:8089/stream.h264
+      - OPENCV_FFMPEG_OPEN_TIMEOUT=300000 # Increase timeout for FFMPEG
+      - OPENCV_FFMPEG_READ_TIMEOUT=300000  # Increase read timeout for FFMPEG
     volumes:
       - ./csv:/output
       - ../videos:/videos:ro
@@ -57,12 +60,17 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 30s
     deploy:
       resources:
         limits:
           cpus: '4.0'  # Adjust based on your needs
-          memory: 8G    # Adjust based on your model requirements
+          memory: 16G    # Adjust based on your model requirements
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     container_name: hpe
     depends_on:
       h264-streaming-server:
@@ -71,10 +79,8 @@ services:
       - streaming-network
     # Add explicit DNS configuration
     dns_search: .
-    extra_hosts:
-      - "h264-streaming-server:172.17.0.2"  # Use docker inspect to get actual IP
     command: >
-      python3 main.py --method ${HPE_METHOD} --input ${HPE_INPUT} --csv --output_dir /output/ --device ${HPE_DEVICE}
+      python3 main.py --method ${HPE_METHOD} --input ${HPE_INPUT} --csv --output_dir /output/ --device ${HPE_DEVICE} --measurement_interval_ms 10
 
   gpu-metrics:
     build:
@@ -115,38 +121,71 @@ services:
     pid: host
     cap_add:
       - SYS_ADMIN
-      - SYS_NICE
+      - NET_ADMIN  
+      - NET_RAW
       - IPC_LOCK
-      - SYS_PTRACE
     privileged: true
     user: root
     networks:
       - streaming-network
 
-  trace_container:
-    image: video-bpftrace:latest
+  # trace_container:
+  #   image: video-bpftrace:latest
+  #   build:
+  #     context: ./bpftrace-tracer
+  #     dockerfile: Dockerfile
+  #   privileged: true
+  #   pid: host
+  #   network_mode: "host"
+  #   environment:
+  #     - NETIF=eth0
+  #     - TARGET_PORT=8089
+  #   depends_on:
+  #     - h264-streaming-server
+  #     - hpe
+  #     - perf_monitor
+  #   volumes:
+  #     - /sys/kernel/debug:/sys/kernel/debug
+  #     - /lib/modules:/lib/modules:ro
+  #     - ./traces:/opt/tracer/output
+  #     - /sys/fs/cgroup:/sys/fs/cgroup:ro
+  #     - /sys:/sys:ro
+  #   working_dir: /opt/tracer
+  #   entrypoint: ["/bin/bash", "-c"]
+  #   command: ./trace_video_traffic.sh
+  
+  bcc-tracer:
     build:
       context: ./bpftrace-tracer
-      dockerfile: Dockerfile
-    privileged: true
-    pid: host
-    network_mode: "host"
-    environment:
-      - NETIF=eth0
-      - TARGET_PORT=8089
-    depends_on:
-      - h264-streaming-server
-      - hpe
-      - perf_monitor
+      dockerfile: Dockerfile.bcc
+    container_name: bcc-tracer
+    # Mount output directory for results
     volumes:
-      - /sys/kernel/debug:/sys/kernel/debug
+      - ./tracer_output:/opt/tracer/output
       - /lib/modules:/lib/modules:ro
-      - ./traces:/opt/tracer/output
-      - /sys/fs/cgroup:/sys/fs/cgroup:ro
-      - /sys:/sys:ro
-    working_dir: /opt/tracer
-    entrypoint: ["/bin/bash", "-c"]
-    command: ./trace_video_traffic.sh
+      - /usr/src:/usr/src:ro
+      - /sys/kernel/debug:/sys/kernel/debug
+    pid: host
+    user: root # Ensure root user for BCC tracing
+    environment:
+    - TARGET_CONTAINER=hpe  # The container to monitor
+    - STREAMER_IP=h264-streaming-server
+    - PORT_DETECTION_TIMEOUT=30
+    # Ensure the tracer is on the same network as hpe and streaming server
+    network_mode: "service:hpe"  # Share HPE's network namespace
+    # Optionally, wait for hpe to be healthy before starting
+    depends_on:
+      - hpe
+    # Run in privileged mode for BCC to access kernel tracing
+    privileged: true
+    cap_add:
+    - SYS_ADMIN
+    - NET_ADMIN
+    - NET_RAW
+    - IPC_LOCK
+    - SYS_RESOURCE
+    security_opt:
+    - seccomp:unconfined
 
 networks:
   streaming-network:
