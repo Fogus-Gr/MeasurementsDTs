@@ -45,3 +45,5 @@ results_dash_*/
 videos/*
 monitor_hpe/results_*/
 ffmpeg_hpe/results_*
+models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
+models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
