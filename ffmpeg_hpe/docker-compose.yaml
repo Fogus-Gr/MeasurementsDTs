@@ -53,7 +53,7 @@ services:
       - OPENCV_FFMPEG_OPEN_TIMEOUT=300000 # Increase timeout for FFMPEG
       - OPENCV_FFMPEG_READ_TIMEOUT=300000  # Increase read timeout for FFMPEG
     volumes:
-      - ./csv:/output
+      - ./results:/output:rw
       - ../videos:/videos:ro
     healthcheck:
       test: ["CMD", "pgrep", "-f", "python.*main.py"]

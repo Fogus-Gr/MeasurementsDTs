@@ -53,3 +53,57 @@ You are streaming a video file (833 MB, H.264, 1920x1080, 5:07 duration) from a 
 - Docker stats are the most comprehensive measurement for total network traffic.
 
 **For scientific proof, use Docker stats and ensure the client reads the entire stream.**
+
+
+## Steps:
+
+1) Install tcpdump in the hpe container (if not already present):
+```shell
+docker exec -it hpe apt-get update
+docker exec -it hpe apt-get install -y tcpdump
+```
+
+2) Capture all RX packets on the main interface (e.g., eth0):
+
+```shell
+docker exec -it hpe tcpdump -i eth0 -w /output/hpe_rx.pcap
+```
+
+3) After the experiment, process the pcap file on the host:
+```shell
+tshark -r ./csv/hpe_rx.pcap -T fields -e frame.time_epoch -e frame.len > rx_times.csv
+```
+4) Summarize RX bytes per 10ms in Python:
+
+This method **will show spikes** in RX traffic in your plot, and the CSV will feature timestamps suitable for plotting.
+
+### Details:
+
+- The `rx_times.csv` file contains one line per packet with:
+  - **UNIX timestamp** (with sub-second precision, e.g., `1720701234.123456`)
+  - **Packet length** (in bytes)
+
+- The Python script bins these by 10ms intervals:
+  - The `bin` column is essentially the UNIX timestamp in 10ms units (e.g., `int(timestamp * 100)`).
+  - The output `rx_10ms.csv` will have the bin number and total bytes for each 10ms interval.
+
+- **Spikes:**  
+  If there is a burst of RX traffic in a particular 10ms window, the corresponding value in the CSV will be higher, and this will appear as a spike in your plot.
+
+- **Timestamps:**  
+  The bin numbers can be converted back to UNIX time by dividing by 100.  
+  If you want the CSV to include the actual UNIX timestamp for each bin, you can modify the script:
+
+```python
+import pandas as pd
+df = pd.read_csv('rx_times.csv', sep='\t', names=['time', 'len'])
+df['time'] = df['time'].astype(float)
+df['len'] = df['len'].astype(int)
+df['bin'] = (df['time'] * 100).astype(int)  # 10ms bins
+summary = df.groupby('bin')['len'].sum().reset_index()
+summary['timestamp'] = summary['bin'] / 100  # UNIX timestamp in seconds
+summary[['timestamp', 'len']].to_csv('rx_10ms.csv', index=False)
+```
+Now, `rx_10ms.csv` will have columns: `timestamp,len` (timestamp in seconds, bytes in 10ms).
+
+---

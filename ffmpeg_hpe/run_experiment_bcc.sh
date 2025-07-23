@@ -129,22 +129,30 @@ STREAM_URL="http://${STREAM_SERVER_IP}:8089/stream.h264"
 echo "[DEBUG] Using direct IP for stream: $STREAM_URL"
 
 # Step 10: Configure HPE environment
+arguments="$*"  # Capture all arguments
+
 export HPE_METHOD="$1"
 export HPE_INPUT="http://h264-streaming-server:8089/stream.h264"
-export HPE_DEVICE="CPU"
+export HPE_DEVICE="${HPE_DEVICE:-CPU}"
+# Method-specific defaults
 if [[ "$1" == "alphapose" || "$arguments" == *"--method alphapose"* ]]; then
-  export HPE_DEVICE="GPU"
-elif [[ "$1" == "hrnetet" || "$arguments" == *"--method hrnetet"* ]]; then
-  export HPE_DEVICE="CPU"
-elif [[ "$1" == "openpose" || "$arguments" == *"--method openpose"* ]]; then
-  export HPE_DEVICE="CPU"
-elif [[ "$1" == "movenet" || "$arguments" == *"--method movenet"* ]]; then
-  export HPE_DEVICE="CPU"
-elif [[ "$arguments" == *"--device GPU"* ]]; then
-  export HPE_DEVICE="GPU"
-elif [[ "$arguments" == *"--device CPU"* ]]; then
+  export HPE_DEVICE="GPU"  # AlphaPose default
+elif [[ "$1" == "hrnet"* ]]; then
   export HPE_DEVICE="CPU"
 fi
+
+# Argument overrides
+if [[ "$arguments" == *"--device GPU"* ]]; then
+  export HPE_DEVICE="GPU"
+elif [[ "$arguments" == *"--device CPU"* ]]; then
+  export HPE_DEVICE="CPU"  # This will override AlphaPose's GPU default
+fi
+
+echo "Selected configuration:"
+echo "Method: $HPE_METHOD"
+echo "Device: $HPE_DEVICE"
+echo "Input: $HPE_INPUT"
+
 
 # Step 11: Start HPE container
 docker compose -f $docker_compose_file up -d hpe
@@ -172,15 +180,22 @@ sleep 8  # Extra time for BCC compilation and port detection
 measure_container_startup "bcc-tracer" "$bcc_start"
 
 # Verify BCC tracer status
+detected_port=""
 for i in {1..10}; do
-  if docker logs $TRACE_CONTAINER 2>&1 | grep -q "Detected HPE video port"; then
+  docker logs $TRACE_CONTAINER 2>&1 | tail -n 10
+  if docker logs $TRACE_CONTAINER 2>&1 | grep -q "Monitoring HPE traffic on port"; then
     echo "[DEBUG] BCC tracer successfully initialized"
-    detected_port=$(docker logs $TRACE_CONTAINER 2>&1 | grep "Detected HPE video port" | awk '{print $NF}')
+    detected_port=$(docker logs $TRACE_CONTAINER 2>&1 | grep "Monitoring HPE traffic on port" | awk '{print $NF}')
     echo "BCC detected HPE video port: $detected_port" >> "$results_dir/container_timing.txt"
-    break
   fi
   sleep 2
 done
+
+if [[ -z "$detected_port" ]]; then
+  echo "[WARNING] BCC tracer did not detect HPE video port after 20 seconds."
+  # Optionally: exit 1 or continue
+fi
+echo "[DEBUG] waiting for experiment to finish..."
 
 # Step 13: Collect initial logs
 sleep 2  # Allow containers to stabilize
@@ -236,6 +251,9 @@ for container in "${container_list[@]}"; do
   container_id=$(docker ps -aqf "name=^/${container}$")
   [ -n "$container_id" ] && docker logs $container_id > "$results_dir/logs/$container.log" 2>&1
 done
+
+mkdir -p "$results_dir/hpe_output"
+cp ./results/*.csv "$results_dir/hpe_output/" 2>/dev/null || echo "[WARNING] No CSVs found in ./results"
 
 # Step 16: Cleanup
 echo "[DEBUG] Stopping and cleaning up containers..."
