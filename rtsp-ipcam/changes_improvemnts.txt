@@ -1,0 +1,106 @@
+# H.264 Streaming Configuration Guide
+# Created: July 1, 2025
+# ----------------------------------------
+
+# 1. SYSTEM-LEVEL CODEC SUPPORT
+# ----------------------------------------
+# Install full codec support
+sudo apt update
+sudo apt install -y ubuntu-restricted-extras
+
+# Additional H.264 specific libraries
+sudo apt install -y libx264-dev x264
+sudo apt install -y ffmpeg
+
+# Install alternative players
+sudo apt install -y vlc
+sudo apt install -y mpv
+
+# 2. MPV CONFIGURATION
+# ----------------------------------------
+# Create mpv configuration directory
+mkdir -p ~/.config/mpv
+
+# Create configuration file for raw H.264 support
+cat > ~/.config/mpv/mpv.conf << EOF
+# Force demuxer for raw H.264 streams
+[extension.h264]
+demuxer=h264
+
+# Raw H.264 specific options
+[protocol.http]
+demuxer-lavf-o=protocol_whitelist=file,http,https,tcp,tls
+demuxer-lavf-probe-info=nostreams
+EOF
+
+# 3. SERVER CODE MODIFICATIONS
+# ----------------------------------------
+# Option 1: Change Content-Type and format for raw H.264
+self.send_header('Content-Type', 'video/h264')
+...
+'-f', 'h264',
+
+# Option 2: Enhanced raw H.264 streaming command
+cmd = [
+    'ffmpeg',
+    '-re',
+    '-i', self.video_path,
+    '-c:v', 'libx264',
+    '-preset', 'ultrafast',
+    '-tune', 'zerolatency',
+    '-bsf:v', 'h264_mp4toannexb',  # Add Annex B framing
+    '-movflags', '+faststart',     # Optimize for streaming
+    '-flags', 'global_header',     # Include global header
+    '-f', 'h264',
+    '-'
+]
+
+# Option 3: Alternative with different bitstream filter
+cmd = [
+    'ffmpeg',
+    '-re',
+    '-i', self.video_path,
+    '-c:v', 'libx264',
+    '-preset', 'ultrafast',
+    '-tune', 'zerolatency',
+    '-bsf:v', 'h264_mp4toannexb',
+    '-profile:v', 'baseline',
+    '-level', '4.0',
+    '-f', 'h264',
+    '-'
+]
+
+# 4. CLIENT PLAYBACK COMMANDS
+# ----------------------------------------
+# mpv with advanced options
+mpv --no-ytdl --demuxer=h264 --demuxer-lavf-o=protocol_whitelist=file,http,https,tcp,tls http://localhost:8089/stream.h264
+
+# VLC with custom options
+vlc --no-http-reconnect http://localhost:8089/stream.h264
+
+# FFplay with optimized settings
+ffplay -fflags nobuffer -flags low_delay -framedrop http://localhost:8089/stream.h264
+
+# 5. NETWORK PERFORMANCE TWEAKS
+# ----------------------------------------
+# Increase UDP buffer sizes
+sudo sysctl -w net.core.rmem_max=8388608
+sudo sysctl -w net.core.wmem_max=8388608
+
+# Make persistent across reboots
+cat >> /etc/sysctl.conf << EOF
+net.core.rmem_max=8388608
+net.core.wmem_max=8388608
+EOF
+
+# 6. TROUBLESHOOTING
+# ----------------------------------------
+# Verify content type being served
+curl -I http://localhost:8089/stream.h264
+
+# Capture stream for analysis
+curl http://localhost:8089/stream.h264 > test_stream.h264
+ffprobe test_stream.h264
+
+# Test direct FFmpeg playback
+ffmpeg -i http://localhost:8089/stream.h264 -c copy -f null
