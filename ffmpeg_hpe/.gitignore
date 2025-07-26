@@ -6,3 +6,4 @@ __pycache__/
 *.csv
 *.png
 ssl/
+/home/user/MeasurementsDTs/ffmpeg_hpe/results_*
