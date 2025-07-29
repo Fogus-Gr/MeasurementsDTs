@@ -165,7 +165,6 @@ services:
       - /lib/modules:/lib/modules:ro
       - /usr/src:/usr/src:ro
       - /sys/kernel/debug:/sys/kernel/debug
-    pid: host
     user: root # Ensure root user for BCC tracing
     environment:
     - TARGET_CONTAINER=hpe  # The container to monitor

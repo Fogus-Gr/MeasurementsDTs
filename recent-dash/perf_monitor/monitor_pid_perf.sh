@@ -1,54 +1,72 @@
 #!/bin/bash
-set -x  # Debug mode
+# set -x # Commented out for production
 
-TARGET_PID_FILE="/pids/dash.pid"
 OUTPUT_DIR="/output"
-OUTPUT_FILE="${OUTPUT_DIR}/aggregated_metrics.csv"
-INTERVAL=0.5  # Sampling interval in seconds
+PID_FILE="/pids/dash.pid"
+OUTPUT_FILE="${OUTPUT_DIR}/perf_metrics.csv"
+INTERVAL=1 # pidstat works best with intervals of 1 second or more
 
-# Ensure output directory exists
+# Ensure output directory exists and we can write to it
 mkdir -p "$OUTPUT_DIR"
+touch "$OUTPUT_FILE" || { echo "Cannot write to output file"; exit 1; }
 
-# Write CSV header if file doesn't exist or is empty
 echo "timestamp,total_cpu_percent,total_mem_rss_kb,active_pids" > "$OUTPUT_FILE"
 
-echo "[DEBUG] Starting monitoring script..."
+echo "[INFO] Starting monitoring script with pidstat (Interval: ${INTERVAL}s)..."
 
 # Main monitoring loop
 while true; do
-  timestamp=$(date +%s%3N)
-  total_cpu_percent=0
-  total_mem_rss_kb=0
-  active_pids=0
-  
-  # Get updated PIDs from file every iteration
-  if [ -f "$TARGET_PID_FILE" ]; then
-    PIDS=($(cat "$TARGET_PID_FILE"))
-    
-    # Process each PID
-    for PID in "${PIDS[@]}"; do
-      if ps -p $PID >/dev/null 2>&1; then
-        active_pids=$((active_pids + 1))
-        
-        # Get CPU and memory stats
-        cpu=$(ps -p $PID -o %cpu= | tr -d ' ' || echo "0")
-        mem=$(ps -p $PID -o rss= | tr -d ' ' || echo "0")
-        
-        # Properly handle floating point with bc
-        total_cpu_percent=$(echo "$total_cpu_percent + $cpu" | bc)
-        total_mem_rss_kb=$(echo "$total_mem_rss_kb + $mem" | bc)
-      fi
-    done
-  else
-    # Fallback to system-wide metrics if no PID file
-    total_cpu_percent=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
-    total_mem_rss_kb=$(free -k | grep "Mem:" | awk '{print $3}')
-    active_pids=1  # Just to have some data
+  # Check if the PID file exists and is readable
+  if [ ! -f "$PID_FILE" ] || [ ! -r "$PID_FILE" ]; then
+    echo "[WARN] PID file not found or not readable at $PID_FILE. Sleeping for ${INTERVAL}s."
+    sleep $INTERVAL
+    continue
   fi
+
+  # Read all PIDs into a comma-separated string for pidstat
+  PIDS=$(cat "$PID_FILE" | tr '\n' ',' | sed 's/,$//')
+
+  if [ -z "$PIDS" ]; then
+    echo "[WARN] PID file is empty. Sleeping for ${INTERVAL}s."
+    sleep $INTERVAL
+    continue
+  fi
+
+  # --- Use pidstat for accurate interval-based CPU and memory ---
+  # pidstat -p $PIDS -u -r $INTERVAL 1
+  # This command samples for $INTERVAL seconds and then prints the average over that interval.
+  # The output is parsed to get the total CPU and Memory.
   
-  # Write data to CSV
-  echo "$timestamp,$total_cpu_percent,$total_mem_rss_kb,$active_pids" >> "$OUTPUT_FILE"
+  # We run pidstat in the background to capture its output without blocking the timestamp
+  # Note: The actual metrics will correspond to the end of the interval.
   
-  # Sleep before next sample
-  sleep $INTERVAL || true  # Continue even if sleep is interrupted
+  metrics=$(pidstat -p $PIDS -u -r $INTERVAL 1 | tail -n +4)
+  
+  # If pidstat returned no data (all pids died), then we record zeros
+  if [ -z "$metrics" ]; then
+      total_cpu="0"
+      total_mem="0"
+      active_pids=0
+  else
+      # Use awk for powerful column-based processing
+      totals=$(echo "$metrics" | awk '
+        { 
+          cpu_sum += $8;   # %CPU column
+          mem_sum += $7;   # RSS (kB) column
+          count++ 
+        } 
+        END { 
+          print cpu_sum, mem_sum, count 
+        }
+      ')
+      
+      total_cpu=$(echo $totals | cut -d ' ' -f 1)
+      total_mem=$(echo $totals | cut -d ' ' -f 2)
+      active_pids=$(echo $totals | cut -d ' ' -f 3)
+  fi
+
+  timestamp=$(date +%s%3N)
+  echo "$timestamp,$total_cpu,$total_mem,$active_pids" >> "$OUTPUT_FILE"
+
+  # No extra sleep is needed because pidstat's interval handles the delay
 done
