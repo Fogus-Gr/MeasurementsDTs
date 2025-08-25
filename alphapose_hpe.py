@@ -2,6 +2,8 @@ import os
 import cv2
 import numpy as np
 import torch
+import torchvision.transforms as transforms
+import torchvision.transforms.functional as F
 from base_hpe import BaseHPE, Body, Padding
 from types import SimpleNamespace
 
@@ -58,50 +60,34 @@ class AlphaPoseHPE(BaseHPE):
         kwargs['pd_w'] = 0
         kwargs['pd_h'] = 0
 
-        super().__init__(*args, **kwargs)
+        # Pass gpu_id to BaseHPE for PyNvCodec
+        super().__init__(*args, gpu_id=self.gpus[0] if self.gpus[0] >= 0 else -1, **kwargs)
 
 
     def load_model(self):
         self.cfg = update_config(self.cfg)
         qsize = 1024
         
-        # Load detection loader
-        if self.input_type == 'webcam':
-            opt1 = SimpleNamespace(detector=self.detector, gpus=self.gpus, device=self.device)
-            opt2 = SimpleNamespace(tracking=False, sp=self.sp)
-            self.det_loader = WebCamDetectionLoader(self.input_src, self.cap, get_detector(opt1), self.cfg, opt2, queueSize=1)
-            det_worker = self.det_loader.start()
-        else:
+        # Load detector model
+        opt1 = SimpleNamespace(detector=self.detector, gpus=self.gpus, device=self.device)
+        self.detector_model = get_detector(opt1)
+        
+        # For image/directory inputs, we still need to handle loading
+        if self.input_type == "image" or self.input_type == "directory":
             inputpath = os.getcwd()
-
             if self.input_type == "image":
-                self.cap = ""
-                input_src_dir = os.path.dirname(self.input_src)  # Extracts 'frames_pair'
-                inputpath = os.path.join(inputpath, input_src_dir)
-                self.input_src = os.path.basename(self.input_src)
-            elif self.input_type == "directory":
-                self.cap = ""
-                inputpath = os.path.join(inputpath, self.img_dir)
-            elif self.input_type == "video":
-                self.path = self.input_src
-                stream = self.cap
-                if isinstance(self.path, str) and self.path == 'pipe:0':
-                    print("[INFO] Using stdin pipe as input source")
-                    self.datalen = 10000  # Set a default for pipe input
-                else:
-                    if not stream or not stream.isOpened():
-                        print("[WARNING] Video stream could not be opened, setting datalen=10000")
-                        self.datalen = 10000
-                    else:
-                        self.datalen = int(stream.get(cv2.CAP_PROP_FRAME_COUNT))
                 input_src_dir = os.path.dirname(self.input_src)
                 inputpath = os.path.join(inputpath, input_src_dir)
                 self.input_src = os.path.basename(self.input_src)
+            elif self.input_type == "directory":
+                inputpath = os.path.join(inputpath, self.img_dir)
             
-            opt1 = SimpleNamespace(detector=self.detector, gpus=self.gpus, device=self.device)
             opt2 = SimpleNamespace(device=self.device, sp=self.sp, inputpath=inputpath, tracking=False)
-            self.det_loader = DetectionLoader([self.input_src], self.cap, get_detector(opt1), self.cfg, opt2, batchSize=self.detbatch, mode=self.input_type, queueSize=qsize)
-            det_worker = self.det_loader.start()
+            self.det_loader = DetectionLoader([self.input_src], None, self.detector_model, self.cfg, opt2, batchSize=self.detbatch, mode=self.input_type, queueSize=qsize)
+            self.det_worker = self.det_loader.start()
+        else: # Video, webcam, or stream handled by BaseHPE
+            self.det_loader = None # No need for DetectionLoader to manage input
+            self.det_worker = None
 
         # Load pose model
         self.pose_model = builder.build_sppe(self.cfg.MODEL, preset_cfg=self.cfg.DATA_PRESET)
@@ -122,89 +108,176 @@ class AlphaPoseHPE(BaseHPE):
             'pn': []
         }
 
-    def run_model(self, padded):
-        # TODO - AlphaPose can handle multiple image with parallelization, here we pass one-one even in directories
-        norm_type = 'softmax'  # Default normalization (update based on cfg)
+        # Define the transformation for pose estimation input
+        # This should match the input requirements of your AlphaPose model
+        # For example, if it expects 256x192, normalized, and (C, H, W)
+        self.transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
+    def run_model(self, frame_input):
+        # frame_input can be a NumPy array (from OpenCV) or a PyTorch Tensor (from PyNvCodec)
+        norm_type = 'softmax'
         flip = False
         profile = False
 
-        orig_h = 0
-        orig_w = 0
-
-        # Print only padded shape since that's the only variable defined so far
-        # print(f"Debug - padded shape: {padded.shape if padded is not None else None}")
-
-        # Specific inference for AlphaPose
-        batchSize = self.posebatch
-        if flip:
-            batchSize = int(batchSize / 2)
         with torch.no_grad():
-                # This creates the variables inps, boxes, etc.
-                (inps, orig_img, im_name, boxes, scores, ids, cropped_boxes) = self.det_loader.frame_preprocess(padded)
-                
-                # # NOW you can debug these variables
-                # print(f"Debug - detections: {len(boxes) if boxes is not None else None}")
-                # print(f"Debug - inps before device: {type(inps)}")
-                
+            if self.det_loader: # For image/directory inputs, use DetectionLoader
+                (inps, orig_img, im_name, boxes, scores, ids, cropped_boxes) = self.det_loader.frame_preprocess(frame_input)
                 if orig_img is None:
                     return []
-
                 orig_h, orig_w = orig_img.shape[:2]
+            else: # For video/webcam/stream with PyNvCodec, frame_input is a GPU tensor
+                # frame_input is already a torch.Tensor on GPU (RGB, H, W, C)
+                orig_img_tensor = frame_input.to(self.device) # Ensure it's on the correct device
+                orig_h, orig_w = orig_img_tensor.shape[:2]
                 
-                # Pose Estimation
-                if inps is None:
-                    #print("Warning: Input is None, skipping inference")
-                    return []  # or appropriate empty result
+                # Prepare image for detector (resize, normalize, permute)
+                # Assuming detector expects (N, C, H, W) float [0,1]
+                # Detector input size might be different from pose model input size
+                det_input_size = self.cfg.DETECTOR.INPUT_SIZE if hasattr(self.cfg.DETECTOR, 'INPUT_SIZE') else [640, 640] # Default for YOLO
+                
+                # Resize using torchvision.transforms.functional (GPU-accelerated)
+                resized_img_tensor = F.resize(orig_img_tensor.permute(2,0,1), det_input_size, antialias=True) # (C, H, W)
+                detector_input = resized_img_tensor.float() / 255.0
+                detector_input = detector_input.unsqueeze(0) # Add batch dimension (N, C, H, W)
 
-                try:
-                    #print(f"Debug - inps shape: {inps.shape if inps is not None else None}")
-                    inps = inps.to(self.device)
-                except Exception as e:
-                    print(f"Error moving tensor to device: {e}")
+                # Perform detection directly using the loaded detector model
+                # The images_detection method expects a list of images and original dimensions
+                # For a single image, it's a list with one item.
+                # The output format of images_detection needs to be parsed.
+                
+                # Assuming self.detector_model.images_detection returns a list of dicts,
+                # where each dict contains 'boxes', 'scores', 'ids', 'inps', 'cropped_boxes'
+                # This is a simplification and might need adjustment based on actual detector API.
+                
+                # Call images_detection
+                # orig_dim_list needs to be a tensor for YOLODetector
+                orig_dim_tensor = torch.FloatTensor([(orig_w, orig_h, orig_w, orig_h)]).to(self.device)
+                det_results = self.detector_model.images_detection(detector_input, orig_dim_tensor)
+                
+                # Parse detection results
+                # det_results is a tensor of shape (n, (batch_idx, x1, y1, x2, y2, c, s, idx of cls))
+                if isinstance(det_results, int) or det_results.shape[0] == 0:
                     return []
                 
-                datalen = inps.size(0)
-                leftover = 0
-                if (datalen) % batchSize:
-                    leftover = 1
-                num_batches = datalen // batchSize + leftover
-                hm = []
-                for j in range(num_batches):
-                    inps_j = inps[j * batchSize:min((j + 1) * batchSize, datalen)]
-                    if flip:
-                        inps_j = torch.cat((inps_j, flip(inps_j)))
-                    hm_j = self.pose_model(inps_j)
-                    if flip:
-                        hm_j_flip = flip_heatmap(hm_j[int(len(hm_j) / 2):], self.pose_dataset.joint_pairs, shift=True)
-                        hm_j = (hm_j[0:int(len(hm_j) / 2)] + hm_j_flip) / 2
-                    hm.append(hm_j)
-                hm = torch.cat(hm)
-                if profile:
-                    ckpt_time, pose_time = getTime(ckpt_time)
-                    self.runtime_profile['pt'].append(pose_time)
-                hm = hm.cpu()
+                # Filter for human class (idx of cls == 0 for COCO) and current batch_idx (which is 0)
+                # Assuming human class index is 0 based on yolo_api.py's write_results
+                human_detections = det_results[(det_results[:, 0] == 0) & (det_results[:, 7] == 0)]
 
-                # TODO - This should be done in postprocess
-                self.heatmap_to_coord = get_func_heatmap_to_coord(self.cfg)
-
-                if boxes is None or boxes.nelement() == 0:
+                if human_detections.nelement() == 0:
                     return []
-                
-                keypoints_array = []
-                for j in range(hm.shape[0]):
-                    bbox = cropped_boxes[j].tolist()
-                    hm_size = hm[j].shape[-2:]  # Heatmap dimensions
-                    pose_coord, pose_score = self.heatmap_to_coord(hm[j], bbox, hm_shape=hm_size, norm_type=norm_type)
 
-                    # Normalize coordinates to [0,1] range
-                    pose_coord[:, 0] /= orig_w
-                    pose_coord[:, 1] /= orig_h
+                # Extract boxes, scores, ids
+                boxes = human_detections[:, 1:5] # x1, y1, x2, y2
+                scores = human_detections[:, 6] # class score
+                ids = torch.arange(1, boxes.shape[0] + 1, device=self.device) # Generate dummy IDs for now
+                cropped_boxes = boxes # For now, cropped_boxes are the same as boxes
+
+                # --- Implement GPU-accelerated cropping and resizing for pose model ---
+                inps_list = []
+                pose_input_size = self.cfg.MODEL.IMAGE_SIZE # [width, height]
+                
+                # orig_img_tensor is (H, W, C) RGB
+                # We need to permute to (C, H, W) for F.crop and F.resize
+                orig_img_tensor_chw = orig_img_tensor.permute(2, 0, 1)
+
+                for i in range(boxes.shape[0]):
+                    box = boxes[i]
+                    x1, y1, x2, y2 = box.int().tolist()
+
+                    # Ensure coordinates are within image bounds
+                    x1, y1, x2, y2 = max(0, x1), max(0, y1), min(orig_w, x2), min(orig_h, y2)
                     
-                    # Combine coordinates and scores into a single array
-                    person_keypoints = np.hstack((pose_coord, pose_score.reshape(-1, 1)))
-                    keypoints_array.append(person_keypoints)
+                    if x2 <= x1 or y2 <= y1: # Skip invalid boxes
+                        continue
+
+                    # Cropping on GPU
+                    cropped_person = F.crop(orig_img_tensor_chw, y1, x1, y2-y1, x2-x1) # (C, H, W)
+                    
+                    # Resizing on GPU
+                    resized_person = F.resize(cropped_person, pose_input_size[::-1], antialias=True) # F.resize expects (H, W) for size
+
+                    # Apply normalization (self.transform)
+                    # self.transform is a Compose of ToTensor and Normalize.
+                    # ToTensor expects a PIL Image or NumPy array.
+                    # We need a GPU-aware normalization.
+                    # For now, let's apply normalization manually on GPU.
+                    
+                    # Convert to float and normalize [0,1]
+                    normalized_person = resized_person.float() / 255.0
+                    
+                    # Apply mean/std normalization on GPU
+                    mean = torch.tensor([0.485, 0.456, 0.406], device=self.device).view(3, 1, 1)
+                    std = torch.tensor([0.229, 0.224, 0.225], device=self.device).view(3, 1, 1)
+                    normalized_person = (normalized_person - mean) / std
+                    
+                    inps_list.append(normalized_person)
                 
-                return keypoints_array
+                if inps_list:
+                    inps = torch.stack(inps_list).to(self.device)
+                else:
+                    inps = torch.empty((0, 3, pose_input_size[1], pose_input_size[0]), device=self.device)
+
+                if inps.nelement() == 0:
+                    return []
+
+            # Pose Estimation (common for both paths)
+            # 'inps' should now be ready for the pose model
+            if inps is None:
+                return []
+
+            # Pose Estimation (common for both paths)
+            # 'inps' should now be ready for the pose model
+            if inps is None:
+                return []
+
+            try:
+                inps = inps.to(self.device)
+            except Exception as e:
+                print(f"Error moving tensor to device: {e}")
+                return []
+            
+            datalen = inps.size(0)
+            leftover = 0
+            if (datalen) % batchSize:
+                leftover = 1
+            num_batches = datalen // batchSize + leftover
+            hm = []
+            for j in range(num_batches):
+                inps_j = inps[j * batchSize:min((j + 1) * batchSize, datalen)]
+                if flip:
+                    inps_j = torch.cat((inps_j, flip(inps_j)))
+                hm_j = self.pose_model(inps_j)
+                if flip:
+                    hm_j_flip = flip_heatmap(hm_j[int(len(hm_j) / 2):], self.pose_dataset.joint_pairs, shift=True)
+                    hm_j = (hm_j[0:int(len(hm_j) / 2)] + hm_j_flip) / 2
+                hm.append(hm_j)
+            hm = torch.cat(hm)
+            if profile:
+                ckpt_time, pose_time = getTime(ckpt_time)
+                self.runtime_profile['pt'].append(pose_time)
+            hm = hm.cpu()
+
+            self.heatmap_to_coord = get_func_heatmap_to_coord(self.cfg)
+
+            if boxes is None or boxes.nelement() == 0:
+                return []
+            
+            keypoints_array = []
+            for j in range(hm.shape[0]):
+                bbox = cropped_boxes[j].tolist()
+                hm_size = hm[j].shape[-2:]
+                pose_coord, pose_score = self.heatmap_to_coord(hm[j], bbox, hm_shape=hm_size, norm_type=norm_type)
+
+                pose_coord[:, 0] /= orig_w
+                pose_coord[:, 1] /= orig_h
+                
+                person_keypoints = np.hstack((pose_coord, pose_score.reshape(-1, 1)))
+                keypoints_array.append(person_keypoints)
+            
+            return keypoints_array
         
     def postprocess(self, predictions):
         bodies = []

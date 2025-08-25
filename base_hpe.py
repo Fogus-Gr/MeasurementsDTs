@@ -4,6 +4,14 @@ import os
 from collections import namedtuple
 import glob
 import time
+import torch
+import numpy as np
+
+try:
+    import PyNvCodec as nvc
+except ImportError:
+    nvc = None
+    print("[WARNING] PyNvCodec not found. Hardware accelerated video decoding will not be available.")
 
 from utils.visualizer import render
 from utils.evaluator import append_COCO_format_json, append_COCO_format_csv, save_COCO_format_json, save_COCO_format_csv, save_Tx_csv_data
@@ -40,8 +48,17 @@ class BaseHPE(ABC):
                 show_scores = True,
                 show_bounding_box = True,
                 pd_w = 256,
-                pd_h = 256):
+                pd_h = 256,
+                gpu_id = 0): # Added gpu_id parameter
         super().__init__()
+
+        self.gpu_id = gpu_id
+        self.demuxer = None
+        self.decoder = None
+        self.to_rgb_converter = None
+        self.to_tensor_converter = None
+        self.cap = None # Keep for non-PyNvCodec paths or fallback
+        self.is_pynvcodec_enabled = False
 
         self.json = enable_json
         self.csv = enable_csv
@@ -80,50 +97,21 @@ class BaseHPE(ABC):
                 self.img = cv2.imread(input_src)
                 self.img_h, self.img_w = self.img.shape[:2]
                 self.current_image_file = os.path.basename(input_src)
-            elif input_src.startswith("http"):
-                self.input_type = "ip_stream"
-                
-                print(f"Attempting to connect to IP stream at {input_src}...")
-
-                # e.g. 60 tries * 1s = 60 seconds timeout
-                max_retries = 60
-                for attempt in range(max_retries):
-                    self.cap = cv2.VideoCapture()
-                    try:
-                        self.cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 60000)
-                        self.cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 60000)
-                    except AttributeError:
-                        pass  # OpenCV build may not support these properties
-                    opened = self.cap.open(
-                        input_src,
-                        apiPreference=cv2.CAP_FFMPEG
-                    )
-                    if opened and self.cap.isOpened():
-                        break
-                    print(f"[{attempt+1}/{max_retries}] Stream not available, retrying in 1s...")
-                    time.sleep(1)
-
-                if not self.cap.isOpened():
-                    raise ValueError(f"Failed to connect to video stream after {max_retries} attempts: {input_src}")
-
-                # Give OpenCV a small buffer time to fetch metadata
-                time.sleep(0.5)
-
-                self.video_fps = int(self.cap.get(cv2.CAP_PROP_FPS)) or 25
-                self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            else:
-                if not input_src.isdigit():
-                    self.input_type = "video"
+            elif input_src.startswith("http") or (not input_src.isdigit() and (input_src.endswith('.mp4') or input_src.endswith('.avi') or input_src.endswith('.mov'))):
+                # Use PyNvCodec for video streams and files
+                if nvc is None:
+                    print("[ERROR] PyNvCodec not available. Falling back to OpenCV for video decoding.")
+                    self.input_type = "video" # Treat as generic video for OpenCV
+                    self._init_opencv_video_capture(input_src)
                 else:
-                    input_src = int(input_src)
-                    self.input_type = "webcam"
-                self.cap = cv2.VideoCapture(input_src)
-                self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
-                self.cap.set(cv2.CAP_PROP_FOCUS, 0)
-                self.video_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
-                self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    self.input_type = "video" # Treat all PyNvCodec inputs as video
+                    self._init_pynvcodec_video_capture(input_src)
+            elif input_src.isdigit():
+                # Webcam input (OpenCV only for now, PyNvCodec for webcam is more complex)
+                self.input_type = "webcam"
+                self._init_opencv_video_capture(int(input_src))
+            else:
+                raise ValueError("No valid input source provided or unsupported file type for PyNvCodec.")
                 
             self.set_padding()
         else:
@@ -132,12 +120,65 @@ class BaseHPE(ABC):
         self.input_src = input_src  
 
         if (self.input_type == "directory" or self.input_type == "image") and self.save_video:
-            raise ValueError("image input - video output not supported!")
+            raise ValueError("Image input - video output not supported!")
 
         if self.save_video:
             fourcc = cv2.VideoWriter_fourcc(*"MJPG")
             filename = os.path.join(self.output_dir, "video.avi")
             self.output = cv2.VideoWriter(filename, fourcc, self.video_fps, (self.img_w, self.img_h))
+
+    @abstractmethod
+    def _init_opencv_video_capture(self, input_src):
+        if isinstance(input_src, str) and input_src.startswith("http"):
+            print(f"Attempting to connect to IP stream at {input_src} using OpenCV...")
+            max_retries = 60
+            for attempt in range(max_retries):
+                self.cap = cv2.VideoCapture()
+                try:
+                    self.cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 60000)
+                    self.cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 60000)
+                except AttributeError:
+                    pass
+                opened = self.cap.open(input_src, apiPreference=cv2.CAP_FFMPEG)
+                if opened and self.cap.isOpened():
+                    break
+                print(f"[{attempt+1}/{max_retries}] Stream not available, retrying in 1s...")
+                time.sleep(1)
+            if not self.cap.isOpened():
+                raise ValueError(f"Failed to connect to video stream after {max_retries} attempts: {input_src}")
+            time.sleep(0.5) # Give OpenCV a small buffer time to fetch metadata
+        else:
+            self.cap = cv2.VideoCapture(input_src)
+            self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+            self.cap.set(cv2.CAP_PROP_FOCUS, 0)
+        
+        self.video_fps = int(self.cap.get(cv2.CAP_PROP_FPS)) or 25
+        self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.is_pynvcodec_enabled = False
+
+    def _init_pynvcodec_video_capture(self, input_src):
+        if nvc is None:
+            raise RuntimeError("PyNvCodec is not installed, cannot use hardware acceleration.")
+        
+        print(f"[INFO] Attempting to connect to video stream/file at {input_src} using PyNvCodec on GPU {self.gpu_id}...")
+        
+        try:
+            self.demuxer = nvc.FFmpegDemuxer(input_src)
+            self.decoder = nvc.PyNvDecoder(self.demuxer.Width(), self.demuxer.Height(), self.demuxer.Format(), self.demuxer.Codec(), self.gpu_id)
+            self.to_rgb_converter = nvc.PyNvConverter(self.demuxer.Width(), self.demuxer.Height(), nvc.PixelFormat.NV12, nvc.PixelFormat.RGB, self.gpu_id)
+            self.to_tensor_converter = nvc.PyTorchConverter(self.demuxer.Width(), self.demuxer.Height(), nvc.PixelFormat.RGB, self.gpu_id)
+
+            self.img_w = self.demuxer.Width()
+            self.img_h = self.demuxer.Height()
+            self.video_fps = self.demuxer.AvgFramerateNum() / self.demuxer.AvgFramerateDen() if self.demuxer.AvgFramerateDen() > 0 else 25
+            self.is_pynvcodec_enabled = True
+            print(f"[INFO] PyNvCodec initialized successfully. Resolution: {self.img_w}x{self.img_h}, FPS: {self.video_fps:.2f}")
+
+        except Exception as e:
+            print(f"[ERROR] Failed to initialize PyNvCodec: {e}. Falling back to OpenCV for video decoding.")
+            self.is_pynvcodec_enabled = False
+            self._init_opencv_video_capture(input_src) # Fallback
 
     @abstractmethod
     def load_model(self):
@@ -171,8 +212,30 @@ class BaseHPE(ABC):
 
                 frame_number += 1
         
-        else:   # webcam, video or stream
-            print("Starting processing video/webcam data. Press CTR+C to exit")
+        elif self.is_pynvcodec_enabled: # PyNvCodec path
+            print(f"Starting processing video/stream data with PyNvCodec on GPU {self.gpu_id}. Press CTR+C to exit")
+            while True:
+                try:
+                    # Decode a frame
+                    surface = self.decoder.DecodeSingleFrame(self.demuxer)
+                    if not surface:
+                        break # End of video
+
+                    # Convert NV12 surface to RGB surface
+                    rgb_surface = self.to_rgb_converter.Execute(surface)
+                    
+                    # Convert RGB surface to PyTorch tensor on GPU
+                    frame_tensor = self.to_tensor_converter.Execute(rgb_surface)
+                    
+                    self.process_frame(frame_tensor, frame_number)
+
+                    frame_number += 1
+                except Exception as e:
+                    print(f"[ERROR] PyNvCodec decoding error: {e}")
+                    break # Exit loop on error
+
+        else:   # OpenCV video/webcam/stream fallback
+            print("Starting processing video/webcam data with OpenCV. Press CTR+C to exit")
             while True:
                 ok, frame = self.cap.read()
                 if not ok:
@@ -191,8 +254,16 @@ class BaseHPE(ABC):
     def process_frame(self, frame, frame_number):
         timestamp = time.time()
 
-        padded = self.pad_and_resize(frame)
-        predictions = self.run_model(padded)
+        # If frame is a PyTorch tensor, it's on GPU. Convert to CPU NumPy for OpenCV operations.
+        if isinstance(frame, torch.Tensor):
+            # Ensure it's RGB (PyNvCodec outputs RGB) and convert to BGR for OpenCV
+            frame_np = frame.cpu().numpy()
+            frame_np = cv2.cvtColor(frame_np, cv2.COLOR_RGB2BGR)
+        else:
+            frame_np = frame # Already a NumPy array from OpenCV
+
+        padded = self.pad_and_resize(frame_np) # pad_and_resize expects numpy array
+        predictions = self.run_model(padded) # run_model will handle converting padded to tensor if needed
         bodies = self.postprocess(predictions)
 
         if self.json:
@@ -205,16 +276,16 @@ class BaseHPE(ABC):
             if not hasattr(self, 'LINES_BODY'):
                 raise ValueError("LINES_BODY is not defined in the child class.")
             
-            render(frame, bodies, self.LINES_BODY, self.score_thresh, self.show_scores, self.show_bounding_box)
+            render(frame_np, bodies, self.LINES_BODY, self.score_thresh, self.show_scores, self.show_bounding_box)
 
             if self.save_video:
                 if not self.output.isOpened():
                     raise ValueError("Failed to open the video writer")
-                self.output.write(frame)
+                self.output.write(frame_np)
 
             elif self.save_image:
                 filename = os.path.join(self.output_dir, f"frame_{frame_number:04d}.jpg")
-                cv2.imwrite(filename, frame)
+                cv2.imwrite(filename, frame_np)
     
     @abstractmethod
     def run_model(self, padded):
