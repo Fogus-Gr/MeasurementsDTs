@@ -26,14 +26,15 @@ def parse_arguments():
         parser.add_argument("--save_video", action="store_true", help="Save resutls into a video file")
         parser.add_argument("--save_image", action="store_true", help="Save image with keypoints")
         parser.add_argument('--device', type=str, default="GPU", choices=['GPU', 'CPU'], help="Device to run inference on. Options: CPU, GPU")
+        parser.add_argument('--detbatch', type=int, default=5, help="Detection batch size (default=%(default)s)")
         
         return parser
 
 def get_hpe_method(args):
     method_map = {
-        'movenet': lambda args: MoveNetHPE(device=args.device, **base_args(args)),
-        'alphapose': lambda args: AlphaPoseHPE(device=args.device, **base_args(args)),
-        'openpose': lambda args: OpenVINOBaseHPE(model_type='openpose', device=args.device, **base_args(args)),
+        'movenet': lambda args: MoveNetHPE(device=args.device, detbatch=args.detbatch, **base_args(args)),
+        'alphapose': lambda args: AlphaPoseHPE(device=args.device, detbatch=args.detbatch, **base_args(args)),
+        'openpose': lambda args: OpenVINOBaseHPE(model_type='openpose', device=args.device, detbatch=args.detbatch, **base_args(args)),
         'hrnet': lambda args: OpenVINOBaseHPE(model_type='higherhrnet', device=args.device, **base_args(args)),
         'ae1': lambda args: OpenVINOBaseHPE(model_type='efficienthrnet1', device=args.device, **base_args(args)),
         'ae2': lambda args: OpenVINOBaseHPE(model_type='efficienthrnet2', device=args.device, **base_args(args)),

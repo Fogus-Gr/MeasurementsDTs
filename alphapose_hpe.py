@@ -34,8 +34,9 @@ class AlphaPoseHPE(BaseHPE):
         [12,14], [14,16], [11,13], [13,15]
     ]
 
-    def __init__(self, cfg = DEFAULT_CFG, device = "GPU", detbatch = 5, posebatch = 64, detector = "yolo", 
+    def __init__(self, detbatch: int, cfg = DEFAULT_CFG, device = "GPU", posebatch = 64, detector = "yolo", 
                  checkpoint = DEFAULT_CHECKPOINT, sp = True, *args, **kwargs):
+        # detbatch is now passed from main.py
         gpus = DEVICE_TO_GPU.get(device, "-1")
         self.cfg = cfg
         self.gpus = [int(i) for i in gpus.split(',')] if torch.cuda.device_count() >= 1 else [-1]
