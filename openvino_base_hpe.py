@@ -1,13 +1,15 @@
 from pathlib import Path
-from base_hpe import BaseHPE
+import os
 import numpy as np
+
+from base_hpe import BaseHPE
 from base_hpe import Body
 
 from models.OpenVINO.model_api.models import ImageModel
 from models.OpenVINO.model_api.adapters import create_core, OpenvinoAdapter
 from models.OpenVINO.model_api.pipelines import get_user_config
 
-import openvino as ov  # NEW
+import openvino as ov  # CPU tuning
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 MODEL_CONFIGS = {
@@ -51,19 +53,24 @@ class OpenVINOBaseHPE(BaseHPE):
         [12,14], [14,16], [11,13], [13,15]
     ]
 
-    # NEW: threads / mode / streams knobs with VPS-friendly defaults
-    def __init__(self, model_type, device="CPU", ov_threads=3, ov_mode="throughput", ov_streams=None, **kwargs):
-        if model_type not in MODEL_CONFIGS:  # BUGFIX: use local arg, not self.model_type
+    # VPS-friendly knobs: ov_threads / ov_mode / ov_streams
+    def __init__(self, model_type, device="CPU", ov_threads=None, ov_mode=None, ov_streams=None, **kwargs):
+        if model_type not in MODEL_CONFIGS:  # BUGFIX: check arg, not self.model_type
             raise ValueError(f"Unsupported model type: {model_type}. Choose from: {list(MODEL_CONFIGS.keys())}")
 
         self.model_type = model_type
         self.model_cfg = MODEL_CONFIGS[self.model_type]
         self.device = device
 
-        # OpenVINO CPU knobs (4 vCPU VPS: 3 for infer, 1 for decode/IO)
-        self.ov_threads = int(ov_threads)            # e.g., 3
-        self.ov_mode = ov_mode.lower()               # "throughput" or "latency"
-        self.ov_streams = ov_streams                 # None = let hint decide
+        # Defaults via ENV (so main.py changes are optional)
+        # 4-vCPU VPS: leave ~1 for decode/IO -> 3 for inference
+        env_threads = os.getenv("OV_THREADS")
+        env_mode = os.getenv("OV_MODE")          # "throughput" or "latency"
+        env_streams = os.getenv("OV_STREAMS")    # int or empty
+
+        self.ov_threads = int(ov_threads if ov_threads is not None else (env_threads or 3))
+        self.ov_mode = (ov_mode or env_mode or "throughput").lower()
+        self.ov_streams = int(env_streams) if (ov_streams is None and env_streams and env_streams.isdigit()) else ov_streams
 
         if self.device == "GPU" and not self.model_cfg["gpu_supported"]:
             print(f"[INFO] Model '{self.model_type}' is not supported on GPU. Falling back to CPU.")
@@ -74,19 +81,16 @@ class OpenVINOBaseHPE(BaseHPE):
         super().__init__(**kwargs)
 
     def _configure_core(self, core: ov.Core):
-        # Map string to OV enum
+        # Map to OV performance hints
         perf_mode = ov.hint.PerformanceMode.THROUGHPUT if self.ov_mode == "throughput" else ov.hint.PerformanceMode.LATENCY
-
         cpu_props = {
             ov.hint.performance_mode: perf_mode,
             ov.inference_num_threads: self.ov_threads,
             ov.hint.enable_cpu_pinning: True,
-            ov.hint.enable_hyper_threading: False,  # tiny VPS: avoid SMT thrash
+            ov.hint.enable_hyper_threading: False,  # helps on small VPS
         }
         if self.ov_streams is not None:
-            # You can set a fixed number of streams if you want explicit control
             cpu_props[ov.num_streams] = int(self.ov_streams)
-
         core.set_property("CPU", cpu_props)
 
     def load_model(self):
@@ -94,33 +98,32 @@ class OpenVINOBaseHPE(BaseHPE):
 
         xml_path = self.model_cfg["path"]
 
-        # Get default plugin config from your pipeline helper (kept for compatibility)
         plugin_config = get_user_config(self.device, '', None)
 
-        # Create/OpenVINO core and apply CPU performance hints
-        core = create_core()  # returns ov.Core
+        # Configure CPU once
+        core = create_core()  # returns ov.Core from model_api
         self._configure_core(core)
 
-        # Build adapter. Let OV infer layouts; set explicitly only if needed.
+        # Build adapter; let OV infer layouts unless you need to force them
         model_adapter = OpenvinoAdapter(
-            core, xml_path, device=self.device,
+            core, xml_path,
+            device=self.device,
             plugin_config=plugin_config,
             max_num_requests=0,
-            # model_parameters={"input_layouts": {"data": "NCHW"}}  # uncomment if your model requires it
+            # model_parameters={"input_layouts": {"data": "NCHW"}}
         )
 
-        # Aspect ratio (used by model_api preproc)
+        # Default to 1.0 aspect ratio if dimensions aren't known at load time
         aspect_ratio = (self.img_w / self.img_h) if (self.img_w and self.img_h) else 1.0
 
         config = {
             "target_size": None,
             "aspect_ratio": aspect_ratio,
             "confidence_threshold": self.score_thresh,
-            # specific for 'higherhrnet' / AE models
+            # the 'higherhrnet' and 'ae' specific
             "padding_mode": "center" if self.model_type == "higherhrnet" else None,
             "delta": 0.5 if self.model_type == "higherhrnet" else None,
         }
-
         architecture = self.model_cfg["architecture"]
         self.model = ImageModel.create_model(architecture, model_adapter, config)
         self.model.log_layers_info()
@@ -131,27 +134,28 @@ class OpenVINOBaseHPE(BaseHPE):
         inputs, preprocessing_meta = self.model.preprocess(padded)
         raw_result = self.model.infer_sync(inputs)
 
-        results = None  # SAFE default
+        results = None  # safe default
         if raw_result:
             results = self.model.postprocess(raw_result, preprocessing_meta)
 
-        poses = []  # SAFE default
+        poses = []  # safe default
         if results:
-            poses, scores = results
+            poses, _scores = results
 
         return poses
 
     def postprocess(self, poses):
         bodies = []
-        for pose in poses:
-            keypoints_xy = pose[:, :2]
-            keypoints_scores = pose[:, 2]
-            score = float(np.mean(keypoints_scores))
 
+        for pose in poses:
+            keypoints_xy = pose[:, :2]  # (17,2)
+            keypoints_scores = pose[:, 2]  # (17,)
+
+            score = float(np.mean(keypoints_scores))
             if score > self.score_thresh:
+                # Depad & rescale keypoints to original image size
                 keypoints_xy_orig = keypoints_xy.copy()
 
-                # Undo resize/pad
                 unpadded_w = self.img_w + self.padding.w
                 unpadded_h = self.img_h + self.padding.h
                 keypoints_xy_orig[:, 0] *= (unpadded_w / self.pd_w)
@@ -161,8 +165,10 @@ class OpenVINOBaseHPE(BaseHPE):
                 if len(visible_kps) == 0:
                     continue
 
-                xmin = int(np.min(visible_kps[:, 0])); xmax = int(np.max(visible_kps[:, 0]))
-                ymin = int(np.min(visible_kps[:, 1])); ymax = int(np.max(visible_kps[:, 1]))
+                xmin = int(np.min(visible_kps[:, 0]))
+                xmax = int(np.max(visible_kps[:, 0]))
+                ymin = int(np.min(visible_kps[:, 1]))
+                ymax = int(np.max(visible_kps[:, 1]))
 
                 body = Body(
                     score=score,
@@ -172,4 +178,5 @@ class OpenVINOBaseHPE(BaseHPE):
                     keypoints_norm=keypoints_xy_orig / np.array([self.img_w, self.img_h], dtype=float)
                 )
                 bodies.append(body)
+
         return bodies
