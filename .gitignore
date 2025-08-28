@@ -49,3 +49,4 @@ models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-p
 models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
 rtsp-ipcam/.DS_Store
 .DS_Store
+.aider*
