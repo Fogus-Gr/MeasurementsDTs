@@ -2,8 +2,15 @@ import torch.nn as nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 from torch.nn.modules.utils import _pair
+import torch
 
-from . import roi_align_cuda
+# Conditional import for CUDA extension
+roi_align_cuda = None
+if torch.cuda.is_available():
+    try:
+        from . import roi_align_cuda
+    except ImportError:
+        print("[WARNING] roi_align_cuda not found. Ensure AlphaPose extensions are built for CUDA.")
 
 
 class RoIAlignFunction(Function):
@@ -21,11 +28,12 @@ class RoIAlignFunction(Function):
         num_rois = rois.size(0)
 
         output = features.new_zeros(num_rois, num_channels, out_h, out_w)
-        if features.is_cuda:
+        if features.is_cuda and roi_align_cuda is not None:
             roi_align_cuda.forward(features, rois, out_h, out_w, spatial_scale,
                                    sample_num, output)
         else:
-            raise NotImplementedError
+            # Fallback to CPU or raise error if no CUDA and no torchvision fallback
+            raise NotImplementedError("RoIAlign is not implemented for CPU without torchvision fallback.")
 
         return output
 
@@ -43,12 +51,15 @@ class RoIAlignFunction(Function):
         out_h = grad_output.size(2)
 
         grad_input = grad_rois = None
-        if ctx.needs_input_grad[0]:
+        if ctx.needs_input_grad[0] and grad_output.is_cuda and roi_align_cuda is not None:
             grad_input = rois.new_zeros(batch_size, num_channels, data_height,
                                         data_width)
             roi_align_cuda.backward(grad_output.contiguous(), rois, out_h,
                                     out_w, spatial_scale, sample_num,
                                     grad_input)
+        elif ctx.needs_input_grad[0] and not grad_output.is_cuda:
+            # CPU fallback for backward pass if no CUDA extension
+            raise NotImplementedError("RoIAlign backward is not implemented for CPU without torchvision fallback.")
 
         return grad_input, grad_rois, None, None, None
 

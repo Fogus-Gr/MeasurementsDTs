@@ -179,6 +179,39 @@ class BaseHPE(ABC):
             print(f"[ERROR] Failed to initialize PyNvCodec: {e}. Falling back to OpenCV for video decoding.")
             self.is_pynvcodec_enabled = False
             self._init_opencv_video_capture(input_src) # Fallback
+    
+    # inside class OpenVINOBaseHPE(BaseHPE)
+    def _init_opencv_video_capture(self, input_src):
+        """Open input (file, camera index, or URL) with OpenCV and record frame size."""
+        import cv2
+
+        # Accept "0" style camera index or a path/URL
+        if isinstance(input_src, str) and input_src.isdigit():
+            src = int(input_src)
+        else:
+            src = input_src  # path like ~/.. gets expanded by the shell
+
+        cap = cv2.VideoCapture(src)
+        if not cap.isOpened():
+            raise RuntimeError(f"Could not open input source: {input_src}")
+
+        # Try to read dimensions from metadata
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 0
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 0
+
+        # If unknown, read one frame to infer size
+        if w <= 0 or h <= 0:
+            ok, frame = cap.read()
+            if ok:
+                h, w = frame.shape[:2]
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # rewind
+            # else leave as None; downstream will handle
+
+        self.img_w = w if w > 0 else None
+        self.img_h = h if h > 0 else None
+        self.cap = cap
+        return cap
+
 
     @abstractmethod
     def load_model(self):

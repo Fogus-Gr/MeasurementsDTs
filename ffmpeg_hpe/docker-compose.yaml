@@ -49,6 +49,14 @@ services:
       - WAIT_HOSTS=h264-streaming-server:8089
       - WAIT_HOSTS_TIMEOUT=30
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32
+      # Add these lines for CPU optimization
+      # - OV_MODE="latency"
+      # - OV_STREAMS="1"
+      # - OV_THREADS="3"
+      # - OMP_NUM_THREADS="3"
+      # - MKL_NUM_THREADS="3"
+      # - OPENBLAS_NUM_THREADS="3"
+      # - PYTHONUNBUFFERED="1"
       # - HPE_INPUT=http://h264-streaming-server:8089/stream.h264
       - OPENCV_FFMPEG_OPEN_TIMEOUT=300000 # Increase timeout for FFMPEG
       - OPENCV_FFMPEG_READ_TIMEOUT=300000  # Increase read timeout for FFMPEG

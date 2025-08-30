@@ -31,9 +31,11 @@ class OpenPose(ImageModel):
 
     def __init__(self, model_adapter, configuration=None, preload=False):
         super().__init__(model_adapter, configuration, preload=False)
-        self.pooled_heatmaps_blob_name = 'pooled_heatmaps'
         self.heatmaps_blob_name = 'heatmaps'
         self.pafs_blob_name = 'pafs'
+        # The use_pooled_heatmaps attribute is set by the base ImageModel class from the configuration
+        if self.use_pooled_heatmaps: # This attribute is now available after super().__init__
+            self.pooled_heatmaps_blob_name = 'pooled_heatmaps'
 
         function = self.model_adapter.model
         paf = function.get_output_op(0)
@@ -57,17 +59,17 @@ class OpenPose(ImageModel):
 
         heatmap.get_output_tensor(0).set_names({self.heatmaps_blob_name})
 
-        # Add keypoints NMS to the network.
-        # Heuristic NMS kernel size adjustment depending on the feature maps upsampling ratio.
-        p = int(np.round(6 / 7 * self.upsample_ratio))
-        k = 2 * p + 1
-        pooled_heatmap = opset8.max_pool(heatmap, kernel_shape=(k, k), dilations=(1, 1), pads_begin=(p, p), pads_end=(p, p),
-                                     strides=(1, 1), name=self.pooled_heatmaps_blob_name)
-        pooled_heatmap.output(0).get_tensor().set_names({self.pooled_heatmaps_blob_name})
-        self.model_adapter.model.add_outputs([pooled_heatmap.output(0)])
+        # The original OpenPose model already has heatmaps and pafs.
+        # The NMS layer for pooled_heatmaps is added dynamically by this wrapper.
+        # This dynamic addition seems to be causing issues with the OpenVINO runtime.
+        # We will remove the dynamic addition of pooled_heatmaps and handle NMS in postprocessing if needed.
 
         self.inputs = self.model_adapter.get_input_layers()
         self.outputs = self.model_adapter.get_output_layers()
+
+        # Ensure heatmaps_blob_name and pafs_blob_name are correctly set to the actual model outputs
+        self.heatmaps_blob_name = 'Mconv7_stage2_L2'
+        self.pafs_blob_name = 'Mconv7_stage2_L1'
 
         self.output_scale = self.inputs[self.image_blob_name].shape[-2] / self.outputs[self.heatmaps_blob_name].shape[-2]
 
@@ -96,6 +98,7 @@ class OpenPose(ImageModel):
             'confidence_threshold': NumericalValue(),
             'upsample_ratio': NumericalValue(default_value=1, value_type=int),
             'size_divisor': NumericalValue(default_value=8, value_type=int),
+            'use_pooled_heatmaps': NumericalValue(value_type=bool, default_value=True),
         })
         return parameters
 
@@ -128,8 +131,13 @@ class OpenPose(ImageModel):
     def postprocess(self, outputs, meta):
         heatmaps = outputs[self.heatmaps_blob_name]
         pafs = outputs[self.pafs_blob_name]
-        pooled_heatmaps = outputs[self.pooled_heatmaps_blob_name]
-        nms_heatmaps = self.heatmap_nms(heatmaps, pooled_heatmaps)
+
+        if self.use_pooled_heatmaps:
+            pooled_heatmaps = outputs[self.pooled_heatmaps_blob_name]
+            nms_heatmaps = self.heatmap_nms(heatmaps, pooled_heatmaps)
+        else:
+            nms_heatmaps = heatmaps # If not using pooled heatmaps, use raw heatmaps for NMS
+
         poses, scores = self.decoder(heatmaps, nms_heatmaps, pafs)
         # Rescale poses to the original image.
         poses[:, :, :2] *= meta['resize_img_scale'] * self.output_scale

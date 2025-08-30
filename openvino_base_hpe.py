@@ -80,50 +80,93 @@ class OpenVINOBaseHPE(BaseHPE):
 
         super().__init__(**kwargs)
 
-    def _configure_core(self, core: ov.Core):
-        # Map to OV performance hints
-        perf_mode = ov.hint.PerformanceMode.THROUGHPUT if self.ov_mode == "throughput" else ov.hint.PerformanceMode.LATENCY
+    def _configure_core(self, core):
+        # 2025.x API: use openvino.properties
+        from openvino import properties as props
+
+        perf = (
+            props.hint.PerformanceMode.THROUGHPUT
+            if self.ov_mode == "throughput"
+            else props.hint.PerformanceMode.LATENCY
+        )
+
         cpu_props = {
-            ov.hint.performance_mode: perf_mode,
-            ov.inference_num_threads: self.ov_threads,
-            ov.hint.enable_cpu_pinning: True,
-            ov.hint.enable_hyper_threading: False,  # helps on small VPS
+            props.hint.performance_mode: perf,
+            props.inference_num_threads: int(self.ov_threads),   # e.g., 3 on 4-vCPU VPS
+            props.hint.enable_cpu_pinning: True,
+            props.hint.enable_hyper_threading: False,
         }
         if self.ov_streams is not None:
-            cpu_props[ov.num_streams] = int(self.ov_streams)
+            cpu_props[props.num_streams] = int(self.ov_streams)
+
         core.set_property("CPU", cpu_props)
+
+        from openvino import properties as props
+        print("[OV] effective:",
+            "mode=", core.get_property("CPU", props.hint.performance_mode),
+            "threads=", core.get_property("CPU", props.inference_num_threads),
+            "streams=", core.get_property("CPU", props.num_streams))
 
     def load_model(self):
         print(f"Loading {self.model_type} model...")
 
         xml_path = self.model_cfg["path"]
 
-        plugin_config = get_user_config(self.device, '', None)
+        # --- plugin config (sanitize legacy keys) ---
+        plugin_config = get_user_config(self.device, '', None) or {}
+        for k in [
+            "PERFORMANCE_HINT", "CPU_THREADS_NUM", "CPU_THROUGHPUT_STREAMS",
+            "INFERENCE_NUM_THREADS", "NUM_STREAMS", "ENABLE_CPU_PINNING",
+            "ENABLE_HYPER_THREADING"
+        ]:
+            plugin_config.pop(k, None)
 
-        # Configure CPU once
-        core = create_core()  # returns ov.Core from model_api
+        # --- configure CPU once (your _configure_core uses openvino.properties) ---
+        core = create_core()  # ov.Core from model_api
         self._configure_core(core)
 
-        # Build adapter; let OV infer layouts unless you need to force them
+        # --- adapter ---
         model_adapter = OpenvinoAdapter(
             core, xml_path,
             device=self.device,
             plugin_config=plugin_config,
             max_num_requests=0,
-            # model_parameters={"input_layouts": {"data": "NCHW"}}
+            # model_parameters={"input_layouts": {"data": "NCHW"}}  # only if you truly need it
         )
+        print(f"DEBUG: Model adapter outputs before ImageModel.create_model: {model_adapter.get_output_layers().keys()}")
 
-        # Default to 1.0 aspect ratio if dimensions aren't known at load time
-        aspect_ratio = (self.img_w / self.img_h) if (self.img_w and self.img_h) else 1.0
+        # compute aspect ratio safely; fallback to 1.0 if unknown
+        w = int(self.img_w or 0)
+        h = int(self.img_h or 0)
+        aspect_ratio = (w / h) if (w > 0 and h > 0) else 1.0
 
-        config = {
-            "target_size": None,
-            "aspect_ratio": aspect_ratio,
-            "confidence_threshold": self.score_thresh,
-            # the 'higherhrnet' and 'ae' specific
-            "padding_mode": "center" if self.model_type == "higherhrnet" else None,
-            "delta": 0.5 if self.model_type == "higherhrnet" else None,
-        }
+        if self.model_type == "openpose":
+            # OPENPOSE (intel/human-pose-estimation-0001) wants a tuple (W,H)
+            # human-pose-estimation-0001: target_size = HEIGHT (int)
+            height_int = int(self.model_cfg["input_size"][1])  # 256
+            config = {
+                "target_size": height_int,                # int HEIGHT
+                "aspect_ratio": float(aspect_ratio),      # width / height of the SOURCE image
+                "confidence_threshold": self.score_thresh,
+                "use_pooled_heatmaps": False,             # 0001 has no 'pooled_heatmaps' output
+                "upsample_ratio": 4,                      # int (your file expects int)
+                # no padding_mode / delta for openpose
+            }
+        else: # AE/HigherHRNet blocks as-is
+            is_ae = (self.model_cfg["architecture"] == "HPE-associative-embedding")
+            size_int = int(self.model_cfg["input_size"][0])  # 288 for 0005
+
+            config = {
+                "target_size": size_int,
+                "aspect_ratio": float(aspect_ratio),          # <-- required, not None
+                "confidence_threshold": self.score_thresh,
+            }
+
+            if is_ae or self.model_type == 'higherhrnet':
+                config["padding_mode"] = "center"
+
+            if self.model_type == "higherhrnet":
+                config["delta"] = 0.5
         architecture = self.model_cfg["architecture"]
         self.model = ImageModel.create_model(architecture, model_adapter, config)
         self.model.log_layers_info()
@@ -140,7 +183,7 @@ class OpenVINOBaseHPE(BaseHPE):
 
         poses = []  # safe default
         if results:
-            poses, _scores = results
+            poses, scores = results
 
         return poses
 

@@ -77,7 +77,10 @@ class SimpleTransform(object):
             self.upper_body_ids = dataset.upper_body_ids
             self.lower_body_ids = dataset.lower_body_ids
         if platform.system() != 'Windows':
-            self.roi_align = RoIAlign(self._input_size, sample_num=-1)
+            # Use torchvision's RoIAlign if on CPU or if CUDA extension is not available
+            use_tv_roi_align = (gpu_device is not None and gpu_device.type == 'cpu') or \
+                               (not torch.cuda.is_available())
+            self.roi_align = RoIAlign(self._input_size, sample_num=-1, use_torchvision=use_tv_roi_align)
             if gpu_device is not None:
                 self.roi_align = self.roi_align.to(gpu_device)
 
@@ -264,7 +267,7 @@ class SimpleTransform(object):
         img[2].add_(-0.480)
         
         if self._loss_type == 'Combined':
-        	return img, [torch.from_numpy(target_mse), torch.from_numpy(target_inter)], [torch.from_numpy(target_weight_mse), torch.from_numpy(target_weight_inter)], torch.Tensor(bbox)
+            return img, [torch.from_numpy(target_mse), torch.from_numpy(target_inter)], [torch.from_numpy(target_weight_mse), torch.from_numpy(target_weight_inter)], torch.Tensor(bbox)
         else:
             return img, torch.from_numpy(target), torch.from_numpy(target_weight), torch.Tensor(bbox)
 

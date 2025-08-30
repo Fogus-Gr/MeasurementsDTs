@@ -1,11 +1,21 @@
 import os
 import sys
+import cv2
+
+cv2.setNumThreads(1)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import argparse
 from movenet_hpe import MoveNetHPE
 from openvino_base_hpe import OpenVINOBaseHPE
-from alphapose_hpe import AlphaPoseHPE
+import logging
+
+class _HideAspectWarn(logging.Filter):
+    def filter(self, rec):
+        msg = rec.getMessage()
+        return "Chosen model aspect ratio doesn't match image aspect ratio" not in msg
+
+logging.getLogger().addFilter(_HideAspectWarn())
 
 def main():
     parser = parse_arguments()
@@ -33,8 +43,8 @@ def parse_arguments():
 def get_hpe_method(args):
     method_map = {
         'movenet': lambda args: MoveNetHPE(device=args.device, detbatch=args.detbatch, **base_args(args)),
-        'alphapose': lambda args: AlphaPoseHPE(device=args.device, detbatch=args.detbatch, **base_args(args)),
-        'openpose': lambda args: OpenVINOBaseHPE(model_type='openpose', device=args.device, detbatch=args.detbatch, **base_args(args)),
+        #'alphapose': lambda args: AlphaPoseHPE(device=args.device, detbatch=args.detbatch, **base_args(args)),
+        'openpose': lambda args: OpenVINOBaseHPE(model_type='openpose', device=args.device, **base_args(args)),
         'hrnet': lambda args: OpenVINOBaseHPE(model_type='higherhrnet', device=args.device, **base_args(args)),
         'ae1': lambda args: OpenVINOBaseHPE(model_type='efficienthrnet1', device=args.device, **base_args(args)),
         'ae2': lambda args: OpenVINOBaseHPE(model_type='efficienthrnet2', device=args.device, **base_args(args)),
