@@ -1,0 +1,52 @@
+FROM debian:bookworm
+
+# Install dependencies
+RUN echo "deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
+  apt-get update && apt-get install -y \
+  git build-essential curl python3 meson ninja-build pkg-config yasm \
+  libx264-dev libmp3lame-dev libfdk-aac-dev libssl-dev libxml2-dev \
+  libass-dev libplacebo-dev liblua5.2-dev libjpeg-dev \
+  libarchive-dev libbluray-dev libdvdnav-dev \
+  libavutil-dev libavcodec-dev libavformat-dev libswresample-dev \
+  libswscale-dev libavfilter-dev libdav1d-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt
+
+# Build FFmpeg 6.1.2
+RUN git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg && \
+    cd ffmpeg && \
+    git checkout n6.1.2 && \
+    ./configure --prefix=/usr/local --enable-gpl --enable-nonfree \
+        --enable-libx264 --enable-libmp3lame --enable-libfdk-aac \
+        --enable-libxml2 --enable-openssl --enable-libdav1d \
+        --disable-debug --enable-shared --disable-static --disable-doc && \
+    make -j$(nproc) && make install
+
+ENV LD_LIBRARY_PATH=/usr/local/lib
+
+RUN apt-get update && apt-get install -y libpostproc-dev
+
+# Build libplacebo from source
+RUN git clone https://code.videolan.org/videolan/libplacebo.git && \
+    cd libplacebo && \
+    git checkout v7.349.0 && \
+    git submodule update --init && \
+    meson setup build && \
+    meson compile -C build && \
+    meson install -C build
+
+
+# Build mpv 0.39.0
+RUN git clone https://github.com/mpv-player/mpv.git && \
+  cd mpv && \
+  git checkout v0.39.0 && \
+  meson setup build && \
+  meson compile -C build && \
+  meson install -C build
+
+# Clean up and prepare for runtime
+RUN apt-get purge -y git build-essential && \
+  apt-get autoremove -y && apt-get clean
+
+ENTRYPOINT ["mpv"]

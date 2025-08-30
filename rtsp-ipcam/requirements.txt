@@ -1,0 +1,10 @@
+# No external dependencies required!
+# This project uses only Python standard library modules:
+# - http.server (for HTTP server)
+# - subprocess (for FFmpeg integration)  
+# - logging (for debug output)
+# - socket, threading, time (standard utilities)
+
+# External requirements:
+# - Python 3.7+ (any recent Python version)
+# - FFmpeg (must be installed and available in PATH)

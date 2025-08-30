@@ -1,0 +1,103 @@
+name: dash-caching
+services:
+  http_server:
+    image: dash-caching:http
+    expose:
+      - "80"
+    environment:
+      - SERVICE_ADDITIONAL_PARAMETERS=-r2 5.0
+    build:
+      dockerfile: HTTP-Server.Dockerfile
+    labels:
+      - "coroot.monitored=true"
+      - "coroot.service.type=streaming"
+      - "coroot.logs.enabled=true"
+
+  http_proxy:
+    image: dash-caching:proxy_fixed_dl
+    expose:
+      - "80"
+    environment:
+      - HTTP_SERVER_DOMAIN=http_server
+      - HTTP_SERVER_PORT=80
+      - SERVICE_ADDITIONAL_PARAMETERS=-al swg -r1 8.3 -r2 3.6 -l 3000 -dl fixed -c random -s 600 -n 131
+    depends_on:
+      - http_server
+    pid: "host"
+    build:
+      dockerfile: HTTP-Proxy.Dockerfile
+    labels:
+      - "coroot.monitored=true"
+      - "coroot.service.type=streaming"
+      - "coroot.logs.enabled=true"
+
+  http_client:
+    image: dash-caching:client
+    expose:
+      - "80"
+    ports:
+      - "80"
+    environment:
+      - HTTP_PROXY_DOMAIN=http_proxy
+      - HTTP_PROXY_PORT=80
+    depends_on:
+      - http_proxy
+    build:
+      dockerfile: HTTP-Client.Dockerfile
+    labels:
+      - "coroot.monitored=true"
+      - "coroot.service.type=streaming"
+      - "coroot.logs.enabled=true"
+
+  perf_monitor:
+    build:
+      context: .
+      dockerfile: perf_monitor/Dockerfile
+    volumes:
+      - ./results:/output:rw
+      - ./pids:/pids:ro
+    environment:
+      - OUTPUT_DIR=/output
+    pid: host
+    cap_add:
+      - SYS_ADMIN
+      - SYS_NICE
+      - IPC_LOCK
+      - SYS_PTRACE  # Add this for process monitoring
+    privileged: true
+    user: root  # Ensure running as root
+
+  trace_container:
+    image: bpftrace-container:latest
+    build:
+      context: ./bpftrace-tracer
+      dockerfile: Dockerfile
+    privileged: true
+    pid: host
+    network_mode: "host"
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
+      - SYS_RESOURCE
+      - NET_ADMIN
+    security_opt:
+      - apparmor:unconfined
+      - seccomp:unconfined
+    environment:
+      - NETIF=eth0  # Use the container's default interface
+    volumes:
+      - /sys/kernel/debug:/sys/kernel/debug  # Required for bpftrace
+      - /lib/modules:/lib/modules:ro  # Required for bpftrace
+      - ./bpftrace-tracer:/opt/tracer  # Ensure ./bpftrace-tracer exists
+      - ./traces:/opt/tracer/output  # Ensure ./traces is cleaned up before starting
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /sys:/sys:ro
+    working_dir: /opt/tracer
+    entrypoint: ["/bin/bash", "-c"]
+    command: ./trace_container_net.sh
+
+  # mpv:
+  # build: ./mpv
+  # entrypoint: >
+  #   mpv --vo=null --ao=pcm --no-terminal
+  #   http://dash-server:32901/manifest.mpd

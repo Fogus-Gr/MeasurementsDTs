@@ -1,0 +1,19 @@
+FROM ubuntu:20.04
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    linux-tools-common \
+    linux-tools-generic \
+    bpftrace \
+    bc \
+    procps \
+    util-linux
+
+# Copy the monitoring script
+COPY monitor_pid_perf.sh /monitor_pid.sh
+
+# Make it executable
+RUN chmod +x /monitor_pid.sh
+
+# Use bash as the entry point
+CMD ["/bin/bash"]

@@ -1,0 +1,51 @@
+services:
+  hpe:
+    image: monitor-hpe:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile_base
+    entrypoint: ["/app/entrypoint.sh"]
+    command: python3 main.py --method movenet --input /videos/${VIDEO_FILE:-ultimatum/hd_00_00.mp4}
+    pid: "host"
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+    volumes:
+      - ./pids:/pids:rw
+      - /home/user/MeasurementsDTs/videos:/videos:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'  # Allow up to 4 cores
+          memory: 4G   # Maximum memory
+        reservations:
+          cpus: '2.0'  # Guarantee at least 2 cores
+          memory: 2G   # Guarantee memory
+
+  monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pid: "host"
+    cap_add:
+      - IPC_LOCK
+      - SYS_ADMIN
+    ulimits:
+      memlock: -1  # Unlimited memory lock
+    volumes:
+      - ./pids:/pids:rw
+      - ./results:/output:rw
+    environment:
+      - TARGET_PID_FILE=/pids/hpe.pid
+      - BPFTRACE_STRLEN=64  # Ensure string length is sufficient
+    command: /monitor_pid.sh
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'  # Limit to 1 core to minimize impact
+          memory: 512M # Modest memory limit
+
+

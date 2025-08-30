@@ -1,0 +1,37 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV SAMPLE_RATE_MS=100
+ENV TARGET_PORT=8089
+ENV NETIF=eth0
+
+# Install required packages
+RUN apt-get update && \
+    apt-get install -y \
+        bpftrace \
+        gawk \
+        tcpdump \
+        iproute2 \
+        procps \
+        net-tools \
+        build-essential \
+        linux-headers-generic && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/tracer
+
+# Create output directory
+RUN mkdir -p /opt/tracer/output && chmod 777 /opt/tracer/output
+VOLUME /opt/tracer/output
+
+# Copy tracer script
+COPY windsurf_tracer.sh /opt/tracer/
+RUN chmod +x /opt/tracer/windsurf_tracer.sh
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD [ -f /opt/tracer/output/trace.csv ] && \
+      [ $(($(date +%s) - $(stat -c %Y /opt/tracer/output/trace.csv))) -lt 60 ] || exit 1
+
+CMD ["./windsurf_tracer.sh"]

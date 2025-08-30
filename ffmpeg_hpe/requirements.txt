@@ -1,0 +1,3 @@
+# Requirements for merged ffmpeg_hpe project
+pandas
+matplotlib

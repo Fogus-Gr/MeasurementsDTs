@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  dcgm-exporter:
+    image: nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.1-ubuntu22.04
+    command: ["-c", "500", "-f", "/etc/dcgm-exporter/dcp-metrics-included.csv"]
+    ports:
+      - "9400:9400"
+    cap_add:
+      - SYS_ADMIN
+    restart: unless-stopped
+    gpus: all
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - dcgm-exporter
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped

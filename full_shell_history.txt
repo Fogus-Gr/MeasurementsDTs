@@ -1,0 +1,1000 @@
+  988  glances 
+  989  source /home/user/MeasurementsDTs/myenv/bin/activate
+  990  cd ffmpeg_hpe/
+  991  ./run_experiment.sh 
+  992  ./run_experiment.sh alphapose
+  993  clear
+  994  source /home/user/MeasurementsDTs/myenv/bin/activate
+  995  cd ffmpeg_hpe/
+  996  ll
+  997  docker system prune
+  998  docker compose build --no-cache h264-streaming-server
+  999  clear
+ 1000  cd ..
+ 1001  git diff main..cuda-dev alphapose_hpe.py
+ 1002  git diff main..cuda-dev /home/user/MeasurementsDTs/models/AlphaPose/alphapose/utils/detector.py
+ 1003  git diff main..cuda-dev models/AlphaPose/alphapose/utils/detector.py
+ 1004  git diff main..cuda-dev--  models/AlphaPose/alphapose/utils/detector.py
+ 1005  git diff main..cuda-dev -- /home/user/MeasurementsDTs/models/AlphaPose/alphapose/utils/detector.py
+ 1006  git diff main..cuda-dev -- /models/AlphaPose/alphapose/utils/detector.py
+ 1007  git diff main..cuda-dev -- models/AlphaPose/alphapose/utils/detector.py
+ 1008  git diff main..cuda-dev models/AlphaPose/alphapose/utils/detector.py
+ 1009  git diff origin/main..cuda-dev models/AlphaPose/alphapose/utils/detector.py
+ 1010  git diff main..cuda-dev -- models/AlphaPose/alphapose/utils/detector.py
+ 1011  clear
+ 1012  cd ffmpeg_hpe/
+ 1013  docker compose build hpe
+ 1014  MP4Box --info videos/rangeOfMotion/hd_00_00.mp4
+ 1015  source myenv/bin/activate
+ 1016  python3 main.py --help
+ 1017  python3 main.py --method alphapose --input http://172.18.0.2:8089/stream.h264 --csv --output_dir results/
+ 1018  history | grep curl
+ 1019  curl http://172.18.0.2:8089/stream.h264 --output video.h264
+ 1020  python3 main.py --method alphapose --input videos/rangeOfMotion/vga_01_01.mp4 --csv --output_dir results/
+ 1021  python3 main.py --method alphapose --input video.mp4 --csv --output_dir results/
+ 1022  python3 main.py --method alphapose --input videos/rangeOfMotion/vga_01_01.mp4 --csv --output_dir results/
+ 1023  python3 main.py --method alphapose --input http://172.18.0.2:8089/stream.h264 --csv --output_dir ./results
+ 1024  curl -I http://172.18.0.2:8089/stream.h264
+ 1025  ffprobe http://172.18.0.2:8089/stream.h264
+ 1026  ffprobe -v error -select_streams v:0 -show_entries stream=pix_fmt -of default=noprint_wrappers=1  http://172.18.0.2:8089/stream.h264
+ 1027  ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1  http://172.18.0.2:8089/stream.h264
+ 1028  ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1 http://172.18.0.2:8089/stream.h264
+ 1029  chmod +x check_stream_compat.sh 
+ 1030  ./check_stream_compat.sh http://172.18.0.2:8089/stream.h264
+ 1031  INFO=$(ffprobe -v error -select_streams v:0 \
+ 1032      -show_entries stream=codec_name,codec_type,width,height,r_frame_rate,pix_fmt \
+ 1033      -of default=noprint_wrappers=1 "$VIDEO_URL")
+ 1034  CODEC=$(echo "$INFO" | grep codec_name | cut -d= -f2)
+ 1035  RESOLUTION=$(echo "$INFO" | awk -F= '/width=/{w=$2} /height=/{print w","$2}')
+ 1036  FPS=$(echo "$INFO" | grep r_frame_rate | cut -d= -f2)
+ 1037  ./check_stream_compat.sh http://172.18.0.2:8089/stream.h264
+ 1038  curl -I http://172.18.0.2:8089/stream.h264
+ 1039  curl -X GET http://172.18.0.2:8089/stream.h264
+ 1040  curl -v http://172.18.0.2:8089/stream.h264
+ 1041  ./check_stream_compat.sh http://172.18.0.2:8089/stream.h264
+ 1042  python3 main.py --method alphapose --input http://172.18.0.2:8089/stream.h264 --csv --output_dir ./results
+ 1043  awk -F, 'NR>1 && $2>0 {count++} END {print count}' 1751713587.2427607_alphapose_stream.h264_Tx.csv
+ 1044  ./check_stream_compat.sh http://172.18.0.2:8089/stream.h264
+ 1045  ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames -of default=nokey=1:noprint_wrappers=1 http://172.18.0.2:8089/stream.h264
+ 1046  ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames -of default=nokey=1:noprint_wrappers=1 http://172.18.0.2:8089/stream.h264
+ 1047  clear
+ 1048  python3 main.py --method alphapose --input http://172.18.0.2:8089/stream.h264 --csv --save_video --output_dir ./results
+ 1049  docker stats
+ 1050  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1051  docker compose -f $COMPOSE_FILE down --remove-orphans
+ 1052  cd ffmpeg_hpe/
+ 1053  docker compose -f $COMPOSE_FILE down --remove-orphans
+ 1054  docker compose build
+ 1055  docker compose build gpu-metrics
+ 1056  docker compose build h264-streaming-server
+ 1057  docker compose build perf_monitor
+ 1058  docker compose build trace_container
+ 1059  docker compose up --wait  && sleep 307 && docker compose down
+ 1060  clear
+ 1061  docker compose down -v --remove-orphans
+ 1062  ./run_experiment.sh 
+ 1063  ./run_experiment.sh alphapose
+ 1064  clear
+ 1065  ./run_experiment.sh alphapose
+ 1066  cd /home/user/MeasurementsDTs/ffmpeg_hpe/results_alphapose_AMD_EPYC_7551P_32-Core_Processor_20250706_145259
+ 1067  cat perf/performance_data.csv | wc -l
+ 1068  grep -i "http" logs/hpe_startup_full.log | wc -l
+ 1069  head -n 1 traces/trace.csv && tail -n 1 traces/trace.csv
+ 1070  clear
+ 1071  python /home/user/.vscode-server/extensions/ms-python.python-2025.8.0-linux-x64/python_files/printEnvVariablesToFile.py /home/user/.vscode-server/extensions/ms-python.python-2025.8.0-linux-x64/python_files/deactivate/bash/envVars.txt
+ 1072  docker stats
+ 1073  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1074  python3 main.py --help
+ 1075  btop
+ 1076  history | grep curl
+ 1077  docker stats
+ 1078  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1079  cd ffmpeg_hpe/
+ 1080  mkdir -p csv
+ 1081  chmod 777 csv   # (optional, for broad write access; adjust as needed)
+ 1082  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1083  cd ffmpeg_hpe/
+ 1084  docker compose build trace_container
+ 1085  docker compose build --no-cache trace_container
+ 1086  clear
+ 1087  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1088  python3 main.py --method alphapose --input http://172.18.0.2:8089/stream.h264 --csv --output_dir output/ --device GPU
+ 1089  history | grep find
+ 1090  ls -lh output/
+ 1091  ls -lh ./csv
+ 1092  cd ffmpeg_hpe/
+ 1093  ls -lh ./csv
+ 1094  ls -ld ./csv
+ 1095  clear
+ 1096  ls -ld /home/user/MeasurementsDTs/ffmpeg_hpe/csv
+ 1097  clear
+ 1098  ls -lh /home/user/MeasurementsDTs/ffmpeg_hpe/csv/testfile.txt
+ 1099  watch nvidia-smi 
+ 1100  htop
+ 1101  btop
+ 1102  glances 
+ 1103  df -h
+ 1104  docker system prune
+ 1105  glances 
+ 1106  df -h
+ 1107  btop
+ 1108  glances 
+ 1109  lazydocker
+ 1110  df -h
+ 1111  docker system prune
+ 1112  lazydocker
+ 1113  cd ffmpeg_hpe/
+ 1114  ./run_experiment.sh alphapose
+ 1115  find . -name '1751886242.286289_alphapose_stream.h264_Tx.csv'
+ 1116  cd ..
+ 1117  find . -name '*Tx.csv'
+ 1118  ./run_experiment.sh alphapose
+ 1119  cd ffmpeg_hpe/
+ 1120  ./run_experiment.sh alphapose
+ 1121  find ./results
+ 1122  ./run_experiment.sh alphapose
+ 1123  sudo ls -lh ./results
+ 1124  sudo chown -R $(whoami):$(whoami) ./results
+ 1125  find ./results
+ 1126  cd ..
+ 1127  find ./results
+ 1128  cd  ffmpeg_hpe/
+ 1129  ./run_experiment.sh alphapose
+ 1130  docker compose build hpe
+ 1131  ./run_experiment.sh alphapose
+ 1132  mkdir -p csv results traces
+ 1133  docker compose build --no-cache trace_container
+ 1134  ./run_experiment.sh alphapose
+ 1135  docker compose build --no-cache trace_container
+ 1136  ./run_experiment.sh alphapose
+ 1137  ls -lh results_alphapose_AMD_EPYC_7551P_32-Core_Processor_20250707_171358/
+ 1138  ./run_experiment.sh alphapose
+ 1139  ls -lh /home/user/MeasurementsDTs/ffmpeg_hpe/csv
+ 1140  sudo ls -lh /home/user/MeasurementsDTs/ffmpeg_hpe/csv
+ 1141  chmod 777 /home/user/MeasurementsDTs/ffmpeg_hpe/csv
+ 1142  ls -ld /home/user/MeasurementsDTs/ffmpeg_hpe/csv
+ 1143  mkdir -p /home/user/MeasurementsDTs/ffmpeg_hpe/csv
+ 1144  chmod 777 /home/user/MeasurementsDTs/ffmpeg_hpe/csv
+ 1145  ls -lh /home/user/MeasurementsDTs/ffmpeg_hpe/csv
+ 1146  sudo ls -lh /home/user/MeasurementsDTs/ffmpeg_hpe/csv
+ 1147  pwd
+ 1148  ls -lh ./csv
+ 1149  docker compose config | grep csv
+ 1150  ./run_experiment.sh alphapose
+ 1151  cd ffmpeg_hpe/
+ 1152  docker system prune
+ 1153  df -h
+ 1154  python /home/user/.vscode-server/extensions/ms-python.python-2025.8.0-linux-x64/python_files/printEnvVariablesToFile.py /home/user/.vscode-server/extensions/ms-python.python-2025.8.0-linux-x64/python_files/deactivate/bash/envVars.txt
+ 1155  sudo reboot
+ 1156  cd ffmpeg_hpe/
+ 1157  ./run_experiment.sh alphapose
+ 1158  docker compose build --no-cache trace_container
+ 1159  ./run_experiment.sh alphapose
+ 1160  awk -F, 'NR>1 {sum += $2} END {print sum}' /home/user/MeasurementsDTs/ffmpeg_hpe/results_alphapose_AMD_EPYC_7551P_32-Core_Processor_20250707_202646/traces/trace.csv
+ 1161  awk -F, 'NR>1 {sum += $2} END {print sum/1024/1024 " MB"}' /home/user/MeasurementsDTs/ffmpeg_hpe/results_alphapose_AMD_EPYC_7551P_32-Core_Processor_20250707_202646/traces/trace.csv
+ 1162  docker compose build --no-cache trace_container
+ 1163  ./run_experiment.sh alphapose
+ 1164  grep 'length' /home/user/MeasurementsDTs/hpe_bridge_tcpdump.log | awk '{for(i=1;i<=NF;i++) if($i=="length") sum+=$(i+1);} END{print sum+0}'
+ 1165  grep 'length' /home/user/MeasurementsDTs/ffmpeg_hpe/traces/tcpdump_8089.log | awk '{for(i=1;i<=NF;i++) if($i=="length") sum+=$(i+1);} END{print sum+0}'
+ 1166  exit
+ 1167  ip link
+ 1168  sudo tcpdump -i  br-7b7a7536a274 tcp port 8089 -nn -tt > hpe_bridge_tcpdump.log 2>&1
+ 1169  exit
+ 1170  python /home/user/.vscode-server/extensions/ms-python.python-2025.8.0-linux-x64/python_files/printEnvVariablesToFile.py /home/user/.vscode-server/extensions/ms-python.python-2025.8.0-linux-x64/python_files/deactivate/bash/envVars.txt
+ 1171  watch nvidia-smi 
+ 1172  cd ffmpeg_hpe/
+ 1173  df -h
+ 1174  cd MeasurementsDTs/ffmpeg_hpe/
+ 1175  docker compose down -v -remove-orphans
+ 1176  docker compose down -v --remove-orphans
+ 1177  ll
+ 1178  ls -ltrh
+ 1179  rm -rf results_alphapose_AMD_EPYC_7551P_32-Core_Processor_20250707_205443
+ 1180  exit
+ 1181  docker ps
+ 1182  cd MeasurementsDTs/ffmpeg_hpe/
+ 1183  ll
+ 1184  docker compose down -v
+ 1185  docker compose down -v -remove-orphans
+ 1186  docker compose down -help
+ 1187  docker compose down --help
+ 1188  docker compose down -v --remove-orphans
+ 1189  docker compose
+ 1190  ls
+ 1191  docker compose ls
+ 1192  docker compose config --help
+ 1193  docker compose config
+ 1194  docker stats
+ 1195  exit
+ 1196  watch nvidia-smi
+ 1197  grep 'length' /home/user/MeasurementsDTs/ffmpeg_hpe/traces/tcpdump_8089.log | awk '{for(i=1;i<=NF;i++) if($i=="length") sum+=$(i+1);} END{print sum+0}'
+ 1198  ll /home/user/MeasurementsDTs/ffmpeg_hpe/traces/tcpdump_8089.log
+ 1199  head /home/user/MeasurementsDTs/ffmpeg_hpe/traces/tcpdump_8089.log
+ 1200  cd  /home/user/MeasurementsDTs/ffmpeg_hpe/traces/tcpdump_8089.log
+ 1201  cd  /home/user/MeasurementsDTs/ffmpeg_hpe/
+ 1202  user@816dc002-4023-4db5-bf2f-55a9203bf804:~/MeasurementsDTs/ffmpeg_hpe/traces$ grep "172.18.0.2.8089 > 172.18.0.3.56202" tcpdump_8089.log | awk -F'length ' '{if (NF>1) sum 
+ 1203  grep "172.18.0.2.8089 > 172.18.0.3.56202" tcpdump_8089.log | awk -F'length ' '{if (NF>1) sum
+ 1204  grep "172.18.0.2.8089 > 172.18.0.3.56202" tcpdump_8089.log |   awk -F'length ' '{if (NF>1) sum += $2} END {print "Total bytes:", sum, "Total MB:", sum/1024/1024}'
+ 1205  grep "172.18.0.2.8089 > 172.18.0.3.56202" traces/tcpdump_8089.log |   awk -F'length ' '{if (NF>1) sum += $2} END {print "Total bytes:", sum, "Total MB:", sum/1024/1024}'
+ 1206  watch nvidia-smi
+ 1207  cd MeasurementsDTs/ffmpeg_hpe/
+ 1208  grep "172.18.0.2.8089 > 172.18.0.3.56202" traces/tcpdump_8089.log |   awk -F'length ' '{if (NF>1) sum += $2} END {print "Total bytes:", sum, "Total MB:", sum/1024/1024}'
+ 1209  docker stats
+ 1210  date -r 1751986366.5,623
+ 1211  date -r 1751986366.5
+ 1212  date -r 1751986366
+ 1213  grep "172.18.0.2.8089 > 172.18.0.3.37210" traces/tcpdump_8089.log |   awk -F'length ' '{if (NF>1) sum += $2} END {print "Total bytes:", sum, "Total MB:", sum/1024/1024}'
+ 1214  grep "172.18.0.2.8089 > 172.18.0.3.8089" traces/tcpdump_8089.log |   awk -F'length ' '{if (NF>1) sum += $2} END {print "Total bytes:", sum, "Total MB:", sum/1024/1024}'
+ 1215  grep "172.18.0.2.8089 > 172.18.0.3.37210" traces/tcpdump_8089.log |   awk -F'length ' '{if (NF>1) sum += $2} END {print "Total bytes:", sum, "Total MB:", sum/1024/1024}'
+ 1216  grep 'length' /home/user/MeasurementsDTs/ffmpeg_hpe/traces/tcpdump_8089.log | awk '{for(i=1;i<=NF;i++) if($i=="length") sum+=$(i+1);} END{print sum+0}'
+ 1217  grep '172.18.0.2.8089 > 172.18.0.3.37210' traces/tcpdump_8089.log | awk '{for(i=1;i<=NF;i++) if($i=="length") print $(i+1)}' | awk '{sum+=$1} END {print sum}'
+ 1218  grep 'length' /home/user/MeasurementsDTs/ffmpeg_hpe/traces/tcpdump_8089.log | awk '{for(i=1;i<=NF;i++) if($i=="length") sum+=$(i+1);} END{print sum+0}'
+ 1219  ip link
+ 1220  history | grep "hpe_bridge_tcpdump.log"
+ 1221  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1222  cd ffmpeg_hpe/
+ 1223  docker compose build --no-cache trace_container
+ 1224  ./run_experiment.sh alphapose
+ 1225  clear
+ 1226  cd MeasurementsDTs/ffmpeg_hpe/
+ 1227  cd ffmpeg_hpe/
+ 1228  clear
+ 1229  ./run_experiment.sh alphapose
+ 1230  clear
+ 1231  cd /home/user/MeasurementsDTs/ffmpeg_hpe/traces
+ 1232  clear
+ 1233  grep "172.18.0.2.8089 > 172.18.0.3.56202" tcpdump_8089.log | \  awk -F'length ' '{if (NF>1) sum += $2} END {print "Total bytes:", sum, "Total MB:", sum/1024/1024}'
+ 1234  grep "172.18.0.2.8089 > 172.18.0.3.56202" tcpdump_8089.log | awk -F'length ' '{if (NF>1) sum += $2} END {print "Total bytes:", sum, "Total MB:", sum/1024/1024}'
+ 1235  tcpdump -r tcpdump_8089.log 'tcp[tcpflags] & tcp-rst != 0'
+ 1236  sudo tcpdump -r tcpdump_8089.log 'tcp[tcpflags] & tcp-rst != 0'
+ 1237  grep 'Flags \[R\]' tcpdump_8089.log
+ 1238  grep "172.18.0.2.8089 > 172.18.0.3.56202" tcpdump_8089.log | awk '{for(i=1;i<=NF;i++) if($i=="length") sum+=$(i+1);} END{print sum, "bytes,", sum/1024/1024, "MB"}'
+ 1239  cd ..
+ 1240  docker compose build --no-cache trace_container
+ 1241  /usr/bin/python3 /home/user/.vscode-server/extensions/ms-python.python-2025.8.0-linux-x64/python_files/printEnvVariablesToFile.py /home/user/.vscode-server/extensions/ms-python.python-2025.8.0-linux-x64/python_files/deactivate/bash/envVars.txt
+ 1242  watch nvidia-smi
+ 1243  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1244  cd ffmpeg_hpe/
+ 1245  docker compose build --no-cache trace_container
+ 1246  cd ffmpeg_hpe/
+ 1247  docker compose build --no-cache trace_container
+ 1248  ./run_experiment.sh alphapose
+ 1249  watch nvidia-smi
+ 1250  date
+ 1251  lazydocker
+ 1252  watch nvidia-smi
+ 1253  cd /home/user/MeasurementsDTs/ffmpeg_hpe/traces
+ 1254  sudo tcpdump -r tcpdump_8089.log 'tcp[tcpflags] & tcp-rst != 0'
+ 1255  grep "172.18.0.2.8089 > 172.18.0.3.56202" tcpdump_8089.log | awk -F'length ' '{if (NF>1) sum += $2} EN39432int "Total bytes:", sum, "Total MB:", sum/1024/1024}'
+ 1256  grep 'length' /home/user/MeasurementsDTs/ffmpeg_hpe/traces/tcpdump_8089.log | awk '{for(i=1;i<=NF;i++) if($i=="length") sum+=$(i+1);} END{print sum+0}'
+ 1257  head -n 10 tcpdump_8089.log
+ 1258  grep '172.18.0.2.8089 > 172.18.0.3.39432' tcpdump_8089.log |  awk '{for(i=1; i<=NF; i++) if($i == "length") {print $(i+1); break}}' |  awk '{sum += $1} END {print sum}'
+ 1259  grep '172.18.0.2.8089 > 172.18.0.3.39432' tcpdump_8089.log |  awk '{for(i=1; i<=NF; i++) if($i == "length") {p*$(i+1); break}}' |  awk '{sum += $1} END {print sum}'
+ 1260  grep '172.18.0.2.8089 > 172.18.0.3.39432' tcpdump_8089.log |  awk '{for(i=1; i<=NF; i++) if($i == "length"53778$(i+1); break}}' |  awk '{sum += $1} END {print sum}'
+ 1261  grep '172.18.0.2.8089 > 172.18.0.3.53778' tcpdump_8089.log | > awk '{for(i=1; i<=NF; i++) if($i == "length") {print $(i+1); break}}' | > awk '{sum += $1} END {print sum}'
+ 1262  clear
+ 1263  grep '172.18.0.2.8089 > 172.18.0.3.53778' tcpdump_8089.log | > awk '{for(i=1; i<=NF; i++) if($i == "length") {print $(i+1); break}}' | > awk '{sum += $1} END {print sum}'
+ 1264  sudo grep '172.18.0.2.8089 > 172.18.0.3.53778' tcpdump_8089.log | > awk '{for(i=1; i<=NF; i++) if($i == "length") {print $(i+1); break}}' | > awk '{sum += $1} END {print sum}'
+ 1265  lear
+ 1266  clear
+ 1267  grep 'length' /home/user/MeasurementsDTs/ffmpeg_hpe/traces/tcpdump_8089.log | awk '{for(i=1;i<=NF;i++) if($i=="length") sum+=$(i+1);} END{print sum+0}'
+ 1268  lazydocker 
+ 1269  docker compose build --no-cache trace_container
+ 1270  cd ffmpeg_hpe/
+ 1271  docker compose build --no-cache trace_container
+ 1272  ./run_experiment.sh alphapose
+ 1273  clear
+ 1274  docker compose build --no-cache --no-cache h264-streaming-server
+ 1275  ./run_experiment.sh alphapose
+ 1276  docker compose build --no-cache --no-cache h264-streaming-server
+ 1277  ./run_experiment.sh alphapose
+ 1278  docker compose build --no-cache trace_container
+ 1279  ./run_experiment.sh alphapose
+ 1280  docker compose build --no-cache trace_container
+ 1281  ./run_experiment.sh alphapose
+ 1282  docker compose build --no-cache trace_container
+ 1283  ./run_experiment.sh alphapose
+ 1284  docker compose build --no-cache trace_container
+ 1285  ./run_experiment.sh alphapose
+ 1286  docker compose build --no-cache trace_container
+ 1287  ./run_experiment.sh alphapose
+ 1288  docker compose build --no-cache trace_container
+ 1289  ./run_experiment.sh alphapose
+ 1290  docker compose build --no-cache trace_container
+ 1291  ./run_experiment.sh alphapose
+ 1292  docker compose build --no-cache trace_container
+ 1293  ./run_experiment.sh alphapose
+ 1294  docker compose build --no-cache trace_container
+ 1295  ./run_experiment.sh alphapose
+ 1296  docker compose build --no-cache trace_container
+ 1297  ./run_experiment.sh alphapose
+ 1298  docker compose build --no-cache trace_container
+ 1299  ./run_experiment.sh alphapose
+ 1300  docker compose build --no-cache trace_container
+ 1301  ./run_experiment.sh alphapose
+ 1302  docker compose build --no-cache trace_container
+ 1303  ./run_experiment.sh alphapose
+ 1304  docker compose build --no-cache trace_container
+ 1305  ./run_experiment.sh alphapose
+ 1306  /bin/python3 /home/user/.vscode-server/extensions/ms-python.python-2025.8.1-linux-x64/python_files/printEnvVariablesToFile.py /home/user/.vscode-server/extensions/ms-python.python-2025.8.1-linux-x64/python_files/deactivate/bash/envVars.txt
+ 1307  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1308  ls videos/
+ 1309  clear
+ 1310  cd ffmpeg_hpe/traces/
+ 1311  awk -F, 'NR>1 {sum += $2} END {print sum/1024/1024 " MB"}' trace.csv 
+ 1312  clear
+ 1313  awk -F, 'NR>1 {sum += $2} END {print sum/1024/1024 " MB"}' trace.csv 
+ 1314  clear
+ 1315  cd ..
+ 1316  ll
+ 1317  cd traces/
+ 1318  awk -F, 'NR>1 {sum += $2} END {print sum/1024/1024 " MB"}' trace.csv 
+ 1319  df -h
+ 1320  docker system prune 
+ 1321  cd MeasurementsDTs/ffmpeg_hpe/
+ 1322  df -h
+ 1323  docker image ls
+ 1324  docker rmi 5a6abb117cbb f7cd26c7c8d7
+ 1325  docker stats
+ 1326  watch nvidia-smi
+ 1327  docker stats
+ 1328  watch nvidia-smi
+ 1329  curl -v http://h264-streaming-server:8089/stream.h264
+ 1330  docker compose hpe port
+ 1331  docker compose port
+ 1332  docker compose port hpe
+ 1333  cd MeasurementsDTs/ffmpeg_hpe/
+ 1334  docker compose port hpe
+ 1335  docker compose port --help
+ 1336  docker compose port --dry-run hpe 8089
+ 1337  docker compose port --dry-run h264-streaming-server 8089
+ 1338  docker compose port h264-streaming-server 
+ 1339  docker compose port h264-streaming-server 8089
+ 1340  docker compose inspect h264-streaming-server
+ 1341  docker compose top h264-streaming-server
+ 1342  docker ps
+ 1343  docker inspect 8f289061906c
+ 1344  df -h
+ 1345  htop
+ 1346  glances 
+ 1347  ss -ntp
+ 1348  ss -ntp | awk '/:34576/ {split($4, a, ":"); print a[length(a)]}' | head -1
+ 1349  ss -ntp | awk '/:59238/ {split($4, a, ":"); print a[length(a)]}' | head -1
+ 1350  ss -ntp | awk '/:37181/ {split($4, a, ":"); print a[length(a)]}' | head -1
+ 1351  ss -ntp | awk '/:59238/ {split($4, a, ":"); print a[length(a)]}' | head -1
+ 1352  ss -ntp | awk '/:37181/ {split($4, a, ":"); print a[length(a)]}' | head -1
+ 1353  ss -ntp | awk -v streamer_port="$STREAMER_PORT" '
+ 1354      $5 ~ ":"streamer_port"$" {
+ 1355          split($4, a, ":");
+ 1356          print a[length(a)];
+ 1357          exit;
+ 1358      }' | head -1
+ 1359  cd ffmpeg_hpe/
+ 1360  docker compose build --no-cache bcc-tracer
+ 1361  ./run_experiment_bcc.sh alphapose
+ 1362  docker compose build --no-cache bcc-tracer
+ 1363  ./run_experiment_bcc.sh alphapose
+ 1364  docker compose build --no-cache bcc-tracer
+ 1365  ./run_experiment_bcc.sh alphapose
+ 1366  docker compose build --no-cache bcc-tracer
+ 1367  ./run_experiment_bcc.sh alphapose
+ 1368  docker compose build --no-cache bcc-tracer
+ 1369  ./run_experiment_bcc.sh alphapose
+ 1370  docker compose build hpe
+ 1371  clear
+ 1372  docker compose down -v --remove-orphans
+ 1373  ./run_experiment_bcc.sh alphapose
+ 1374  docker compose down -v --remove-orphans
+ 1375  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1376  docker compose build bcc-tracer
+ 1377  ./run_experiment_bcc.sh alphapose
+ 1378  docker compose build bcc-tracer
+ 1379  ./run_experiment_bcc.sh alphapose
+ 1380  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1381  docker compose build bcc-tracer
+ 1382  ./run_experiment_bcc.sh alphapose
+ 1383  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1384  docker compose build bcc-tracer
+ 1385  ./run_experiment_bcc.sh alphapose
+ 1386  docker compose build bcc-tracer
+ 1387  glances 
+ 1388  uname -r
+ 1389  ls /sys/fs/bpf/
+ 1390  sudo ls /sys/fs/bpf/
+ 1391  grep BPF /boot/config-$(uname -r)
+ 1392  grep -E "CONFIG_BPF=|CONFIG_BPF_SYSCALL=" /boot/config-$(uname -r)
+ 1393  CONFIG_BPF=y
+ 1394  CONFIG_BPF_SYSCALL=y
+ 1395  dmesg | grep -i bpf
+ 1396  grep -E "CONFIG_BPF=|CONFIG_BPF_SYSCALL=|CONFIG_NET_CLS_BPF=|CONFIG_NET_ACT_BPF=" /boot/config-$(uname -r)
+ 1397  dmesg | grep -i bpf
+ 1398  ./run_experiment_bcc.sh alphapose
+ 1399  cd ffmpeg_hpe/
+ 1400  ./run_experiment_bcc.sh alphapose
+ 1401  clear
+ 1402  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1403  docker compose build bcc-tracer
+ 1404  ./run_experiment_bcc.sh alphapose
+ 1405  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1406  docker compose build bcc-tracer
+ 1407  ./run_experiment_bcc.sh alphapose
+ 1408  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1409  docker compose build bcc-tracer
+ 1410  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1411  docker compose build bcc-tracer
+ 1412  ./run_experiment_bcc.sh alphapose
+ 1413  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1414  docker compose build bcc-tracer
+ 1415  ./run_experiment_bcc.sh alphapose
+ 1416  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1417  docker compose build bcc-tracer
+ 1418  ./run_experiment_bcc.sh alphapose
+ 1419  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1420  docker compose build bcc-tracer
+ 1421  ./run_experiment_bcc.sh alphapose
+ 1422  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1423  docker compose build --no-cache bcc-tracer
+ 1424  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1425  echo 1 > /proc/sys/kernel/unprivileged_bpf_disabled
+ 1426  sudo echo 1 > /proc/sys/kernel/unprivileged_bpf_disabled
+ 1427  sudo nano /proc/sys/kernel/unprivileged_bpf_disabled
+ 1428  ./run_experiment_bcc.sh alphapose
+ 1429  cd ffmpeg_hpe/
+ 1430  ./run_experiment_bcc.sh alphapose
+ 1431  docker compose build bcc-tracer
+ 1432  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1433  ./run_experiment_bcc.sh alphapose
+ 1434  uname -r
+ 1435  uname -a
+ 1436  lsb_release 
+ 1437  lsb_release -a
+ 1438  dmesg | grep -i bpf
+ 1439  grep -E "CONFIG_BPF=|CONFIG_BPF_SYSCALL=|CONFIG_NET_CLS_BPF=|CONFIG_NET_ACT_BPF=" /boot/config-$(uname -r)
+ 1440  curl -sSL https://antuin-cli-url/install.sh | bash 
+ 1441  bash <(curl --proto '=https' --tlsv1.2 -sSf https://setup.atuin.sh)
+ 1442  atuin register -u <USERNAME> -e <EMAIL>
+ 1443  atuin import auto
+ 1444  nvim 
+ 1445  echo 'eval "$(atuin init bash)"' >> ~/.bashrc
+ 1446  source  ~/.bash
+ 1447  source  ~/.bashrc 
+ 1448  atuin sync
+ 1449  nvim ~/.bashrc 
+ 1450  source  ~/.bashrc 
+ 1451  exit
+ 1452  3. The extracted source will be in linux-source-5.4.0.
+ 1453  If you specifically need the exact build config or patches for `-216-generic`, you can also check config-5.4.0-216-generic and linux-headers-5.4.0-216-generic, but the source tarball is always generic for the series.
+ 1454  If you need a mainline or vanilla kernel source, you can download it from:  
+ 1455  https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.4.0.tar.xz
+ 1456  wget https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.4.0.tar.xz
+ 1457  wget https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.4.1.tar.gz
+ 1458   tar -xzf linux-5.4.1.tar.gz                                                                                                                                             
+ 1459  ll
+ 1460  ls
+ 1461  cd MeasurementsDTs/
+ 1462  ll
+ 1463  ls
+ 1464  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1465  cd
+ 1466  sudo mkdir -p /usr/src/linux-headers-$(uname -r)/include/linux
+ 1467  sudo cp /linux-5.4.1/tools/testing/selftests/bpf/bpf_helpers.h /usr/src/linux-headers-$(uname -r)/include/linux/
+ 1468  sudo cp /home/user/linux-5.4.1/tools/testing/selftests/bpf/bpf_helpers.h /usr/src/linux-headers-$(uname -r)/include/linux/
+ 1469  clear
+ 1470  cd ffmpeg_hpe/
+ 1471  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1472  docker compose build bcc-tracer
+ 1473  docker compose build --no-cache bcc-tracer
+ 1474  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1475  ./run_experiment_bcc.sh alphapose
+ 1476  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1477  docker compose build --no-cache bcc-tracer
+ 1478  ./run_experiment_bcc.sh alphapose
+ 1479  docker compose build bcc-tracer
+ 1480  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1481  ./run_experiment_bcc.sh alphapose
+ 1482  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1483  docker compose build bcc-tracer
+ 1484  ./run_experiment_bcc.sh alphapose
+ 1485  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1486  ./run_experiment_bcc.sh alphapose
+ 1487  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1488  docker compose build bcc-tracer
+ 1489  ./run_experiment_bcc.sh alphapose
+ 1490  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1491  docker compose build bcc-tracer
+ 1492  ./run_experiment_bcc.sh alphapose
+ 1493  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1494  docker compose build bcc-tracer
+ 1495  ./run_experiment_bcc.sh alphapose
+ 1496  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1497  docker compose build bcc-tracer
+ 1498  ./run_experiment_bcc.sh alphapose
+ 1499  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1500  docker compose build bcc-tracer
+ 1501  ./run_experiment_bcc.sh alphapose
+ 1502  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1503  docker compose build bcc-tracer
+ 1504  ./run_experiment_bcc.sh alphapose
+ 1505  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1506  docker compose build bcc-tracer
+ 1507  ./run_experiment_bcc.sh alphapose
+ 1508  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1509  docker compose build bcc-tracer
+ 1510  ./run_experiment_bcc.sh alphapose
+ 1511  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1512  docker compose build bcc-tracer
+ 1513  ./run_experiment_bcc.sh alphapose
+ 1514  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1515  docker compose build bcc-tracer
+ 1516  ./run_experiment_bcc.sh alphapose
+ 1517  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1518  lazydocker 
+ 1519  tail -f /sys/kernel/debug/tracing/trace_pipe
+ 1520  sudo tail -f /sys/kernel/debug/tracing/trace_pipe
+ 1521  mount | grep debugfs
+ 1522  sudo tail -f /sys/kernel/debug/tracing/trace_pipe
+ 1523  docker stats
+ 1524  docker stats
+ 1525  watch nvidia-smi
+ 1526  awk -F, 'NR>1 {sum+=$2} END {print sum}' /home/user/MeasurementsDTs/ffmpeg_hpe/results_alphapose_AMD_EPYC_7551P_32-Core_Processor_20250711_102448/traces/bcc/video_rx.csv
+ 1527  awk -F, 'NR>1 {sum+=$2} END {print sum}' /home/user/MeasurementsDTs/ffmpeg_hpe/results_alphapose_AMD_EPYC_7551P_32-Core_Processor_20250711_101308/traces/bcc/video_rx.csv
+ 1528  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1529  cd ffmpeg_hpe/
+ 1530  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1531  ./run_experiment_bcc.sh alphapose
+ 1532  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1533  awk -F, 'NR>1 {sum+=$2} END {print sum}' /home/user/MeasurementsDTs/ffmpeg_hpe/results_alphapose_AMD_EPYC_7551P_32-Core_Processor_20250711_142932/traces/bcc/video_rx.csv
+ 1534  python3 plot_rx_bytes.py
+ 1535  python3 plot_rx_bytes_trimmed_reset.py 
+ 1536  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1537  ./run_experiment_bcc.sh alphapose
+ 1538  awk -F, 'NR>1 {sum+=$2} END {print sum}' /home/user/MeasurementsDTs/ffmpeg_hpe/results_alphapose_AMD_EPYC_7551P_32-Core_Processor_20250711_154102/traces/bcc/video_rx.csv 
+ 1539  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1540  ./run_experiment_bcc.sh alphapose
+ 1541  awk -F, 'NR>1 {sum+=$2} END {print sum}' /home/user/MeasurementsDTs/ffmpeg_hpe/results_alphapose_AMD_EPYC_7551P_32-Core_Processor_20250711_160132/traces/bcc/video_rx.csv 
+ 1542  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1543  docker system prune
+ 1544  df -h
+ 1545  docker info | grep -i nvidia
+ 1546  nvidia-container-toolkit --version
+ 1547  docker info | grep -i swap
+ 1548  sudo nano /etc/default/grub
+ 1549  sudo update-grub
+ 1550  docker info | grep -i swap
+ 1551  exit
+ 1552  cd ffmpeg_hpe/
+ 1553  ./run_experiment_bcc.sh movenet 
+ 1554  ./run_experiment_bcc.sh openpose 
+ 1555  ./run_experiment_bcc.sh ae1
+ 1556  source ../myenv/bin/activate
+ 1557  pip show openvino
+ 1558  nvim ~/.bashrc
+ 1559  df -h
+ 1560  docker stats
+ 1561  sudo reboot
+ 1562  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1563  wget "https://drive.google.com/uc?export=download&id=1ZSdsqgD4zUO4gyHMYBfxq3m4UMyQ187j" -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
+ 1564  gdown 1ZSdsqgD4zUO4gyHMYBfxq3m4UMyQ187j -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
+ 1565  mkdir -p models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32
+ 1566  gdown 1ZSdsqgD4zUO4gyHMYBfxq3m4UMyQ187j -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
+ 1567  gdown 1lEUFqQnWHVymQoZvaXuDFcnOyEEKsexP -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
+ 1568  mkdir -p models/OpenVINO/pretrained_models/public/human-pose-
+ 1569  mkdir -p models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32
+ 1570  gdown 1lEUFqQnWHVymQoZvaXuDFcnOyEEKsexP -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
+ 1571  gdown 1fko47eVczJZQb9wWA2X7eQ0TuF4PDXzs -O models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.bin
+ 1572  1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.bin
+ 1573  gdown 1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.bin
+ 1574  docker stats
+ 1575  docker info | grep -i swap
+ 1576  df -h
+ 1577  docker system prune
+ 1578  df -h
+ 1579  docker stats
+ 1580  sudo cat  /etc/default/grub
+ 1581  docker info | grep -i swap
+ 1582  docker info
+ 1583  clear
+ 1584  python3 main.py --method alphapose --input http://172.18.0.2:8089/stream.h264 --csv --output_dir output/ --device GPU
+ 1585  source ../myenv/bin/activate
+ 1586  python3 main.py --method openpose --input http://172.18.0.2:8089/stream.h264 --csv --output_dir output/ --device GPU
+ 1587  cd ..
+ 1588  python3 main.py --method openpose --input http://172.18.0.2:8089/stream.h264 --csv --output_dir output/ --device GPU
+ 1589  docker stats
+ 1590  glances 
+ 1591  watch nvidia-smi
+ 1592  source ../myenv/bin/activate
+ 1593  cd ffmpeg_hpe/
+ 1594  source ../myenv/bin/activate
+ 1595  docker info | grep -i swap
+ 1596  ./run_experiment_bcc.sh ae1
+ 1597  docker compose build hpe
+ 1598  ./run_experiment_bcc.sh openpose
+ 1599  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1600  docker compose build --no-cache hpe
+ 1601  docker compose build hpe
+ 1602  docker compose build --no-cache hpe
+ 1603  ./run_experiment_bcc.sh higherhrnet
+ 1604  ./run_experiment_bcc.sh hrnet
+ 1605  glances 
+ 1606  docker stats
+ 1607  awk -F, 'NR>1 {sum+=$2} END {print sum}' /home/user/MeasurementsDTs/ffmpeg_hpe/results_alphapose_AMD_EPYC_7551P_32-Core_Processor_20250711_160132/traces/bcc/video_rx.csv 
+ 1608  python3 main.py --method alphapose --input http://172.18.0.2:8089/stream.h264 --csv --output_dir output/ --device GPU
+ 1609  cd MeasurementsDTs/
+ 1610  source myenv/bin/activate
+ 1611  python3 main.py --method alphapose --input http://172.18.0.2:8089/stream.h264 --csv --output_dir output/ --device GPU
+ 1612  python3 main.py --method alphapose --input python3 main.py --method alphapose --input http://localhost:8089/stream.h264 --csv --output_dir output/ --device GPU
+ 1613  cd ffmpeg_hpe/
+ 1614  cd ..
+ 1615  python3 main.py --method alphapose --input http://localhost:8089/stream.h264 --csv --output_dir output/ --device GPU
+ 1616  cd ffmpeg_hpe/
+ 1617  docker compose -f docker-compose.yaml down -v --remove-orphans
+ 1618  ./run_experiment_bcc.sh alphapose
+ 1619  docker compose down -v --remove-orphans
+ 1620  ./run_experiment_bcc.sh alphapose
+ 1621  curl -v http://h264-streaming-server:8089/stream.mpegts
+ 1622  curl -v http://localhost:8089/stream.mpegts
+ 1623  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1624  cd MeasurementsDTs/ffmpeg_hpe/
+ 1625  ./run_experiment_bcc.sh alphapose
+ 1626  curl -v http://h264-streaming-server:8089/stream.mpegts
+ 1627  curl -v http://localhost:8089/stream.mpegts
+ 1628  curl -v http://localhost:8089/stream.mpegts | head -c 1000 | hexdump -C
+ 1629  docker system prune
+ 1630  df -h
+ 1631  docker compose down -v --remove-orphans
+ 1632  df -h
+ 1633  docker system prune
+ 1634  ./run_experiment_bcc.sh alphapose
+ 1635  docker stats
+ 1636  glances 
+ 1637  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1638  awk -F, 'NR>1 {sum+=$2} END {print sum}' ffmpeg_hpe/results_hrnet_AMD_EPYC_7551P_32-Core_Processor_4_20250712_120838/hpe_video_rx.csv 
+ 1639  docker compose build hpe
+ 1640  cd ffmpeg_hpe/
+ 1641  docker compose build hpe
+ 1642  docker compose build --no-cache hpe
+ 1643  docker compose build --no-cache h264-streaming-server
+ 1644  clear
+ 1645  docker compose build --no-cache h264-streaming-server
+ 1646  docker compose build --no-cache hpe
+ 1647  docker compose build --no-cache h264-streaming-server
+ 1648  docker compose build --no-cache hpe
+ 1649  docker exec h264-streaming-server ffmpeg -re -i /app/videos/hd_00_00.mp4 -c:v libx264 -f h264 - | head -c 1000000 | strings | grep avc1
+ 1650  curl -v http://localhost:8089/stream.h264 | head -c 1000 | hexdump -C
+ 1651  cd MeasurementsDTs/ffmpeg_hpe/
+ 1652  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1653  ./run_experiment_bcc.sh alphapose
+ 1654  df -h
+ 1655  docker system prune
+ 1656  ./run_experiment_bcc.sh alphapose
+ 1657  curl -v http://localhost:8089/stream.h264 | head -c 1000
+ 1658  curl -v http://localhost:8089/stream.h264 | head -c 1000 | hexdump -C
+ 1659  glances 
+ 1660  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1661  cd ffmpeg_hpe/
+ 1662  docker compose build h264-streaming-server
+ 1663  docker compose build --no-cache h264-streaming-server
+ 1664  docker compose build hpe
+ 1665  curl -sSf http://localhost:8089/stream.h264 | head -c 100 | grep -a 'avc1' || exit 1"
+ 1666  curl -sSf http://localhost:8089/stream.h264 | head -c 100 | grep -a 'avc1' || exit 1"]
+ 1667  curl -sSf http://localhost:8089/stream.h264 | head -c 100 | grep -a 'avc1' || exit 1
+ 1668  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1669  curl -sSf http://localhost:8089/stream.h264 | head -c 100 | grep -a 'avc1' || exit 1
+ 1670  curl -sSf http://localhost:8089/stream.h264 | head -c 100 | grep -a 'avc1' 
+ 1671  curl -sSf http://localhost:8089/stream.h264 | head -c 100
+ 1672  curl -sSf http://localhost:8089/stream.h264 | head -c 100 | grep . || exit 1"
+ 1673  curl -sSf http://localhost:8089/stream.h264 | head -c 100 | grep . || exit 1
+ 1674  glances 
+ 1675  docker compose build hpeclear
+ 1676  clear
+ 1677  glances 
+ 1678  exit
+ 1679  docker stats
+ 1680  exit
+ 1681  cd MeasurementsDTs/ffmpeg_hpe/
+ 1682  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1683  ./run_experiment_bcc.sh alphapose
+ 1684  ./run_experiment_bcc.sh openpose
+ 1685  cd MeasurementsDTs/
+ 1686  python3 main.py --method alphapose --input http://localhost:8089/stream.h264 --csv --output_dir output/ --device GPU
+ 1687  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1688  python3 main.py --method alphapose --input videos/rangeOfMotion/hd_00_00.mp4 --device GPU
+ 1689  python3 main.py --method movenet --input videos/rangeOfMotion/hd_00_00.mp4
+ 1690  cd ffmpeg_hpe/
+ 1691  time ./run_experiment_bcc.sh movenet
+ 1692  time ./run_experiment_bcc.sh openpose
+ 1693  ./run_experiment_bcc.sh openpose
+ 1694  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1695  ffmpeg -i /videos/hd_00_00.mp4 -c:v libx264 -b:v 8M -preset veryfast -tune zerolatency videos/rangeOfMotion/hd_00_00_8M.mp4
+ 1696  ffmpeg -i /videos/videos/rangeOfMotion/hd_00_00.mp4 -c:v libx264 -b:v 8M -preset veryfast -tune zerolatency videos/rangeOfMotion/hd_00_00_8M.mp4
+ 1697  ffmpeg -i videos/rangeOfMotion/hd_00_00.mp4 -c:v libx264 -b:v 8M -preset veryfast -tune zerolatency videos/rangeOfMotion/hd_00_00_8M.mp4
+ 1698  cleat
+ 1699  clear
+ 1700  ffmpeg -encoders | grep libx264
+ 1701  clear
+ 1702  cd ffmpeg_hpe/
+ 1703  rm -rf trace
+ 1704  rm -rf traces/
+ 1705  sudo rm -rf traces/
+ 1706  echo "$cpu_model" | cut -c1-32 | sed 's/_*$//'
+ 1707  echo "$cpu_model" | cut -c1-32 | sed 's/_*$//'"
+ 1708  git push
+ 1709  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1710  curl -sSf http://localhost:8089/stream.h264 | head -c 1 | wc -c | grep 1
+ 1711  curl -sSf http://localhost:8089/stream.h264 | head -c 188 | wc -c | grep 188
+ 1712  cd ffmpeg_hpe/
+ 1713  docker compose build --no-cache h264-streaming-server
+ 1714  /bin/python3 /home/user/.vscode-server/extensions/ms-python.python-2025.10.0-linux-x64/python_files/printEnvVariablesToFile.py /home/user/.vscode-server/extensions/ms-python.python-2025.10.0-linux-x64/python_files/deactivate/bash/envVars.txt
+ 1715  clear
+ 1716  docker compose -f $docker_compose_file down -v
+ 1717  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1718  docker logs $(docker ps -aqf "name=.*bcc-tracer.*")
+ 1719  docker logs hpe
+ 1720  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1721  curl -v http://localhost:8089/stream.h264
+ 1722  cd MeasurementsDTs/ffmpeg_hpe/
+ 1723  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1724  ./run_experiment_bcc.sh movenet
+ 1725  ./run_experiment_bcc.sh openpose
+ 1726  ./run_experiment_bcc.sh hrnetet
+ 1727  ./run_experiment_bcc.sh hrnet
+ 1728  ./run_experiment_bcc.sh alphapose
+ 1729  ./run_experiment_bcc.sh alphapose --device GPU
+ 1730  ./run_experiment_bcc.sh alphapose "--device GPU"
+ 1731  ./run_experiment_bcc.sh alphapose
+ 1732  df -h
+ 1733  clear
+ 1734  ./run_experiment_bcc.sh alphapose
+ 1735  docker compose down -v --remove-orphans
+ 1736  ./run_experiment_bcc.sh alphapose --device GPU
+ 1737  docker compose down -v --remove-orphans
+ 1738  ./run_experiment_bcc.sh alphapose
+ 1739  ./run_experiment_bcc.sh movenet
+ 1740  docker compose down -v --remove-orphans
+ 1741  nvidia-smi
+ 1742  docker compose down -v --remove-orphans
+ 1743  nvidia-smi
+ 1744  docker compose down -v --remove-orphans
+ 1745  nvidia-smi
+ 1746  docker compose down -v --remove-orphans
+ 1747  nvidia-smi
+ 1748  docker compose down -v --remove-orphans
+ 1749  exit
+ 1750  cd ffmpeg_hpe/
+ 1751  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1752  ./run_experiment_bcc.sh movenet
+ 1753  ./run_experiment_bcc.sh alphapose 
+ 1754  ./run_experiment_bcc.sh alphapose --device CPU
+ 1755  HPE_DEVICE=CPU ./run_experiment_bcc.sh alphapose
+ 1756  ./run_experiment_bcc.sh alphapose --device CPU
+ 1757  ./run_experiment_bcc.sh ae1 --device CPU
+ 1758  docker stats
+ 1759  glances
+ 1760  htop
+ 1761  clear
+ 1762  htop
+ 1763  sudo reboot
+ 1764  docker stats
+ 1765  glances
+ 1766  cd ffmpeg_hpe/
+ 1767  awk -F'"' '{print NF-1}' run_experiment_bcc.sh | grep -vE '^(0|2|4|6|8|10|12|14|16|18|20)$'
+ 1768  grep '"' run_experiment_bcc.sh | nl
+ 1769  grep -n -E '^\s*(if|for|while|case|function|do|then|elif|else|fi|done|esac)' run_experiment_bcc.sh
+ 1770  /usr/bin/python3 /home/user/.vscode-server/extensions/ms-python.python-2025.10.0-linux-x64/python_files/printEnvVariablesToFile.py /home/user/.vscode-server/extensions/ms-python.python-2025.10.0-linux-x64/python_files/deactivate/bash/envVars.txt
+ 1771  docker system prune
+ 1772  cd MeasurementsDTs/ffmpeg_hpe/
+ 1773  python3 main.py --method ae1 --input videos/rangeOfMotion/hd_00_00.mp4
+ 1774  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1775  cd ..
+ 1776  python3 main.py --method ae1 --input videos/rangeOfMotion/hd_00_00.mp4
+ 1777  gdown --id 1lEUFqQnWHVymQoZvaXuDFcnOyEEKsexP -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
+ 1778  python3 main.py --method ae1 --input videos/rangeOfMotion/hd_00_00.mp4
+ 1779  cd ffmpeg_hpe/
+ 1780  ./run_experiment_bcc.sh alphapose --device GPU
+ 1781  docker compose down -v --remove-orphans
+ 1782  ./run_experiment_bcc.sh alphapose --device CPU
+ 1783  docker compose down -v --remove-orphans
+ 1784  docker system prune
+ 1785  ./run_experiment_bcc.sh movenet --device CPU
+ 1786  docker compose down -v --remove-orphans
+ 1787  docker system prune
+ 1788  ./run_experiment_bcc.sh openpose --device GPU
+ 1789  docker compose down -v --remove-orphans
+ 1790  ./run_experiment_bcc.sh openpose --device CPU
+ 1791  cd MeasurementsDTs/ffmpeg_hpe/
+ 1792  docker compose down -v --remove-orphans
+ 1793  watch nvidia-smi
+ 1794  cd MeasurementsDTs/ffmpeg_hpe/
+ 1795  ll
+ 1796  ls -ltr
+ 1797  ls -lt
+ 1798  docker compose down -v --remove-orphans
+ 1799  ./run_experiment_bcc.sh movenet --device CPU
+ 1800  docker compose down -v --remove-orphans
+ 1801  ./run_experiment_bcc.sh openpose --device CPU
+ 1802  ls -lt
+ 1803  ./run_experiment_bcc.sh alphapose --device GPU
+ 1804  docker compose down -v --remove-orphans
+ 1805  ./run_experiment_bcc.sh movenet --device CPU
+ 1806  htop
+ 1807  cd MeasurementsDTs/ffmpeg_hpe/
+ 1808  docker compose down -v --remove-orphans
+ 1809  ./run_experiment_bcc.sh movenet --device CPU
+ 1810  docker compose down -v --remove-orphans
+ 1811  ./run_experiment_bcc.sh movenet --device CPU
+ 1812  ./run_experiment_bcc.sh alphapose --device GPU
+ 1813  docker compose down -v --remove-orphans
+ 1814  ./run_experiment_bcc.sh movenet --device CPU
+ 1815  docker compose down -v --remove-orphans
+ 1816  ./run_experiment_bcc.sh openpose --device CPU
+ 1817  docker compose down -v --remove-orphans
+ 1818  ./run_experiment_bcc.sh openpose --device CPU
+ 1819  docker compose down -v --remove-orphans
+ 1820  ./run_experiment_bcc.sh movenet --device CPU
+ 1821  ./run_experiment_bcc.sh openpose --device CPU
+ 1822  ./run_experiment_bcc.sh alphapose --device GPU
+ 1823  ./run_experiment_bcc.sh movenet --device CPU
+ 1824  docker compose down -v --remove-orphans
+ 1825  ./run_experiment_bcc.sh openpose --device CPU
+ 1826  docker compose down -v --remove-orphans
+ 1827  watch nvidia-smi
+ 1828  docker stats
+ 1829  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1830  cd ffmpeg_hpe/
+ 1831  rm -f ./results/*.csv 2>/dev/null || true
+ 1832  clear
+ 1833  docker pull ghcr.io/codions/docker-stream-server/docker-stream-server:latest
+ 1834  ll MeasurementsDTs/videos/
+ 1835  docker run --rm -it -v Clipchamp30s.mp4 -p 1935:1935 -p 8454:80 ghcr.io/codions/docker-stream-server/docker-stream-server:latest
+ 1836  pwd
+ 1837  docker run --rm -it -v MeasurementsDTs/videos/Clipchamp30s.mp4 -p 1935:1935 -p 8454:80 ghcr.io/codions/docker-stream-server/docker-stream-server:latest
+ 1838  docker system prune
+ 1839  df -h
+ 1840  docker pull ros:humble-ros-core 
+ 1841  docker ps
+ 1842  docker container inspect humble_core --format='{{.SizeRw}}'
+ 1843  docker ps -a
+ 1844  docker ps -s
+ 1845  docker ps
+ 1846  docker commit humble_core humble_core_gk:saved
+ 1847  docker run -it --rm ros:humble-ros-core
+ 1848  docker run -it --name humble_core ros:humble-ros-core
+ 1849  docker ls
+ 1850  docker ps
+ 1851  docker ps --no-truc
+ 1852  docker ps --no-trunv
+ 1853  docker ps --no-trunc
+ 1854  clear
+ 1855  ll
+ 1856  docker run -it --name humble_core -v $(pwd)/humble_dev_ws:/ws  ros:humble-ros-core
+ 1857  ./check_stream_compat.sh video.mp4 
+ 1858  ffplay
+ 1859  ffprobe video.mp4 
+ 1860  npm install -g @anthropic-ai/claude-code
+ 1861  curl -fsSL https://get.pnpm.io/install.sh | sh -
+ 1862  source /home/user/.bashrc
+ 1863  pnpm 
+ 1864  pnpm add -g @anthropic-ai/claude-code
+ 1865  claude
+ 1866  claude -v
+ 1867  ll
+ 1868  cd humble_dev_ws/
+ 1869  claude
+ 1870  pnpm install --global pnpm
+ 1871  pnpm self-update
+ 1872  export PNPM_HOME="/home/user/.local/share/pnpm"
+ 1873  case ":$PATH:" in   *":$PNPM_HOME:"*) ;;   *) export PATH="$PNPM_HOME:$PATH" ;; esac
+ 1874  claude
+ 1875  docker pull osrf/ros:humble-desktop-full
+ 1876  docker build buildx -t roshumble-desktop:latest .
+ 1877  docker buildx build  -t roshumble-desktop:latest .
+ 1878  cd ..
+ 1879  ll
+ 1880  docker buildx build  -t roshumble-desktop:latest .
+ 1881  docker buildx build  -t roshumble-desktop:latest -f Dockerfile.desktop
+ 1882  docker buildx build -f Dockerfile.desktop -t roshumble-desktop:latest
+ 1883  docker buildx build -f Dockerfile.desktop -t roshumble-desktop:latest .
+ 1884  df -h
+ 1885  htop
+ 1886  docker buildx build  -t roshumble-desktop:v2
+ 1887  docker buildx build -t roshumble-desktop:v2 .
+ 1888  docker buildx build -f Dockerfile.desktop -t roshumble-desktop:v2  .
+ 1889  claude
+ 1890  ipconfig getifaddr en0
+ 1891  apt install ipconfig
+ 1892  sudo apt install ipconfig
+ 1893  ip a
+ 1894  cat ~/.bashrc 
+ 1895  cat ~/.profile 
+ 1896  env
+ 1897  rm -rf ~/.atuin
+ 1898  bash ~/.bashrc 
+ 1899  bash ~/.profile 
+ 1900  exec $SHELL
+ 1901  exec $SHELL
+ 1902  exit
+ 1903  grep "/home/user/.atuin/bin/env"
+ 1904  docker exec -it 757ee2ef3311 bash
+ 1905  xhost +local:docker
+ 1906  export DISPLAY=:0
+ 1907  xhost +local:docker
+ 1908  docker run -it     --env="DISPLAY"     --env="QT_X11_NO_MITSHM=1"     --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw" roshumble-desktop:dev
+ 1909  exit
+ 1910  docker ps
+ 1911  docker exec -it 757ee2ef3311 bash
+ 1912  docker run -it   --env="DISPLAY=$DISPLAY"   --env="QT_X11_NO_MITSHM=1"   roshumble-desktop:dev
+ 1913  docker run -it   --env="DISPLAY=$DISPLAY"   --env="QT_X11_NO_MITSHM=1"   roshumble-desktop:dev
+ 1914  docker run -it   --env="DISPLAY=/private/tmp/com.apple.launchd.XXXXXX/org.xquartz:0"   --env="QT_X11_NO_MITSHM=1"   --env="LIBGL_ALWAYS_SOFTWARE=1"   --volume="/tmp/.X11-unix:/tmp/.X11-unix"   --privileged   roshumble-desktop:dev
+ 1915  docker run -it   --env="DISPLAY=$DISPLAY"   --env="QT_X11_NO_MITSHM=1" docker run -it --env="DISPLAY=$DISPLAY" --env="QT_X11_NO_MITSHM=1" --privileged roshumble-desktop:dev
+ 1916  exit
+ 1917  docker run -it   --env="DISPLAY=$DISPLAY"   --env="QT_X11_NO_MITSHM=1" docker run -it --env="DISPLAY=$DISPLAY" --env="QT_X11_NO_MITSHM=1" --privileged roshumble-desktop:dev
+ 1918  docker ps
+ 1919  docker run -it   --env="DISPLAY=$DISPLAY"   --env="QT_X11_NO_MITSHM=1"   roshumble-desktop:dev
+ 1920  exit
+ 1921  docker run -it   --net=host   --env="DISPLAY=$DISPLAY"   --env="LIBGL_ALWAYS_SOFTWARE=1"   roshumble-desktop:dev
+ 1922  exit
+ 1923  docker run -it   --net=host   --env="DISPLAY=$DISPLAY"   --env="LIBGL_ALWAYS_SOFTWARE=1"   roshumble-desktop:dev
+ 1924  docker run -it --privileged --env="DISPLAY=192.168.2.10:0.0" --env="LIBGL_ALWAYS_SOFTWARE=1" --volume="/tmp/.X11-unix:/tmp/.X11-unix"  roshumble-desktop:dev
+ 1925  nvim /etc/ssh/sshd_config
+ 1926  pip3 install neuromeka
+ 1927  docker ps
+ 1928  pip3 uninstall neuromeka
+ 1929  docker buildx build -f Dockerfile.desktop -t roshumble-desktop:v3  .
+ 1930  docker run -it \  --env="DISPLAY=host.docker.internal:0" \  --env="QT_X11_NO_MITSHM=1" \  roshumble-desktop:v3
+ 1931  docker run -it --env="DISPLAY=host.docker.internal:0" --env="QT_X11_NO_MITSHM=1" roshumble-desktop:v3
+ 1932  docker run -it --env="DISPLAY=172.17.0.1" --env="QT_X11_NO_MITSHM=1" roshumble-desktop:v3
+ 1933  export DISPLAY=:0
+ 1934  export LIBGL_ALWAYS_SOFTWARE=1
+ 1935  rviz2
+ 1936  unset  LIBGL_ALWAYS_SOFTWARE=1
+ 1937  unset LIBGL_ALWAYS_SOFTWARE=1
+ 1938  unset DISPLAY=:0
+ 1939  unset DISPLAY
+ 1940  unset LIBGL_ALWAYS_SOFTWARE
+ 1941  docker commit 757ee2ef3311 roshumble-desktop:dev
+ 1942  df -h
+ 1943  docker exec -it roshumble-desktop:dev
+ 1944  docker exec -it roshumble-desktop:dev /bin/bash
+ 1945  docker ps
+ 1946  sudo systemctl restart ssh
+ 1947  exit
+ 1948  echo $DISPLAY
+ 1949  docker run -it --env="DISPLAY=$DISPLAY" --env="QT_X11_NO_MITSHM=1" roshumble-desktop:dev
+ 1950  exit
+ 1951  pwd
+ 1952  cat .ssh/
+ 1953  cat .ssh/authorized_keys 
+ 1954  cat .ssh/known_hosts 
+ 1955  sudo su -
+ 1956  sudo nano /etc/ssh/sshd_config
+ 1957  sudo systemctl restart ssh
+ 1958  exit
+ 1959  htop
+ 1960  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1961  uname -r
+ 1962  lsb_release 
+ 1963  lsb_release -a
+ 1964  cpu id
+ 1965  echo "OS: $(lsb_release -ds 2>/dev/null || cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"')" && echo "Kernel: $(uname -r)" && echo "CUDA: $(nvcc --version | grep release | awk '{print $6}' | cut -d',' -f1 2>/dev/null || echo 'N/A')" && echo "Container Toolkit: $(dpkg -l | grep nvidia-container-toolkit | awk '{print $3}' 2>/dev/null || echo 'N/A')" && echo "CPU: $(lscpu | grep 'Model name' | cut -d: -f2 | xargs)" && echo "Cores: $(lscpu | grep '^CPU(s):' | awk '{print $2}')" && echo "Threads: $(lscpu | grep 'Thread(s) per core' | awk '{print $4}')" && echo "Memory: $(free -h | awk '/Mem:/ {print $2}')"
+ 1966  nvidia-smi
+ 1967  docker info
+ 1968  sudo cp /home/user/linux-5.4.1/tools/testing/selftests/bpf/bpf_helpers.h /usr/src/linux-headers-$(uname -r)/include/linux/
+ 1969  nvidia-smi
+ 1970  echo "OS: $(lsb_release -ds 2>/dev/null || cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"')" && echo "Kernel: $(uname -r)" && echo "CUDA: $(nvcc --version | grep release | awk '{print $6}' | cut -d',' -f1 2>/dev/null || echo 'N/A')" && echo "Container Toolkit: $(dpkg -l | grep nvidia-container-toolkit | awk '{print $3}' 2>/dev/null || echo 'N/A')" && echo "CPU: $(lscpu | grep 'Model name' | cut -d: -f2 | xargs)" && echo "Cores: $(lscpu | grep '^CPU(s):' | awk '{print $2}')" && echo "Threads: $(lscpu | grep 'Thread(s) per core' | awk '{print $4}')" && echo "Memory: $(free -h | awk '/Mem:/ {print $2}')"
+ 1971  cpu id
+ 1972  cpuid
+ 1973  cpuid | less
+ 1974  cpuid --help
+ 1975  cpuid -1
+ 1976  cpuinfo2cpuid 
+ 1977  cpupower 
+ 1978  cpupower info
+ 1979  cpupower frequency-info
+ 1980  lscpu
+ 1981  lsmem
+ 1982  lshw
+ 1983  history
+ 1984  source /home/user/MeasurementsDTs/myenv/bin/activate
+ 1985  claude
+ 1986  echo "OS: $(lsb_release -ds 2>/dev/null || cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"')" && echo "Kernel: $(uname -r)" && echo "CUDA: $(nvcc --version | grep release | awk '{print $6}' | cut -d',' -f1 2>/dev/null || echo 'N/A')" && echo "Container Toolkit: $(dpkg -l | grep nvidia-container-toolkit | awk '{print $3}' 2>/dev/null || echo 'N/A')" && echo "CPU: $(lscpu | grep 'Model name' | cut -d: -f2 | xargs)" && echo "Cores: $(lscpu | grep '^CPU(s):' | awk '{print $2}')" && echo "Threads: $(lscpu | grep 'Thread(s) per core' | awk '{print $4}')" && echo "Memory: $(free -h | awk '/Mem:/ {print $2}')"
+ 1987  history > ~/full_shell_history.txt
