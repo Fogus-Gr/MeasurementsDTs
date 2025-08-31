@@ -2,7 +2,7 @@
 models/MoveNet
 models/AlphaPose/pretrained_models/*
 models/AlphaPose/detector/nms/build/*
-models/AlphaPose/detector/yolo/data/yolov3-spp.weights    
+models/AlphaPose/detector/yolo/data/*    
 out/
 iperf-test/pcap/*
 *.log
