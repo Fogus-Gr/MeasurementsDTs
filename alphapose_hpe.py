@@ -130,18 +130,23 @@ class AlphaPoseHPE(BaseHPE):
                 orig_h, orig_w = orig_img.shape[:2]
             else: # For video/webcam/stream with PyNvCodec, frame_input is a GPU tensor
                 # frame_input is already a torch.Tensor on GPU (RGB, H, W, C)
-                orig_img_tensor = frame_input.to(self.device) # Ensure it's on the correct device
+                if isinstance(frame_input, np.ndarray):
+                    orig_img_tensor = torch.from_numpy(frame_input).to(self.device)
+                else:
+                    orig_img_tensor = frame_input.to(self.device)
                 orig_h, orig_w = orig_img_tensor.shape[:2]
                 
-                # Prepare image for detector (resize, normalize, permute)
-                # Assuming detector expects (N, C, H, W) float [0,1]
-                # Detector input size might be different from pose model input size
-                det_input_size = self.cfg.DETECTOR.INPUT_SIZE if hasattr(self.cfg.DETECTOR, 'INPUT_SIZE') else [640, 640] # Default for YOLO
-                
-                # Resize using torchvision.transforms.functional (GPU-accelerated)
-                resized_img_tensor = F.resize(orig_img_tensor.permute(2,0,1), det_input_size, antialias=True) # (C, H, W)
-                detector_input = resized_img_tensor.float() / 255.0
-                detector_input = detector_input.unsqueeze(0) # Add batch dimension (N, C, H, W)
+                # Use detector_model's image_preprocess if available, else fallback to manual preprocessing
+                if self.det_loader and self.det_loader.detector_model:
+                    detector_input = self.det_loader.detector_model.image_preprocess(orig_img_tensor.cpu().numpy())
+                    detector_input = detector_input.to(self.device)
+                else:
+                    # Fallback: resize to expected input size (608) and normalize manually
+                    import torchvision.transforms.functional as F
+                    det_input_size = 608
+                    resized_img_tensor = F.resize(orig_img_tensor.permute(2,0,1), (det_input_size, det_input_size), antialias=True)
+                    detector_input = resized_img_tensor.float() / 255.0
+                    detector_input = detector_input.unsqueeze(0).to(self.device)
 
                 # Perform detection directly using the loaded detector model
                 # The images_detection method expects a list of images and original dimensions
@@ -177,7 +182,7 @@ class AlphaPoseHPE(BaseHPE):
 
                 # --- Implement GPU-accelerated cropping and resizing for pose model ---
                 inps_list = []
-                pose_input_size = self.cfg.MODEL.IMAGE_SIZE # [width, height]
+                pose_input_size = self.cfg.MODEL.get("IMAGE_SIZE", [256, 192]) if hasattr(self.cfg.MODEL, "get") else [256, 192]
                 
                 # orig_img_tensor is (H, W, C) RGB
                 # We need to permute to (C, H, W) for F.crop and F.resize
@@ -241,6 +246,7 @@ class AlphaPoseHPE(BaseHPE):
             
             datalen = inps.size(0)
             leftover = 0
+            batchSize = self.posebatch
             if (datalen) % batchSize:
                 leftover = 1
             num_batches = datalen // batchSize + leftover

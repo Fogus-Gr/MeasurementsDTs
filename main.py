@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import argparse
 from movenet_hpe import MoveNetHPE
 from openvino_base_hpe import OpenVINOBaseHPE
+from alphapose_hpe import AlphaPoseHPE
 import logging
 
 class _HideAspectWarn(logging.Filter):
@@ -43,7 +44,7 @@ def parse_arguments():
 def get_hpe_method(args):
     method_map = {
         'movenet': lambda args: MoveNetHPE(device=args.device, detbatch=args.detbatch, **base_args(args)),
-        #'alphapose': lambda args: AlphaPoseHPE(device=args.device, detbatch=args.detbatch, **base_args(args)),
+        'alphapose': lambda args: AlphaPoseHPE(device=args.device, detbatch=args.detbatch, **base_args(args)),
         'openpose': lambda args: OpenVINOBaseHPE(model_type='openpose', device=args.device, **base_args(args)),
         'hrnet': lambda args: OpenVINOBaseHPE(model_type='higherhrnet', device=args.device, **base_args(args)),
         'ae1': lambda args: OpenVINOBaseHPE(model_type='efficienthrnet1', device=args.device, **base_args(args)),

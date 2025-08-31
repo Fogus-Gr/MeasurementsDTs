@@ -1,0 +1,24 @@
+ninja_required_version = 1.3
+cxx = c++
+
+cflags = -Wno-unused-result -Wsign-compare -Wunreachable-code -DNDEBUG -g -fwrapv -O3 -Wall -DOPENSSL_NO_SSL3 -I/opt/homebrew/opt/jpeg/include -I/Users/georgek/.local/share/virtualenvs/AlphaPose-kzn0QKfJ/lib/python3.9/site-packages/numpy/_core/include -I/Users/georgek/.local/share/virtualenvs/AlphaPose-kzn0QKfJ/lib/python3.9/site-packages/torch/include -I/Users/georgek/.local/share/virtualenvs/AlphaPose-kzn0QKfJ/lib/python3.9/site-packages/torch/include/torch/csrc/api/include -I/Users/georgek/.local/share/virtualenvs/AlphaPose-kzn0QKfJ/lib/python3.9/site-packages/torch/include/TH -I/Users/georgek/.local/share/virtualenvs/AlphaPose-kzn0QKfJ/lib/python3.9/site-packages/torch/include/THC -I/Users/georgek/.local/share/virtualenvs/AlphaPose-kzn0QKfJ/include -I/Users/georgek/.pyenv/versions/3.9.18/include/python3.9 -c
+post_cflags = -DTORCH_API_INCLUDE_EXTENSION_H '-DPYBIND11_COMPILER_TYPE="_clang"' '-DPYBIND11_STDLIB="_libcpp"' '-DPYBIND11_BUILD_ABI="_cxxabi1002"' -DTORCH_EXTENSION_NAME=soft_nms_cpu -D_GLIBCXX_USE_CXX11_ABI=0 -std=c++17
+cuda_dlink_post_cflags = 
+ldflags = 
+
+rule compile
+  command = $cxx -MMD -MF $out.d $cflags -c $in -o $out $post_cflags
+  depfile = $out.d
+  deps = gcc
+
+
+
+
+
+build /Users/georgek/MeasurementsDTs/models/AlphaPose/detector/nms/build/temp.macosx-13.4-arm64-cpython-39/src/soft_nms_cpu.o: compile /Users/georgek/MeasurementsDTs/models/AlphaPose/detector/nms/src/soft_nms_cpu.cpp
+
+
+
+
+
+
