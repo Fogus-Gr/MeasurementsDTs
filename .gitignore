@@ -1,6 +1,8 @@
 .vscode/
 models/MoveNet
-models/AlphaPose/pretrained_models/fast_res50_256x192.pth
+models/AlphaPose/pretrained_models/*
+models/AlphaPose/detector/nms/build/*
+models/AlphaPose/detector/yolo/data/yolov3-spp.weights    
 out/
 iperf-test/pcap/*
 *.log
