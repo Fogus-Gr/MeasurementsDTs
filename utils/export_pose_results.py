@@ -1,5 +1,6 @@
 import json
 import csv
+import os
 
 coco_results = []
 csv_rows = []
@@ -8,7 +9,7 @@ ultimate_ms = None
 json_buffer = ""
 interval_msec = None
 
-def create_COCO_format(bodies, score_thresh, frame_number):
+def create_COCO_format(bodies, score_thresh, frame_number, univ_time = None):
     # Flags for COCO format
     CATEGORY_PERSON = 1
     NOT_LABELED = 0
@@ -23,19 +24,24 @@ def create_COCO_format(bodies, score_thresh, frame_number):
             v = LABELED_VISIBLE if score >=score_thresh else LABELED_NOT_VISIBLE
             keypoints.extend([float(x), float(y), v])
 
-        results.append({
+        result_enty = {
             "image_id": frame_number,
             "category_id": CATEGORY_PERSON,
             "keypoints": keypoints,
             "score": float(body.score)
-        })
+        }
+
+        if univ_time is not None:
+            result_enty["univ_time"] = float(univ_time) 
+
+        results.append(result_enty)
 
     return results
 
-def append_COCO_format_json(bodies, score_thresh, frame_number):
+def append_COCO_format_json(bodies, score_thresh, frame_number, univ_time):
     global coco_results
 
-    coco_results.extend(create_COCO_format(bodies, score_thresh, frame_number))
+    coco_results.extend(create_COCO_format(bodies, score_thresh, frame_number, univ_time))
 
 def append_COCO_format_csv(bodies, score_thresh, frame_number, timestamp, measurement_interval_ms):
     global csv_rows

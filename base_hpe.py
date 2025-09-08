@@ -6,7 +6,7 @@ import glob
 import time
 
 from utils.visualizer import render
-from utils.evaluator import append_COCO_format_json, append_COCO_format_csv, save_COCO_format_json, save_COCO_format_csv, save_Tx_csv_data
+from utils.export_pose_results import append_COCO_format_json, append_COCO_format_csv, save_COCO_format_json, save_COCO_format_csv, save_Tx_csv_data
 
 class Body:
     def __init__(self, score, xmin, ymin, xmax, ymax, keypoints_score, keypoints, keypoints_norm):
@@ -51,6 +51,7 @@ class BaseHPE(ABC):
         self.score_thresh = score_thresh
         self.show_scores = show_scores
         self.show_bounding_box = show_bounding_box
+        self.univ_time = 0
         
         self.img_w = 0
         self.img_h = 0
@@ -61,7 +62,7 @@ class BaseHPE(ABC):
         self.start_time_of_experiment = time.time()
         self.input_file = os.path.basename(os.path.normpath(input_src))
 
-        if self.json or self.save_image or self.save_video:
+        if self.json or self.csv or self.save_image or self.save_video:
             if output_dir is not None:
                 self.output_dir = output_dir
             else:
@@ -169,6 +170,8 @@ class BaseHPE(ABC):
                 if not ok:
                     break
 
+                self.univ_time = self.cap.get(cv2.CAP_PROP_POS_MSEC)  # timestamp of current frame, in milliseconds
+
                 self.process_frame(frame, frame_number)
 
                 frame_number += 1
@@ -187,7 +190,7 @@ class BaseHPE(ABC):
         bodies = self.postprocess(predictions)
 
         if self.json:
-            append_COCO_format_json(bodies, self.score_thresh, frame_number)
+            append_COCO_format_json(bodies, self.score_thresh, frame_number, self.univ_time)
         if self.csv:
             append_COCO_format_csv(bodies, self.score_thresh, frame_number, timestamp, self.measurement_interval_ms)
 
