@@ -7,6 +7,8 @@ import torchvision.transforms.functional as F
 from base_hpe import BaseHPE, Body, Padding
 from types import SimpleNamespace
 
+torch.set_num_threads(5)
+
 try:
 	from models.AlphaPose.detector.apis import get_detector
 	from models.AlphaPose.alphapose.models import builder
@@ -36,7 +38,7 @@ class AlphaPoseHPE(BaseHPE):
         [12,14], [14,16], [11,13], [13,15]
     ]
 
-    def __init__(self, detbatch: int, cfg = DEFAULT_CFG, device = "GPU", posebatch = 64, detector = "yolo", 
+    def __init__(self, detbatch: int, cfg = DEFAULT_CFG, device = "GPU", posebatch = 4, detector = "yolo", 
                  checkpoint = DEFAULT_CHECKPOINT, sp = True, *args, **kwargs):
         # detbatch is now passed from main.py
         gpus = DEVICE_TO_GPU.get(device, "-1")

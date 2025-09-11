@@ -127,8 +127,13 @@ class BaseHPE(ABC):
             filename = os.path.join(self.output_dir, "video.avi")
             self.output = cv2.VideoWriter(filename, fourcc, self.video_fps, (self.img_w, self.img_h))
 
-    @abstractmethod
     def _init_opencv_video_capture(self, input_src):
+        """Initialize OpenCV video capture with comprehensive input source handling."""
+        # Handle string camera indices (convert to int)
+        if isinstance(input_src, str) and input_src.isdigit():
+            input_src = int(input_src)
+        
+        # Special handling for HTTP streams with retry logic
         if isinstance(input_src, str) and input_src.startswith("http"):
             print(f"Attempting to connect to IP stream at {input_src} using OpenCV...")
             max_retries = 60
@@ -148,13 +153,30 @@ class BaseHPE(ABC):
                 raise ValueError(f"Failed to connect to video stream after {max_retries} attempts: {input_src}")
             time.sleep(0.5) # Give OpenCV a small buffer time to fetch metadata
         else:
+            # Handle regular files, camera indices, and other sources
             self.cap = cv2.VideoCapture(input_src)
-            self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
-            self.cap.set(cv2.CAP_PROP_FOCUS, 0)
+            if not self.cap.isOpened():
+                raise RuntimeError(f"Could not open input source: {input_src}")
+            
+            # Set camera-specific properties if it's a webcam
+            if isinstance(input_src, int):
+                self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+                self.cap.set(cv2.CAP_PROP_FOCUS, 0)
         
+        # Get video properties
         self.video_fps = int(self.cap.get(cv2.CAP_PROP_FPS)) or 25
-        self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 0
+        h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 0
+        
+        # If dimensions are unknown, read one frame to infer size
+        if w <= 0 or h <= 0:
+            ok, frame = self.cap.read()
+            if ok:
+                h, w = frame.shape[:2]
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # rewind
+        
+        self.img_w = w if w > 0 else None
+        self.img_h = h if h > 0 else None
         self.is_pynvcodec_enabled = False
 
     def _init_pynvcodec_video_capture(self, input_src):
@@ -180,37 +202,6 @@ class BaseHPE(ABC):
             self.is_pynvcodec_enabled = False
             self._init_opencv_video_capture(input_src) # Fallback
     
-    # inside class OpenVINOBaseHPE(BaseHPE)
-    def _init_opencv_video_capture(self, input_src):
-        """Open input (file, camera index, or URL) with OpenCV and record frame size."""
-        import cv2
-
-        # Accept "0" style camera index or a path/URL
-        if isinstance(input_src, str) and input_src.isdigit():
-            src = int(input_src)
-        else:
-            src = input_src  # path like ~/.. gets expanded by the shell
-
-        cap = cv2.VideoCapture(src)
-        if not cap.isOpened():
-            raise RuntimeError(f"Could not open input source: {input_src}")
-
-        # Try to read dimensions from metadata
-        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 0
-        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 0
-
-        # If unknown, read one frame to infer size
-        if w <= 0 or h <= 0:
-            ok, frame = cap.read()
-            if ok:
-                h, w = frame.shape[:2]
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # rewind
-            # else leave as None; downstream will handle
-
-        self.img_w = w if w > 0 else None
-        self.img_h = h if h > 0 else None
-        self.cap = cap
-        return cap
 
 
     @abstractmethod
