@@ -46,3 +46,4 @@ rtsp-ipcam/.DS_Store
 *.mp4
 AGENTS.md
 branch-diff_cuda-dev_vs_feat-ov-epyc-4vcpu.md
+models/AlphaPose/detector/yolo/data/*.weights
