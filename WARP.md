@@ -123,3 +123,78 @@ Use the `dev_tools/` directory for development workflows:
 - Docker containerization for reproducible environments
 
 The project prioritizes reproducible benchmarking across different hardware configurations and input modalities.
+
+
+
+
+
+Of course. I have structured the performance data and analysis into a format that is easy to copy and paste directly into a Google Doc.
+
+Simply copy the entire content below, open a new Google Doc, and paste it. The formatting (headings, bold text, table) will be preserved.
+
+***
+
+### **Performance Comparison of Pose Estimation Methods**
+
+**Video Source Information:**
+*   **Duration:** 2 minutes 31.52 seconds (151.52 seconds)
+*   **Original Resolution:** 1920×1080 (Full HD)
+*   **Frame Rate:** 25 FPS
+*   **Total Frames:** 3,788 frames
+*   **Streamed Resolution:** 1280×720 (via FFmpeg)
+
+**Test Setup:**
+*   **Device:** CPU-only processing
+*   **Streamer:** Custom Flask server using FFmpeg (`app_ffmpeg.py`)
+*   **Stream Protocol:** MJPEG over HTTP multipart/x-mixed-replace
+
+---
+
+### **Performance Results Summary Table**
+
+| Method     | Total Time (mm:ss) | Real-Time Factor | Approx. FPS | CPU Usage | User Time (s) | System Time (s) |
+|------------|--------------------|------------------|-------------|-----------|---------------|-----------------|
+| **MoveNet**    | ~2:30              | ~1.0x           | ~25         | 203-255%  | 270 - 334     | 43 - 46         |
+| **OpenPose**   | ~2:35 - 3:58       | ~1.0x - 1.6x    | ~16 - 24    | 309-431%  | 600 - 661     | 70 - 75         |
+| **AE1**        | ~4:39 - 6:08       | ~1.8x - 2.4x    | ~10 - 14    | 386-483%  | 1178 - 1237   | 172 - 188       |
+| **HRNet**      | ~21:30 - 25:07     | ~8.5x - 9.9x    | ~2.5 - 3    | 480-537%  | 6373 - 6619   | 562 - 620       |
+| **AlphaPose**  | **39:38**          | **15.7x**       | **~1.6**    | **469%**  | **8509**      | **2668**        |
+
+*   **Real-Time Factor:** Values >1.0 are slower than real-time.
+*   **FPS:** Effective frames processed per second.
+
+---
+
+### **Key Observations & Analysis**
+
+1.  **MoveNet is the Optimal Choice for Real-Time Use:**
+    *   **Fastest:** Processes the video at or very near real-time speed (1.0x factor).
+    *   **Most Efficient:** Achieves this with the lowest CPU usage and system time overhead, indicating a highly optimized model for CPU deployment.
+
+2.  **OpenPose is a Viable Alternative:**
+    *   **Near Real-Time:** Can achieve near real-time performance (~1.0x factor in best case).
+    *   **High CPU Utilization:** Effectively uses multiple CPU cores (over 400%) but is less optimized than MoveNet, leading to more variable and sometimes slower performance.
+
+3.  **AE1 is for Less Stringent Latency Requirements:**
+    *   **Moderate Speed:** Processes video about 2x slower than real-time. Suitable for applications where a short delay is acceptable.
+
+4.  **HRNet and AlphaPose are Computational Heavyweights:**
+    *   **Accuracy vs. Speed Trade-off:** These methods are likely chosen for high accuracy but are prohibitively slow for any real-time application on a CPU.
+    *   **Extreme Latency:** Process the video 8.5 to 15.7 times slower than its actual duration.
+    *   **High System Time (AlphaPose):** AlphaPose's exceptionally high "System Time" suggests significant input/output (I/O) overhead, possibly from reading/writing intermediate data or model loading operations, compounding its slowness.
+
+5.  **Multi-core Utilization:**
+    *   All methods successfully leverage multiple CPU cores (evident from CPU usage percentages far exceeding 100%).
+
+---
+
+### **Recommendations**
+
+*   **For Real-Time Applications (e.g., live feedback):** Use **MoveNet**.
+*   **For Accuracy-Critical, Non-Real-Time Analysis (e.g., processing recorded videos):** Consider **HRNet** or **AlphaPose**, accepting the long processing time.
+*   **For a Balance of Established Accuracy and Good Performance:** **OpenPose** is a reasonable choice.
+*   **For General-Purpose Use:** **MoveNet** provides the best balance of speed and efficiency on CPU hardware.
+
+### **Streamer Implementation Notes**
+
+The custom Flask server (`app_ffmpeg.py`) performed reliably, providing a steady MJPEG stream of the video file at the target resolution and framerate. This ensured that the performance bottlenecks measured were solely due to the pose estimation models and not the video streaming source.
