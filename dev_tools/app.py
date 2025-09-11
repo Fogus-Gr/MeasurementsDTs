@@ -1,7 +1,7 @@
 import os
 import cv2
 import logging
-from flask import Flask, Response, render_template
+from flask import Flask, Response, render_template, request
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -20,33 +20,47 @@ abs_path = os.path.abspath(video_path)
 logging.info(f"Absolute video path: {abs_path}")
 logging.info(f"File exists: {os.path.exists(abs_path)}")
 
-# Initialize video capture at module level (key improvement #1)
+# Global cap object for video capture
 cap = None
-try:
-    cap = cv2.VideoCapture(video_path)
-    if cap.isOpened():
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        logging.info(f"Video details: {total_frames} frames, {fps} FPS, duration: {total_frames/fps:.2f} seconds")
-    else:
-        logging.error(f"Error: Could not open video at {video_path}")
-except Exception as e:
-    logging.error(f"Error initializing video: {e}")
+
+def initialize_capture():
+    """Initializes or re-initializes the video capture object."""
+    global cap
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if cap.isOpened():
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            logging.info(f"Video details: {total_frames} frames, {fps} FPS, duration: {total_frames/fps:.2f} seconds")
+        else:
+            logging.error(f"Error: Could not open video at {video_path}")
+            cap = None # Ensure cap is None if opening fails
+    except Exception as e:
+        logging.error(f"Error initializing video: {e}")
+        cap = None
+
+# Initialize capture on startup
+initialize_capture()
 
 def generate_frames():
     """Generate video frames for streaming (plays video once, no looping)"""
+    global cap
     frame_count = 0
     first_frame = True
 
-    while True:
-        if not cap or not cap.isOpened():
-            logging.error("Video capture not available")
-            break
+    # Ensure capture is initialized before starting
+    if cap is None or not cap.isOpened():
+        logging.error("Video capture not available at the start of frame generation.")
+        return # Exit generator if capture is not ready
 
+    while True:
         success, frame = cap.read()
         if not success:
-            # Video ended, stop streaming
+            # Video ended, release capture and break
             logging.info("Video playback completed - stream ended")
+            if cap:
+                cap.release()
+                cap = None
             break
 
         frame_count += 1
@@ -65,7 +79,25 @@ def generate_frames():
 @app.route('/video_feed')
 def video_feed():
     """Route for video stream"""
+    global cap
     logging.info(f"Client connected to video feed")
+
+    # Handle HEAD requests: return headers only, no content
+    if request.method == 'HEAD':
+        # Return 204 No Content status, which is appropriate for HEAD requests
+        # where the resource doesn't have a body to return.
+        # We also need to return the correct Content-Type header.
+        return Response(status=204, mimetype='multipart/x-mixed-replace; boundary=frame')
+
+    # Re-initialize capture if it's not available (e.g., after previous stream ended)
+    if cap is None or not cap.isOpened():
+        logging.info("Re-initializing video capture for new stream.")
+        initialize_capture()
+        if cap is None or not cap.isOpened():
+            logging.error("Failed to re-initialize video capture.")
+            # Return an empty stream if capture fails
+            return Response(b'', mimetype='multipart/x-mixed-replace; boundary=frame')
+
     return Response(generate_frames(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
