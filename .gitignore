@@ -2,7 +2,8 @@
 models/MoveNet
 models/AlphaPose/pretrained_models/*
 models/AlphaPose/detector/nms/build/*
-models/AlphaPose/detector/yolo/data/*    
+models/AlphaPose/detector/yolo/*   
+ 
 out/
 iperf-test/pcap/*
 *.log
