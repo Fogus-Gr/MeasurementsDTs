@@ -1,0 +1,37 @@
+name: Smoke Tests
+
+on:
+  pull_request:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up micromamba
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: hpe
+          create-args: >-
+            python=3.8.10
+
+      - name: Install PyTorch and requirements (README-aligned)
+        shell: bash -l {0}
+        run: |
+          micromamba install -y -n hpe pytorch==2.4.1 torchvision==0.19.1 -c pytorch
+          micromamba run -n hpe conda install --file requirements.txt -y || micromamba run -n hpe pip install -r requirements.txt
+          # Build AlphaPose extensions if possible (non-fatal in CI)
+          if [ -x models/AlphaPose/build_extensions.sh ]; then
+            micromamba run -n hpe bash models/AlphaPose/build_extensions.sh || true
+          fi
+
+      - name: Run smoke tests (CPU)
+        shell: bash -l {0}
+        run: |
+          micromamba run -n hpe bash dev_tools/smoke_test.sh CPU hpe
+        env:
+          PYTHONUNBUFFERED: '1'

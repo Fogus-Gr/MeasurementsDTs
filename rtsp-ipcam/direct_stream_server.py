@@ -77,22 +77,38 @@ class H264StreamHandler(BaseHTTPRequestHandler):
                     'ffmpeg',
                     '-re',
                     '-i', self.video_path,
-                    '-c:v', 'copy',  # or libx264 if re-encoding is needed
-                    '-f', 'mpegts',
+                    '-c:v', 'libx264',  # or 'copy' to avoid re-encoding
+                    '-vf', 'scale=1280:720',  # Optional: scale video to 720p
+                    '-b:v', '8M',  # 8 Mbps bitrate
+                    #'-maxrate', '10M',
+                    #'-bufsize', '16M',
+                    '-g', '48',
+                    '-keyint_min', '48',
+                    #'-profile:v', 'high',
+                    #'-pix_fmt', 'yuv420p',
+                    #'-realtime', '1',
+                    '-preset', 'veryfast',
+                    '-tune', 'zerolatency',                    
+                    '-f', 'flv',  # Use FLV format for better compatibility
                     '-'
                 ]
-                # New command: re-encode to H.264 at 4 Mbps for realistic IP camera emulation
+
+                # For more webcam-like behavior:
+
+
                 # cmd = [
                 #     'ffmpeg',
                 #     '-re',
                 #     '-i', self.video_path,
-                #     '-c:v', 'libx264',
-                #     '-b:v', '4M',  # 4 Mbps bitrate
-                #     '-preset', 'veryfast',
-                #     '-tune', 'zerolatency',
-                #     '-f', 'mpegts',
+                #     '-f', 'mjpeg',              # MJPEG codec (more webcam-like)
+                #     '-q:v', '3',                # Quality setting (2-5 for webcams)
+                #     '-r', '30',                 # 30 FPS (webcam standard)
+                #     '-vf', 'scale=1280:720',    # 720p resolution
+                #     '-f', 'mjpeg',              # MJPEG format
                 #     '-'
                 # ]
+
+                
                 
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 ffmpeg_stderr = []

@@ -42,3 +42,6 @@ ffmpeg_hpe/results_*
 rtsp-ipcam/.DS_Store
 .DS_Store
 .aider*
+*.mp4
+AGENTS.md
+branch-diff_cuda-dev_vs_feat-ov-epyc-4vcpu.md
