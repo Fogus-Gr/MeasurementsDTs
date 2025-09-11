@@ -18,7 +18,11 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
 
 # Default to a relative path from the script directory
-video_path = os.path.join(SCRIPT_DIR, "videos/ultimatum/hd_00_00.mp4")
+#video_path = os.path.join(SCRIPT_DIR, "videos/ultimatum/hd_00_00.mp4")
+
+video_path = os.path.join(SCRIPT_DIR, "../video_squat.mp4")
+
+
 
 # Add these global variables at the top (after video_path)
 video_info = {
@@ -26,6 +30,53 @@ video_info = {
     "fps": "N/A",
     "frame_count": "N/A"
 }
+
+def initialize_video_info():
+    """Initialize video information at server startup"""
+    global video_path, video_info
+
+    print(f"[INFO] Initializing video info for: {video_path}")
+
+    # Check if file exists
+    if not os.path.exists(video_path):
+        print(f"[WARNING] Video file not found: {video_path}")
+        return
+
+    # Try to open video and get properties
+    cap = cv2.VideoCapture(video_path)
+
+    if not cap.isOpened():
+        print(f"[WARNING] Failed to open video file: {video_path}")
+        return
+
+    # Get video properties
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    # Validate and set defaults if needed
+    if width <= 0 or height <= 0:
+        print("[WARNING] Invalid video dimensions, using defaults")
+        width, height = 640, 480
+
+    if fps <= 0:
+        print("[WARNING] FPS not found or invalid, defaulting to 30 FPS")
+        fps = 30
+
+    if frame_count <= 0:
+        print("[WARNING] Frame count not found or invalid")
+        frame_count = "Unknown"
+
+    # Update video_info
+    video_info["resolution"] = f"{width}x{height}"
+    video_info["fps"] = f"{fps:.2f}"
+    video_info["frame_count"] = str(frame_count)
+
+    print(f"[INFO] Video info initialized: {video_info}")
+
+    # Clean up
+    cap.release()
 
 def generate_test_pattern():
     """Generate a test pattern when no video is available"""
@@ -80,23 +131,12 @@ def generate_frames():
                        b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
                 time.sleep(0.5)  # Update twice per second
         else:
-            # Get video info
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            # Video properties are already initialized at startup
+            # Get FPS for frame timing (fallback to 30 if not available)
             fps = cap.get(cv2.CAP_PROP_FPS)
-            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-            if width <= 0 or height <= 0:
-                width, height = 640, 480  # or whatever your default is
             if fps <= 0:
                 print("[WARNING] FPS not found or invalid. Defaulting to 30 FPS.")
                 fps = 30
-            if frame_count <= 0:
-                frame_count = "Unknown"
-
-            video_info["resolution"] = f"{width}x{height}"
-            video_info["fps"] = f"{fps:.2f}"
-            video_info["frame_count"] = str(frame_count)
 
             first_time = True
             frame_counter = 0
@@ -178,7 +218,10 @@ if __name__ == "__main__":
     if args.video:
         video_path = args.video
         print(f"[INFO] Using video path from command line: {video_path}")
-    
+
+    # Initialize video information at startup
+    initialize_video_info()
+
     print(f"[INFO] Starting server with video: {video_path}")
     print(cv2.getBuildInformation())
     app.run(host="0.0.0.0", port=8089, threaded=True)

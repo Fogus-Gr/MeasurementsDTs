@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 
 # Get video path from environment variable with fallback
-video_path = os.environ.get("VIDEO_PATH", "/home/user/MeasurementsDTs/videos/ultimatum/hd_00_00.mp4")
+video_path = os.environ.get("VIDEO_PATH", "hd_00_00_8M_trimmed_25fps.mp4")
 logging.info(f"Using video path: {video_path}")
 
 # Log path information for debugging
@@ -34,36 +34,30 @@ except Exception as e:
     logging.error(f"Error initializing video: {e}")
 
 def generate_frames():
-    """Generate video frames for streaming"""
+    """Generate video frames for streaming (plays video once, no looping)"""
     frame_count = 0
-    loop_count = 0
     first_frame = True
-    
+
     while True:
         if not cap or not cap.isOpened():
             logging.error("Video capture not available")
             break
-            
+
         success, frame = cap.read()
         if not success:
-            # Video ended, reset to beginning (key improvement #2)
-            loop_count += 1
-            logging.info(f"Video loop {loop_count} completed, restarting...")
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            continue
-            
+            # Video ended, stop streaming
+            logging.info("Video playback completed - stream ended")
+            break
+
         frame_count += 1
         if first_frame:
-            logging.info(f"First frame sent to client")
+            logging.info("Video stream started")
             first_frame = False
-            
-        if frame_count % 100 == 0:  # Log every 100 frames
-            logging.info(f"Streaming frame {frame_count}")
-            
+
         # Convert frame to JPEG
         ret, buffer = cv2.imencode('.jpg', frame)
         frame_bytes = buffer.tobytes()
-        
+
         # Yield frame in MJPEG format
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
@@ -79,9 +73,30 @@ def video_feed():
 def index():
     return '''
     <html>
+      <head>
+        <title>Video Stream Player</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }
+          .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
+          h2 { color: #333; text-align: center; }
+          .status { background: #e8f5e8; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
+          .note { background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
+          img { display: block; margin: 0 auto; border: 2px solid #ddd; border-radius: 5px; }
+        </style>
+      </head>
       <body>
-        <h2>Video Stream Server</h2>
-        <img src="/video_feed" width="640" />
+        <div class="container">
+          <h2>▶️ Video Stream Player</h2>
+          <div class="status">
+            <strong>Status:</strong> Ready to stream<br>
+            <strong>Source:</strong> Video file playback<br>
+            <strong>Protocol:</strong> MJPEG over HTTP
+          </div>
+          <div class="note">
+            <strong>Note:</strong> Video plays once and stops when finished (no looping)
+          </div>
+          <img src="/video_feed" width="640" alt="Video stream" />
+        </div>
       </body>
     </html>
     '''
