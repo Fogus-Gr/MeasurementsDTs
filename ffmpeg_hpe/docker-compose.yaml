@@ -63,6 +63,7 @@ services:
     volumes:
       - ./results:/output:rw
       - ../videos:/videos:ro
+    shm_size: 8gb  # Adjust based on your model requirements
     healthcheck:
       test: ["CMD", "pgrep", "-f", "python.*main.py"]
       interval: 30s
