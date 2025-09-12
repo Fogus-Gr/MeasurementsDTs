@@ -179,6 +179,12 @@ class BaseHPE(ABC):
         pass
     
     def main_loop(self):
+        # Load model if not already loaded
+        if not hasattr(self, 'model') or self.model is None:
+            print("Loading model...")
+            self.load_model()
+            print("Model loaded successfully!")
+
         frame_number = 0
 
         if self.input_type == "image":

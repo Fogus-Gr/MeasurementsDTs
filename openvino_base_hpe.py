@@ -1,7 +1,13 @@
+import asyncio
+import concurrent.futures
+from queue import Queue
+import threading
+import time
 from pathlib import Path
 import os
 import numpy as np
 import cv2
+import torch
 
 from base_hpe import BaseHPE
 from base_hpe import Body
@@ -47,6 +53,7 @@ MODEL_CONFIGS = {
 }
 
 class OpenVINOBaseHPE(BaseHPE):
+    """Base OpenVINO Human Pose Estimation class"""
     LINES_BODY = [
         [4,2], [2,0], [0,1], [1,3],
         [10,8], [8,6], [6,5], [5,7], [7,9],
@@ -54,9 +61,8 @@ class OpenVINOBaseHPE(BaseHPE):
         [12,14], [14,16], [11,13], [13,15]
     ]
 
-    # VPS-friendly knobs: ov_threads / ov_mode / ov_streams
     def __init__(self, model_type, device="CPU", ov_threads=None, ov_mode=None, ov_streams=None, **kwargs):
-        if model_type not in MODEL_CONFIGS:  # BUGFIX: check arg, not self.model_type
+        if model_type not in MODEL_CONFIGS:
             raise ValueError(f"Unsupported model type: {model_type}. Choose from: {list(MODEL_CONFIGS.keys())}")
 
         self.model_type = model_type
@@ -64,10 +70,9 @@ class OpenVINOBaseHPE(BaseHPE):
         self.device = device
 
         # Defaults via ENV (so main.py changes are optional)
-        # 4-vCPU VPS: leave ~1 for decode/IO -> 3 for inference
         env_threads = os.getenv("OV_THREADS")
-        env_mode = os.getenv("OV_MODE")          # "throughput" or "latency"
-        env_streams = os.getenv("OV_STREAMS")    # int or empty
+        env_mode = os.getenv("OV_MODE")
+        env_streams = os.getenv("OV_STREAMS")
 
         self.ov_threads = int(ov_threads if ov_threads is not None else (env_threads or 3))
         self.ov_mode = (ov_mode or env_mode or "throughput").lower()
@@ -78,32 +83,31 @@ class OpenVINOBaseHPE(BaseHPE):
             self.device = "CPU"
 
         self.pd_w, self.pd_h = self.model_cfg["input_size"]
-
         super().__init__(**kwargs)
 
     def _init_opencv_video_capture(self, input_src):
         """Initialize OpenCV video capture for fallback when PyNvCodec is not available."""
-        if input_src.isdigit():
-            # Webcam input
+        # Handle both string and integer inputs
+        if isinstance(input_src, str) and input_src.isdigit():
             self.cap = cv2.VideoCapture(int(input_src))
+        elif isinstance(input_src, int):
+            self.cap = cv2.VideoCapture(input_src)
         else:
-            # Video file or HTTP stream
             self.cap = cv2.VideoCapture(input_src)
 
         if not self.cap.isOpened():
             raise ValueError(f"Failed to open video capture: {input_src}")
 
-        # Get video properties
         self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.video_fps = self.cap.get(cv2.CAP_PROP_FPS)
         if self.video_fps == 0:
-            self.video_fps = 25  # Default FPS
+            self.video_fps = 25
 
         print(f"Video capture initialized: {self.img_w}x{self.img_h} @ {self.video_fps} FPS")
 
     def _configure_core(self, core):
-        # 2025.x API: use openvino.properties
+        """Configure OpenVINO core with performance settings"""
         from openvino import properties as props
 
         perf = (
@@ -114,7 +118,7 @@ class OpenVINOBaseHPE(BaseHPE):
 
         cpu_props = {
             props.hint.performance_mode: perf,
-            props.inference_num_threads: int(self.ov_threads),   # e.g., 3 on 4-vCPU VPS
+            props.inference_num_threads: int(self.ov_threads),
             props.hint.enable_cpu_pinning: True,
             props.hint.enable_hyper_threading: False,
         }
@@ -123,50 +127,41 @@ class OpenVINOBaseHPE(BaseHPE):
 
         core.set_property("CPU", cpu_props)
 
-        from openvino import properties as props
         print("[OV] effective:",
             "mode=", core.get_property("CPU", props.hint.performance_mode),
             "threads=", core.get_property("CPU", props.inference_num_threads),
             "streams=", core.get_property("CPU", props.num_streams))
 
     def load_model(self):
+        """Load OpenVINO model"""
         print(f"Loading {self.model_type} model...")
 
         xml_path = self.model_cfg["path"]
-
-        # --- plugin config (sanitize legacy keys) ---
         plugin_config = get_user_config(self.device, '', None) or {}
-        for k in [
-            "PERFORMANCE_HINT", "CPU_THREADS_NUM", "CPU_THROUGHPUT_STREAMS",
-            "INFERENCE_NUM_THREADS", "NUM_STREAMS", "ENABLE_CPU_PINNING",
-            "ENABLE_HYPER_THREADING"
-        ]:
+
+        # Remove legacy keys
+        for k in ["PERFORMANCE_HINT", "CPU_THREADS_NUM", "CPU_THROUGHPUT_STREAMS",
+                  "INFERENCE_NUM_THREADS", "NUM_STREAMS", "ENABLE_CPU_PINNING",
+                  "ENABLE_HYPER_THREADING"]:
             plugin_config.pop(k, None)
 
-        # --- configure CPU once (your _configure_core uses openvino.properties) ---
-        core = create_core()  # ov.Core from model_api
+        core = create_core()
         self._configure_core(core)
 
-        # --- adapter ---
         model_adapter = OpenvinoAdapter(
             core, xml_path,
             device=self.device,
             plugin_config=plugin_config,
             max_num_requests=0,
-            # model_parameters={"input_layouts": {"data": "NCHW"}}  # only if you truly need it
         )
 
-        # Print detailed network information like MoveNet
         print("Reading network")
-        # Try to get network info from the adapter
         try:
-            # Check if we can access the model through the adapter
             if hasattr(model_adapter, '_model'):
                 network = model_adapter._model
             elif hasattr(model_adapter, 'model'):
                 network = model_adapter.model
             else:
-                # Fallback: try to read the model directly
                 network = core.read_model(xml_path)
 
             print(f"Input info: {network.inputs}")
@@ -178,34 +173,29 @@ class OpenVINOBaseHPE(BaseHPE):
                 print(f"Output blob: {output_tensor.get_any_name()} - shape: {output_tensor.shape}")
         except Exception as e:
             print(f"Could not read detailed network info: {e}")
-            print("Model adapter outputs:", list(model_adapter.get_output_layers().keys()))
 
-        print(f"DEBUG: Model adapter outputs before ImageModel.create_model: {model_adapter.get_output_layers().keys()}")
+        print(f"DEBUG: Model adapter outputs: {list(model_adapter.get_output_layers().keys())}")
 
-        # compute aspect ratio safely; fallback to 1.0 if unknown
         w = int(self.img_w or 0)
         h = int(self.img_h or 0)
         aspect_ratio = (w / h) if (w > 0 and h > 0) else 1.0
 
         if self.model_type == "openpose":
-            # OPENPOSE (intel/human-pose-estimation-0001) wants a tuple (W,H)
-            # human-pose-estimation-0001: target_size = HEIGHT (int)
-            height_int = int(self.model_cfg["input_size"][1])  # 256
+            height_int = int(self.model_cfg["input_size"][1])
             config = {
-                "target_size": height_int,                # int HEIGHT
-                "aspect_ratio": float(aspect_ratio),      # width / height of the SOURCE image
+                "target_size": height_int,
+                "aspect_ratio": float(aspect_ratio),
                 "confidence_threshold": self.score_thresh,
-                "use_pooled_heatmaps": False,             # 0001 has no 'pooled_heatmaps' output
-                "upsample_ratio": 4,                      # int (your file expects int)
-                # no padding_mode / delta for openpose
+                "use_pooled_heatmaps": False,
+                "upsample_ratio": 4,
             }
-        else: # AE/HigherHRNet blocks as-is
+        else:
             is_ae = (self.model_cfg["architecture"] == "HPE-associative-embedding")
-            size_int = int(self.model_cfg["input_size"][0])  # 288 for 0005
+            size_int = int(self.model_cfg["input_size"][0])
 
             config = {
                 "target_size": size_int,
-                "aspect_ratio": float(aspect_ratio),          # <-- required, not None
+                "aspect_ratio": float(aspect_ratio),
                 "confidence_threshold": self.score_thresh,
             }
 
@@ -214,6 +204,7 @@ class OpenVINOBaseHPE(BaseHPE):
 
             if self.model_type == "higherhrnet":
                 config["delta"] = 0.5
+
         architecture = self.model_cfg["architecture"]
         self.model = ImageModel.create_model(architecture, model_adapter, config)
         self.model.log_layers_info()
@@ -221,37 +212,36 @@ class OpenVINOBaseHPE(BaseHPE):
         print("Loading completed")
 
     def run_model(self, padded):
+        """Run inference on preprocessed frame"""
         inputs, preprocessing_meta = self.model.preprocess(padded)
         raw_result = self.model.infer_sync(inputs)
 
-        results = None  # safe default
+        results = None
         if raw_result:
             results = self.model.postprocess(raw_result, preprocessing_meta)
 
-        poses = []  # safe default
-        scores = []  # safe default
+        poses = []
+        scores = []
         if results:
             poses, scores = results
 
         return poses, scores
 
     def postprocess(self, predictions):
-        # predictions is now (poses, scores) from run_model
+        """Postprocess model predictions"""
         poses, scores = predictions if isinstance(predictions, tuple) else (predictions, None)
 
         bodies = []
 
         for pose in poses:
-            keypoints_xy = pose[:, :2]  # (17,2)
-            keypoints_scores = pose[:, 2]  # (17,)
+            keypoints_xy = pose[:, :2]
+            keypoints_scores = pose[:, 2]
 
             score = float(np.mean(keypoints_scores))
             if score > self.score_thresh:
-                # Depad & rescale keypoints to original image size
-                keypoints_xy_orig = keypoints_xy.copy()
-
                 unpadded_w = self.img_w + self.padding.w
                 unpadded_h = self.img_h + self.padding.h
+                keypoints_xy_orig = keypoints_xy.copy()
                 keypoints_xy_orig[:, 0] *= (unpadded_w / self.pd_w)
                 keypoints_xy_orig[:, 1] *= (unpadded_h / self.pd_h)
 
@@ -274,3 +264,250 @@ class OpenVINOBaseHPE(BaseHPE):
                 bodies.append(body)
 
         return bodies
+
+class AsyncOpenVINOBaseHPE(OpenVINOBaseHPE):
+    """Async version of OpenVINO HPE with frame buffering and parallel processing"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Async components
+        self.frame_queue = asyncio.Queue(maxsize=5)  # Buffer up to 5 frames
+        self.result_queue = asyncio.Queue()
+        self.processing_task = None
+        self.display_task = None
+        self.capture_task = None
+
+        # Thread pool for CPU-bound operations
+        self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=3)
+
+        # Performance monitoring
+        self.frame_drops = 0
+        self.last_frame_time = 0
+
+    async def start_async_pipeline(self):
+        """Start the async processing pipeline"""
+        print("[ASYNC] Starting async processing pipeline...")
+        print("[ASYNC] Pipeline started successfully")
+        # Tasks will be created in the main async function to avoid event loop issues
+
+    async def stop_async_pipeline(self):
+        """Stop the async processing pipeline"""
+        print("[ASYNC] Stopping async processing pipeline...")
+
+        # Cancel all tasks
+        tasks_to_cancel = [t for t in [self.processing_task, self.display_task, self.capture_task] if t]
+
+        for task in tasks_to_cancel:
+            task.cancel()
+
+        # Wait for cancellation
+        try:
+            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+        except asyncio.CancelledError:
+            pass
+
+        # Shutdown thread pool
+        self.thread_pool.shutdown(wait=True)
+
+        print(f"[ASYNC] Pipeline stopped. Frame drops: {self.frame_drops}")
+
+    async def run_webcam_async(self):
+        """Async webcam capture with frame dropping"""
+        print("[ASYNC] Starting async webcam capture...")
+
+        try:
+            while True:
+                # Capture frame in thread (non-blocking) - Python 3.9+ recommended approach
+                ok, frame = await asyncio.to_thread(self.cap.read)
+
+                if not ok:
+                    print("[ASYNC] Webcam capture ended")
+                    break
+
+                current_time = time.time()
+
+                # Frame rate limiting (optional)
+                if current_time - self.last_frame_time < 1/30:  # Max 30 FPS
+                    await asyncio.sleep(0.001)  # Small delay
+                    continue
+
+                self.last_frame_time = current_time
+
+                # Try to queue frame
+                try:
+                    await self.frame_queue.put(frame)
+                except asyncio.QueueFull:
+                    # Drop frame to prevent latency buildup
+                    self.frame_drops += 1
+                    if self.frame_drops % 100 == 0:  # Log every 100 drops
+                        print(f"[ASYNC] Frame drops: {self.frame_drops}")
+
+        except Exception as e:
+            print(f"[ASYNC] Webcam capture error: {e}")
+        finally:
+            # Signal end of capture
+            await self.frame_queue.put(None)  # Sentinel value
+
+    async def _process_frames_async(self):
+        """Background frame processing pipeline"""
+        frame_number = 0
+
+        try:
+            while True:
+                # Get frame from queue
+                frame = await self.frame_queue.get()
+
+                # Check for sentinel (end of stream)
+                if frame is None:
+                    break
+
+                # Process frame
+                result = await self._process_single_frame_async(frame, frame_number)
+                frame_number += 1
+
+                # Queue result for display
+                await self.result_queue.put(result)
+
+        except asyncio.CancelledError:
+            print("[ASYNC] Frame processing cancelled")
+        except Exception as e:
+            print(f"[ASYNC] Frame processing error: {e}")
+
+    async def _process_single_frame_async(self, frame, frame_number):
+        """Process single frame with OpenVINO inference"""
+        start_time = time.time()
+
+        try:
+            # Convert to numpy if needed
+            if isinstance(frame, torch.Tensor):
+                frame_np = frame.cpu().numpy()
+                frame_np = cv2.cvtColor(frame_np, cv2.COLOR_RGB2BGR)
+            else:
+                frame_np = frame
+
+            # Preprocessing (pad and resize)
+            padded = await asyncio.to_thread(self.pad_and_resize, frame_np)
+
+            # OpenVINO inference (in thread pool to avoid blocking)
+            predictions = await asyncio.to_thread(self.run_model, padded)
+
+            # Postprocessing
+            bodies = await asyncio.to_thread(self.postprocess, predictions)
+
+            # Calculate timing
+            processing_time_ms = (time.time() - start_time) * 1000
+
+            return {
+                'frame': frame_np,
+                'bodies': bodies,
+                'processing_time': processing_time_ms,
+                'frame_number': frame_number,
+                'timestamp': time.time()
+            }
+
+        except Exception as e:
+            print(f"[ASYNC] Frame processing error: {e}")
+            return None
+
+    async def _display_results_async(self):
+        """Background result display and rendering"""
+        try:
+            while True:
+                # Get result from queue
+                result = await self.result_queue.get()
+
+                if result is None:
+                    break
+
+                # Update performance stats
+                self.processing_times.append(result['processing_time'])
+                if len(self.processing_times) > self.max_processing_times_len:
+                    self.processing_times.popleft()
+
+                # Calculate FPS
+                if self.processing_times:
+                    mean_time = np.mean(self.processing_times)
+                    fps = 1000 / mean_time if mean_time > 0 else 0
+                else:
+                    fps = 0
+
+                # Render frame with results
+                display_frame = result['frame'].copy()
+
+                # Draw poses
+                if hasattr(self, 'LINES_BODY') and result['bodies']:
+                    from utils.visualizer import render
+                    render(display_frame, result['bodies'], self.LINES_BODY,
+                          self.score_thresh, self.show_scores, self.show_bounding_box)
+
+                # Draw FPS and timing info
+                if fps > 0:
+                    cv2.putText(
+                        display_frame,
+                        f"ASYNC FPS: {fps:.1f} | Time: {result['processing_time']:.1f}ms",
+                        (20, 40), cv2.FONT_HERSHEY_COMPLEX, 0.7, (0, 255, 0), 2
+                    )
+
+                # Display frame (in thread to avoid blocking)
+                await asyncio.to_thread(cv2.imshow, 'Async HPE', display_frame)
+
+                # Handle keyboard input
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q'):
+                    break
+
+        except asyncio.CancelledError:
+            print("[ASYNC] Display cancelled")
+        except Exception as e:
+            print(f"[ASYNC] Display error: {e}")
+
+    def main_loop_async(self):
+        """Main async entry point"""
+        async def async_main():
+            try:
+                # Load model (synchronous for now)
+                self.load_model()
+
+                print("[ASYNC] Starting async processing pipeline...")
+
+                # Create background tasks in the same event loop context
+                self.processing_task = asyncio.create_task(self._process_frames_async())
+                self.display_task = asyncio.create_task(self._display_results_async())
+
+                print("[ASYNC] Pipeline started successfully")
+
+                # Run webcam capture
+                if self.input_type == "webcam":
+                    await self.run_webcam_async()
+                else:
+                    print(f"[ASYNC] Async processing not implemented for {self.input_type}")
+
+            except KeyboardInterrupt:
+                print("[ASYNC] Keyboard interrupt received")
+            except Exception as e:
+                print(f"[ASYNC] Main loop error: {e}")
+            finally:
+                # Cleanup
+                await self.stop_async_pipeline()
+                cv2.destroyAllWindows()
+
+        # Run async main
+        asyncio.run(async_main())
+
+# Example usage function
+def run_async_openvino_hpe():
+    """Example of how to use AsyncOpenVINOBaseHPE"""
+    hpe = AsyncOpenVINOBaseHPE(
+        model_type="efficienthrnet1",
+        device="CPU",
+        input_src="0",  # Webcam
+        ov_threads=3,
+        ov_mode="throughput"
+    )
+
+    # Run async processing
+    hpe.main_loop_async()
+
+if __name__ == "__main__":
+    run_async_openvino_hpe()
