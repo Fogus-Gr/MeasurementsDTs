@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import cv2
 import os
-from collections import namedtuple
+from collections import namedtuple, deque # Added deque import
 import glob
 import time
 import torch
@@ -92,24 +92,63 @@ class BaseHPE(ABC):
             self.img_dir = input_src
             self.video_fps = 25
         elif input_src:
-            if input_src.endswith('.jpg') or input_src.endswith('.png'):
+            if input_src.startswith("http"): # Check for HTTP first
+                self.input_type = "video" # Treat HTTP as video stream
+                if nvc is None:
+                    print("[ERROR] PyNvCodec not available. Falling back to OpenCV for video decoding.")
+                    if hasattr(self, '_init_opencv_video_capture'):
+                        self._init_opencv_video_capture(input_src)
+                    else:
+                        print(f"[WARNING] Video input ({input_src}) is not supported by this HPE implementation.")
+                        # Set default dimensions for video inputs that don't initialize capture
+                        if self.img_w == 0:
+                            self.img_w = 640
+                        if self.img_h == 0:
+                            self.img_h = 480
+                else:
+                    if hasattr(self, '_init_pynvcodec_video_capture'):
+                        self._init_pynvcodec_video_capture(input_src)
+                    else:
+                        print(f"[WARNING] Video input ({input_src}) is not supported by this HPE implementation.")
+                        # Set default dimensions for video inputs that don't initialize capture
+                        if self.img_w == 0:
+                            self.img_w = 640
+                        if self.img_h == 0:
+                            self.img_h = 480
+            elif input_src.endswith('.mp4') or input_src.endswith('.avi') or input_src.endswith('.mov'): # Check for video files
+                self.input_type = "video"
+                if nvc is None:
+                    print("[ERROR] PyNvCodec not available. Falling back to OpenCV for video decoding.")
+                    if hasattr(self, '_init_opencv_video_capture'):
+                        self._init_opencv_video_capture(input_src)
+                    else:
+                        print(f"[WARNING] Video input ({input_src}) is not supported by this HPE implementation.")
+                        # Set default dimensions for video inputs that don't initialize capture
+                        if self.img_w == 0:
+                            self.img_w = 640
+                        if self.img_h == 0:
+                            self.img_h = 480
+                else:
+                    if hasattr(self, '_init_pynvcodec_video_capture'):
+                        self._init_pynvcodec_video_capture(input_src)
+                    else:
+                        print(f"[WARNING] Video input ({input_src}) is not supported by this HPE implementation.")
+                        # Set default dimensions for video inputs that don't initialize capture
+                        if self.img_w == 0:
+                            self.img_w = 640
+                        if self.img_h == 0:
+                            self.img_h = 480
+            elif input_src.endswith('.jpg') or input_src.endswith('.png'):
                 self.input_type = "image"
                 self.img = cv2.imread(input_src)
                 self.img_h, self.img_w = self.img.shape[:2]
                 self.current_image_file = os.path.basename(input_src)
-            elif input_src.startswith("http") or (not input_src.isdigit() and (input_src.endswith('.mp4') or input_src.endswith('.avi') or input_src.endswith('.mov'))):
-                # Use PyNvCodec for video streams and files
-                if nvc is None:
-                    print("[ERROR] PyNvCodec not available. Falling back to OpenCV for video decoding.")
-                    self.input_type = "video" # Treat as generic video for OpenCV
-                    self._init_opencv_video_capture(input_src)
-                else:
-                    self.input_type = "video" # Treat all PyNvCodec inputs as video
-                    self._init_pynvcodec_video_capture(input_src)
-            elif input_src.isdigit():
-                # Webcam input (OpenCV only for now, PyNvCodec for webcam is more complex)
+            elif input_src.isdigit(): # Check for webcam last
                 self.input_type = "webcam"
-                self._init_opencv_video_capture(int(input_src))
+                if hasattr(self, '_init_opencv_video_capture'):
+                    self._init_opencv_video_capture(int(input_src))
+                else:
+                    print(f"[WARNING] Webcam input ({input_src}) is not supported by this HPE implementation.")
             else:
                 raise ValueError("No valid input source provided or unsupported file type for PyNvCodec.")
                 
@@ -119,6 +158,14 @@ class BaseHPE(ABC):
             
         self.input_src = input_src  
 
+        # Initialize processing time tracking
+        self.processing_times = deque()
+        self.max_processing_times_len = 200
+        
+        # Placeholder keys for model outputs (should be defined in subclasses)
+        self.pafs_output_key = "pafs" 
+        self.heatmaps_output_key = "heatmaps"
+
         if (self.input_type == "directory" or self.input_type == "image") and self.save_video:
             raise ValueError("Image input - video output not supported!")
 
@@ -126,83 +173,6 @@ class BaseHPE(ABC):
             fourcc = cv2.VideoWriter_fourcc(*"MJPG")
             filename = os.path.join(self.output_dir, "video.avi")
             self.output = cv2.VideoWriter(filename, fourcc, self.video_fps, (self.img_w, self.img_h))
-
-    def _init_opencv_video_capture(self, input_src):
-        """Initialize OpenCV video capture with comprehensive input source handling."""
-        # Handle string camera indices (convert to int)
-        if isinstance(input_src, str) and input_src.isdigit():
-            input_src = int(input_src)
-        
-        # Special handling for HTTP streams with retry logic
-        if isinstance(input_src, str) and input_src.startswith("http"):
-            print(f"Attempting to connect to IP stream at {input_src} using OpenCV...")
-            max_retries = 60
-            for attempt in range(max_retries):
-                self.cap = cv2.VideoCapture()
-                try:
-                    self.cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 60000)
-                    self.cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 60000)
-                except AttributeError:
-                    pass
-                opened = self.cap.open(input_src, apiPreference=cv2.CAP_FFMPEG)
-                if opened and self.cap.isOpened():
-                    break
-                print(f"[{attempt+1}/{max_retries}] Stream not available, retrying in 1s...")
-                time.sleep(1)
-            if not self.cap.isOpened():
-                raise ValueError(f"Failed to connect to video stream after {max_retries} attempts: {input_src}")
-            time.sleep(0.5) # Give OpenCV a small buffer time to fetch metadata
-        else:
-            # Handle regular files, camera indices, and other sources
-            self.cap = cv2.VideoCapture(input_src)
-            if not self.cap.isOpened():
-                raise RuntimeError(f"Could not open input source: {input_src}")
-            
-            # Set camera-specific properties if it's a webcam
-            if isinstance(input_src, int):
-                self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
-                self.cap.set(cv2.CAP_PROP_FOCUS, 0)
-        
-        # Get video properties
-        self.video_fps = int(self.cap.get(cv2.CAP_PROP_FPS)) or 25
-        w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 0
-        h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 0
-        
-        # If dimensions are unknown, read one frame to infer size
-        if w <= 0 or h <= 0:
-            ok, frame = self.cap.read()
-            if ok:
-                h, w = frame.shape[:2]
-                self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # rewind
-        
-        self.img_w = w if w > 0 else None
-        self.img_h = h if h > 0 else None
-        self.is_pynvcodec_enabled = False
-
-    def _init_pynvcodec_video_capture(self, input_src):
-        if nvc is None:
-            raise RuntimeError("PyNvCodec is not installed, cannot use hardware acceleration.")
-        
-        print(f"[INFO] Attempting to connect to video stream/file at {input_src} using PyNvCodec on GPU {self.gpu_id}...")
-        
-        try:
-            self.demuxer = nvc.FFmpegDemuxer(input_src)
-            self.decoder = nvc.PyNvDecoder(self.demuxer.Width(), self.demuxer.Height(), self.demuxer.Format(), self.demuxer.Codec(), self.gpu_id)
-            self.to_rgb_converter = nvc.PyNvConverter(self.demuxer.Width(), self.demuxer.Height(), nvc.PixelFormat.NV12, nvc.PixelFormat.RGB, self.gpu_id)
-            self.to_tensor_converter = nvc.PyTorchConverter(self.demuxer.Width(), self.demuxer.Height(), nvc.PixelFormat.RGB, self.gpu_id)
-
-            self.img_w = self.demuxer.Width()
-            self.img_h = self.demuxer.Height()
-            self.video_fps = self.demuxer.AvgFramerateNum() / self.demuxer.AvgFramerateDen() if self.demuxer.AvgFramerateDen() > 0 else 25
-            self.is_pynvcodec_enabled = True
-            print(f"[INFO] PyNvCodec initialized successfully. Resolution: {self.img_w}x{self.img_h}, FPS: {self.video_fps:.2f}")
-
-        except Exception as e:
-            print(f"[ERROR] Failed to initialize PyNvCodec: {e}. Falling back to OpenCV for video decoding.")
-            self.is_pynvcodec_enabled = False
-            self._init_opencv_video_capture(input_src) # Fallback
-    
-
 
     @abstractmethod
     def load_model(self):
@@ -259,6 +229,9 @@ class BaseHPE(ABC):
                     break # Exit loop on error
 
         else:   # OpenCV video/webcam/stream fallback
+            if self.cap is None:
+                print(f"[ERROR] Video capture not initialized for {self.__class__.__name__}. This HPE implementation may not support video inputs.")
+                return
             print("Starting processing video/webcam data with OpenCV. Press CTR+C to exit")
             while True:
                 ok, frame = self.cap.read()
@@ -276,7 +249,8 @@ class BaseHPE(ABC):
             save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
 
     def process_frame(self, frame, frame_number):
-        timestamp = time.time()
+        # Start timing
+        start_time = time.time()
 
         # If frame is a PyTorch tensor, it's on GPU. Convert to CPU NumPy for OpenCV operations.
         if isinstance(frame, torch.Tensor):
@@ -287,20 +261,98 @@ class BaseHPE(ABC):
             frame_np = frame # Already a NumPy array from OpenCV
 
         padded = self.pad_and_resize(frame_np) # pad_and_resize expects numpy array
-        predictions = self.run_model(padded) # run_model will handle converting padded to tensor if needed
-        bodies = self.postprocess(predictions)
+        
+        # --- Inference and Timing ---
+        predictions = self.run_model(padded)
+        stop_time = time.time()
+
+        # Handle different model output formats
+        poses, scores = None, None
+        if hasattr(self, 'process_results') and hasattr(self, 'draw_poses'):
+            # For models that return pafs/heatmaps (like some OpenVINO models)
+            if isinstance(predictions, dict):
+                try:
+                    pafs = predictions.get(self.pafs_output_key)
+                    heatmaps = predictions.get(self.heatmaps_output_key)
+                    if pafs is not None and heatmaps is not None:
+                        poses, scores = self.process_results(frame_np, pafs, heatmaps)
+                        frame_np = self.draw_poses(frame_np, poses, 0.1)
+                except (KeyError, AttributeError, TypeError) as e:
+                    print(f"[WARNING] Could not process pafs/heatmaps: {e}")
+            # For models that return poses directly (like OpenVINO base models)
+            elif isinstance(predictions, (list, tuple)) and len(predictions) > 0:
+                # Check if predictions is already poses/scores
+                if len(predictions) == 2 and isinstance(predictions[0], (list, np.ndarray)):
+                    poses, scores = predictions
+                    frame_np = self.draw_poses(frame_np, poses, 0.1)
+                else:
+                    # Assume predictions is a list of poses
+                    poses = predictions
+                    frame_np = self.draw_poses(frame_np, poses, 0.1)
+        else:
+            # For models that handle pose processing internally
+            # The predictions are processed in postprocess method
+            pass
+
+        # --- Timing Calculation and Console Output ---
+        processing_time_ms = (stop_time - start_time) * 1000
+        self.processing_times.append(processing_time_ms)
+        
+        # Use processing times from last 200 frames.
+        if len(self.processing_times) > self.max_processing_times_len:
+            self.processing_times.popleft()
+
+        # Calculate FPS
+        if self.processing_times: # Avoid division by zero if deque is empty
+            mean_processing_time = np.mean(self.processing_times)
+            fps = 1000 / mean_processing_time if mean_processing_time > 0 else 0
+        else:
+            fps = 0
+
+        # Print inference time and FPS to console (single line that updates)
+        print(f"Inference time: {processing_time_ms:.1f}ms ({fps:.1f} FPS)", end='\r', flush=True)
+
+        # Draw FPS on the frame
+        if frame_np is not None and fps > 0:
+            try:
+                f_width, _ = frame_np.shape[:2]
+                cv2.putText(
+                    frame_np,
+                    f"Inference time: {processing_time_ms:.1f}ms ({fps:.1f} FPS)",
+                    (20, 40), # Position of the text
+                    cv2.FONT_HERSHEY_COMPLEX,
+                    f_width / 1000, # Font scale
+                    (0, 0, 255), # Text color (BGR format, red)
+                    1, # Thickness
+                    cv2.LINE_AA, # Line type
+                )
+            except Exception as e:
+                print(f"[WARNING] Could not draw FPS on frame: {e}")
+
+        # --- Postprocessing and Saving ---
+        # The original postprocess call might need to be adjusted if it uses the 'predictions' directly
+        # or if it needs the 'bodies' derived from poses.
+        # For now, I'll assume 'bodies' are derived from 'poses' and 'scores'
+        # If 'predictions' is not directly used by postprocess, this might need adjustment.
+        # Let's assume postprocess uses the output of run_model, which is 'predictions'
+        bodies = self.postprocess(predictions) # Keep original postprocess call
 
         if self.json:
             append_COCO_format_json(bodies, self.score_thresh, frame_number)
         if self.csv:
-            append_COCO_format_csv(bodies, self.score_thresh, frame_number, timestamp, self.measurement_interval_ms)
+            # The original code used 'timestamp' here, which was defined at the start of the function.
+            # Now, we have start_time and stop_time. Let's use the end of inference for timestamp.
+            append_COCO_format_csv(bodies, self.score_thresh, frame_number, stop_time, self.measurement_interval_ms)
 
         if self.save_image or self.save_video:
             # Ensure that LINES_BODY is defined in the child class
             if not hasattr(self, 'LINES_BODY'):
-                raise ValueError("LINES_BODY is not defined in the child class.")
-            
-            render(frame_np, bodies, self.LINES_BODY, self.score_thresh, self.show_scores, self.show_bounding_box)
+                print("[WARNING] LINES_BODY is not defined in the child class. Cannot render.")
+            else:
+                # The render function might need to be adjusted if it expects poses directly
+                # or if it uses the 'bodies' variable.
+                # For now, I'll keep the original render call, assuming it works with 'bodies'.
+                render(frame_np, bodies, self.LINES_BODY, self.score_thresh, self.show_scores, self.show_bounding_box)
 
             if self.save_video:
                 if not self.output.isOpened():

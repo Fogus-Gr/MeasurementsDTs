@@ -29,6 +29,27 @@ class MoveNetHPE(BaseHPE):
             print(f"[INFO] Model '{self.model_type}' is not supported on GPU. Falling back to CPU.")
             self.device = "CPU"
 
+    def _init_opencv_video_capture(self, input_src):
+        """Initialize OpenCV video capture for fallback when PyNvCodec is not available."""
+        if input_src.isdigit():
+            # Webcam input
+            self.cap = cv2.VideoCapture(int(input_src))
+        else:
+            # Video file or HTTP stream
+            self.cap = cv2.VideoCapture(input_src)
+
+        if not self.cap.isOpened():
+            raise ValueError(f"Failed to open video capture: {input_src}")
+
+        # Get video properties
+        self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.video_fps = self.cap.get(cv2.CAP_PROP_FPS)
+        if self.video_fps == 0:
+            self.video_fps = 25  # Default FPS
+
+        print(f"Video capture initialized: {self.img_w}x{self.img_h} @ {self.video_fps} FPS")
+
     def load_model(self):
         print("Loading MoveNetHPE model...")
         self.ie = Core()
@@ -55,7 +76,7 @@ class MoveNetHPE(BaseHPE):
         self.pd_exec_net = self.ie.compile_model(model=self.pd_net, device_name=self.device)
 
     def run_model(self, padded):
-        frame_nn = cv2.cvtColor(padded, cv2.COLOR_BGR2RGB).transpose(2,0,1).astype(np.float32)[None,] 
+        frame_nn = cv2.cvtColor(padded, cv2.COLOR_BGR2RGB).transpose(2,0,1).astype(np.float32)[None,]
 
         return self.pd_exec_net.infer_new_request({self.pd_input_blob: frame_nn})
     

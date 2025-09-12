@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import numpy as np
+import cv2
 
 from base_hpe import BaseHPE
 from base_hpe import Body
@@ -80,6 +81,27 @@ class OpenVINOBaseHPE(BaseHPE):
 
         super().__init__(**kwargs)
 
+    def _init_opencv_video_capture(self, input_src):
+        """Initialize OpenCV video capture for fallback when PyNvCodec is not available."""
+        if input_src.isdigit():
+            # Webcam input
+            self.cap = cv2.VideoCapture(int(input_src))
+        else:
+            # Video file or HTTP stream
+            self.cap = cv2.VideoCapture(input_src)
+
+        if not self.cap.isOpened():
+            raise ValueError(f"Failed to open video capture: {input_src}")
+
+        # Get video properties
+        self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.video_fps = self.cap.get(cv2.CAP_PROP_FPS)
+        if self.video_fps == 0:
+            self.video_fps = 25  # Default FPS
+
+        print(f"Video capture initialized: {self.img_w}x{self.img_h} @ {self.video_fps} FPS")
+
     def _configure_core(self, core):
         # 2025.x API: use openvino.properties
         from openvino import properties as props
@@ -133,6 +155,31 @@ class OpenVINOBaseHPE(BaseHPE):
             max_num_requests=0,
             # model_parameters={"input_layouts": {"data": "NCHW"}}  # only if you truly need it
         )
+
+        # Print detailed network information like MoveNet
+        print("Reading network")
+        # Try to get network info from the adapter
+        try:
+            # Check if we can access the model through the adapter
+            if hasattr(model_adapter, '_model'):
+                network = model_adapter._model
+            elif hasattr(model_adapter, 'model'):
+                network = model_adapter.model
+            else:
+                # Fallback: try to read the model directly
+                network = core.read_model(xml_path)
+
+            print(f"Input info: {network.inputs}")
+            print(f"Output info: {network.outputs}")
+
+            for input_tensor in network.inputs:
+                print(f"Input blob: {input_tensor.get_any_name()} - shape: {input_tensor.shape}")
+            for output_tensor in network.outputs:
+                print(f"Output blob: {output_tensor.get_any_name()} - shape: {output_tensor.shape}")
+        except Exception as e:
+            print(f"Could not read detailed network info: {e}")
+            print("Model adapter outputs:", list(model_adapter.get_output_layers().keys()))
+
         print(f"DEBUG: Model adapter outputs before ImageModel.create_model: {model_adapter.get_output_layers().keys()}")
 
         # compute aspect ratio safely; fallback to 1.0 if unknown
@@ -182,12 +229,16 @@ class OpenVINOBaseHPE(BaseHPE):
             results = self.model.postprocess(raw_result, preprocessing_meta)
 
         poses = []  # safe default
+        scores = []  # safe default
         if results:
             poses, scores = results
 
-        return poses
+        return poses, scores
 
-    def postprocess(self, poses):
+    def postprocess(self, predictions):
+        # predictions is now (poses, scores) from run_model
+        poses, scores = predictions if isinstance(predictions, tuple) else (predictions, None)
+
         bodies = []
 
         for pose in poses:
