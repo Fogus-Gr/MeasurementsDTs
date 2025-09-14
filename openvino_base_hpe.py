@@ -496,18 +496,29 @@ class AsyncOpenVINOBaseHPE(OpenVINOBaseHPE):
         asyncio.run(async_main())
 
 # Example usage function
-def run_async_openvino_hpe():
+def run_async_openvino_hpe(model_type="efficienthrnet1", device="CPU", input_src="0", **kwargs):
     """Example of how to use AsyncOpenVINOBaseHPE"""
     hpe = AsyncOpenVINOBaseHPE(
-        model_type="efficienthrnet1",
-        device="CPU",
-        input_src="0",  # Webcam
-        ov_threads=3,
-        ov_mode="throughput"
+        model_type=model_type,
+        device=device,
+        input_src=input_src,
+        ov_threads=kwargs.get('ov_threads', 3),
+        ov_mode=kwargs.get('ov_mode', 'throughput'),
+        **{k: v for k, v in kwargs.items() if k not in ['ov_threads', 'ov_mode']}
     )
 
     # Run async processing
     hpe.main_loop_async()
 
 if __name__ == "__main__":
-    run_async_openvino_hpe()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_type', type=str, default='efficienthrnet1', 
+                       choices=['openpose', 'efficienthrnet1', 'efficienthrnet2', 'efficienthrnet3', 'higherhrnet'])
+    parser.add_argument('--device', type=str, default='CPU', choices=['CPU', 'GPU'])
+    parser.add_argument('--input', type=str, default='0', help='Input source (webcam, video file, etc.)')
+    parser.add_argument('--ov_threads', type=int, default=3, help='OpenVINO threads')
+    parser.add_argument('--ov_mode', type=str, default='throughput', choices=['throughput', 'latency'])
+    
+    args = parser.parse_args()
+    run_async_openvino_hpe(**vars(args))
