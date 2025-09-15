@@ -198,3 +198,20 @@ Simply copy the entire content below, open a new Google Doc, and paste it. The f
 ### **Streamer Implementation Notes**
 
 The custom Flask server (`app_ffmpeg.py`) performed reliably, providing a steady MJPEG stream of the video file at the target resolution and framerate. This ensured that the performance bottlenecks measured were solely due to the pose estimation models and not the video streaming source.
+
+
+
+1235u 
+
+[OpenVINO Configuration]
+  Requested settings: threads=8, mode=throughput, streams=2
+  Effective settings:
+    Performance mode: PerformanceMode.THROUGHPUT
+    CPU threads: 8
+    CPU streams: 2
+    CPU pinning: True
+    Hyper-threading: False
+
+
+ae1 - Inference time: 80.8ms (11.9 FPS)
+movenet - Inference time: 18.7ms (62.9 FPS)
