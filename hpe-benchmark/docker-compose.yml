@@ -1,0 +1,68 @@
+version: '3.8'
+services:
+  streamer:
+    build: ./streamer
+    depends_on:
+      hpe:
+        condition: service_healthy
+    environment:
+      HPE_HOST: hpe
+      HPE_PORT: 5000
+    networks:
+      hpe_net:
+    # No health check needed - it's a simple FFmpeg command
+  
+  hpe:
+    build: 
+      context: ./hpe/openpose
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 1s
+      timeout: 5s
+      retries: 30  # Wait up to 30 seconds for HPE to initialize
+      start_period: 5s  # Give it 5 seconds to start before checking
+    networks:
+      hpe_net:
+  
+  network-monitor:
+    build:
+      context: ./monitor/network
+    depends_on:
+      streamer:
+        condition: service_started
+      hpe:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./results:/results
+    environment:
+      STREAMER_CONTAINER: "streamer"
+      HPE_CONTAINER: "hpe"
+      DURATION: 30
+      WARMUP: 10  # Skip first 10 seconds for warm-up
+      INTERVAL: 0.1
+    networks:
+      - hpe_net
+  
+  perf-monitor:
+    build:
+      context: ./monitor/perf
+    depends_on:
+      hpe:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./results:/results
+    environment:
+      MONITORED_CONTAINER: "hpe"
+      DURATION: 30
+      WARMUP: 10  # Skip first 10 seconds for warm-up
+      INTERVAL: 0.5
+    networks:
+      - hpe_net
+
+networks:
+  hpe_net:
+    name: hpe_benchmark_net
