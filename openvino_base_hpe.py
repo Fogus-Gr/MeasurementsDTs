@@ -127,10 +127,14 @@ class OpenVINOBaseHPE(BaseHPE):
 
         core.set_property("CPU", cpu_props)
 
-        print("[OV] effective:",
-            "mode=", core.get_property("CPU", props.hint.performance_mode),
-            "threads=", core.get_property("CPU", props.inference_num_threads),
-            "streams=", core.get_property("CPU", props.num_streams))
+        print("\n[OpenVINO Configuration]")
+        print(f"  Requested settings: threads={self.ov_threads}, mode={self.ov_mode}, streams={self.ov_streams}")
+        print("  Effective settings:")
+        print(f"    Performance mode: {core.get_property('CPU', props.hint.performance_mode)}")
+        print(f"    CPU threads: {core.get_property('CPU', props.inference_num_threads)}")
+        print(f"    CPU streams: {core.get_property('CPU', props.num_streams)}")
+        print(f"    CPU pinning: {core.get_property('CPU', props.hint.enable_cpu_pinning)}")
+        print(f"    Hyper-threading: {core.get_property('CPU', props.hint.enable_hyper_threading)}\n")
 
     def load_model(self):
         """Load OpenVINO model"""
