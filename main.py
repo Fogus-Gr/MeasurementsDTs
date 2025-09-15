@@ -1,6 +1,7 @@
 import os
 import sys
 import cv2
+import time
 
 cv2.setNumThreads(1)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -24,7 +25,20 @@ def main():
 
     hpe = get_hpe_method(args)
     hpe.load_model()
-    hpe.main_loop()
+    
+    # Add timeout and frame count detection for HTTP streams only
+    if args.input.startswith('http'):
+        print(f"HTTP stream detected: {args.input}")
+        print("Adding timeout and frame count detection...")
+        hpe.main_loop_with_timeout(args.timeout, args.max_frames)
+    elif args.input.isdigit() or args.input == '0':
+        print(f"Webcam detected: {args.input}")
+        print("Processing webcam feed (press Ctrl+C to stop)...")
+        hpe.main_loop()
+    else:
+        print(f"Video file detected: {args.input}")
+        print("Processing complete video without timeout...")
+        hpe.main_loop()
 
 def parse_arguments():
         parser = argparse.ArgumentParser()
@@ -38,6 +52,8 @@ def parse_arguments():
         parser.add_argument("--save_image", action="store_true", help="Save image with keypoints")
         parser.add_argument('--device', type=str, default="GPU", choices=['GPU', 'CPU'], help="Device to run inference on. Options: CPU, GPU")
         parser.add_argument('--detbatch', type=int, default=5, help="Detection batch size (default=%(default)s)")
+        parser.add_argument('--timeout', type=int, default=300, help="Timeout in seconds for HTTP streams (default=%(default)s)")
+        parser.add_argument('--max_frames', type=int, default=0, help="Maximum number of frames to process (0=unlimited)")
         
         return parser
 

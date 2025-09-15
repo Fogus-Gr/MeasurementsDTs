@@ -254,6 +254,128 @@ class BaseHPE(ABC):
             save_COCO_format_csv(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_JSON.csv"))
             save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
 
+    def main_loop_with_timeout(self, timeout_seconds=300, max_frames=0):
+        """Enhanced main loop with timeout and frame count detection for HTTP streams"""
+        # Load model if not already loaded
+        if not hasattr(self, 'model') or self.model is None:
+            print("Loading model...")
+            self.load_model()
+            print("Model loaded successfully!")
+
+        frame_number = 0
+        start_time = time.time()
+        
+        print(f"Starting processing with timeout: {timeout_seconds}s, max_frames: {max_frames if max_frames > 0 else 'unlimited'}")
+
+        if self.input_type == "image":
+            self.process_frame(self.img, frame_number)
+
+        elif self.input_type == "directory":
+            # Get all image files from the directory
+            image_files = glob.glob(os.path.join(self.img_dir, '*.[pjg][np][ge]*'))
+            print(f"Found {len(image_files)} images in {self.img_dir}")
+
+            # Sort files to ensure they are in alphanumeric order
+            image_files = sorted(image_files)
+
+            for image_file in image_files:
+                self.img = cv2.imread(image_file)
+                if self.img is None:
+                    print(f"Could not load image: {image_file}")
+                    continue
+
+                self.process_frame(self.img, frame_number)
+                frame_number += 1
+
+        elif self.is_pynvcodec_enabled: # PyNvCodec path
+            print(f"Starting processing video/stream data with PyNvCodec on GPU {self.gpu_id}. Press CTR+C to exit")
+            while True:
+                try:
+                    # Check timeout
+                    if time.time() - start_time > timeout_seconds:
+                        print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
+                        break
+                    
+                    # Check max frames
+                    if max_frames > 0 and frame_number >= max_frames:
+                        print(f"Max frames reached ({max_frames}) - stopping processing")
+                        break
+                    
+                    # Decode a frame
+                    surface = self.decoder.DecodeSingleFrame(self.demuxer)
+                    if not surface:
+                        print("End of video stream")
+                        break # End of video
+
+                    # Convert NV12 surface to RGB surface
+                    rgb_surface = self.to_rgb_converter.Execute(surface)
+                    
+                    # Convert RGB surface to PyTorch tensor on GPU
+                    frame_tensor = self.to_tensor_converter.Execute(rgb_surface)
+                    
+                    self.process_frame(frame_tensor, frame_number)
+                    frame_number += 1
+                    
+                    # Progress update every 100 frames
+                    if frame_number % 100 == 0:
+                        elapsed = time.time() - start_time
+                        print(f"Processed {frame_number} frames in {elapsed:.1f}s")
+                        
+                except Exception as e:
+                    print(f"[ERROR] PyNvCodec decoding error: {e}")
+                    break # Exit loop on error
+
+        else:   # OpenCV video/webcam/stream fallback
+            if self.cap is None:
+                print(f"[ERROR] Video capture not initialized for {self.__class__.__name__}. This HPE implementation may not support video inputs.")
+                return
+            print("Starting processing video/webcam data with OpenCV. Press CTR+C to exit")
+            
+            consecutive_failures = 0
+            max_consecutive_failures = 10
+            
+            while True:
+                # Check timeout
+                if time.time() - start_time > timeout_seconds:
+                    print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
+                    break
+                
+                # Check max frames
+                if max_frames > 0 and frame_number >= max_frames:
+                    print(f"Max frames reached ({max_frames}) - stopping processing")
+                    break
+                
+                ok, frame = self.cap.read()
+                if not ok:
+                    consecutive_failures += 1
+                    if consecutive_failures >= max_consecutive_failures:
+                        print(f"Stream ended after {consecutive_failures} consecutive read failures")
+                        break
+                    else:
+                        print(f"Frame read failed ({consecutive_failures}/{max_consecutive_failures}), retrying...")
+                        time.sleep(0.1)
+                        continue
+                else:
+                    consecutive_failures = 0  # Reset on successful read
+
+                self.process_frame(frame, frame_number)
+                frame_number += 1
+                
+                # Progress update every 100 frames
+                if frame_number % 100 == 0:
+                    elapsed = time.time() - start_time
+                    fps = frame_number / elapsed if elapsed > 0 else 0
+                    print(f"Processed {frame_number} frames in {elapsed:.1f}s (avg {fps:.1f} FPS)")
+
+        print(f"Processing completed. Total frames processed: {frame_number}")
+        print(f"Total time: {time.time() - start_time:.1f}s")
+
+        if self.json:
+            save_COCO_format_json(os.path.join(self.output_dir, "COCOformat.json"))
+        if self.csv:
+            save_COCO_format_csv(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_JSON.csv"))
+            save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
+
     def process_frame(self, frame, frame_number):
         # Start timing
         start_time = time.time()
