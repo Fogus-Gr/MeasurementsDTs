@@ -11,6 +11,21 @@ from movenet_hpe import MoveNetHPE
 from openvino_base_hpe import OpenVINOBaseHPE
 from alphapose_hpe import AlphaPoseHPE
 import logging
+from tqdm import tqdm
+from utils.video_detection import detect_video_properties
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),  # Console output
+        logging.FileHandler('hpe_processing.log')  # File output
+    ]
+)
+
+# Create logger
+logger = logging.getLogger(__name__)
 
 class _HideAspectWarn(logging.Filter):
     def filter(self, rec):
@@ -19,6 +34,7 @@ class _HideAspectWarn(logging.Filter):
 
 logging.getLogger().addFilter(_HideAspectWarn())
 
+
 def main():
     parser = parse_arguments()
     args = parser.parse_args()
@@ -26,18 +42,43 @@ def main():
     hpe = get_hpe_method(args)
     hpe.load_model()
     
-    # Add timeout and frame count detection for HTTP streams only
+    # Auto-detect video properties for HTTP streams
     if args.input.startswith('http'):
-        print(f"HTTP stream detected: {args.input}")
-        print("Adding timeout and frame count detection...")
-        hpe.main_loop_with_timeout(args.timeout, args.max_frames)
+        logging.info(f"HTTP stream detected: {args.input}")
+        
+        # Check if user provided override values
+        if args.video_duration > 0 or args.video_fps > 0:
+            logging.info("Using user-provided video properties...")
+            fps = args.video_fps if args.video_fps > 0 else 25.0
+            duration = args.video_duration if args.video_duration > 0 else 300.0
+            total_frames = int(duration * fps)
+            logging.info(f"User-provided video properties:")
+            logging.info(f"  FPS: {fps:.2f}")
+            logging.info(f"  Duration: {duration:.1f}s")
+            logging.info(f"  Total frames: {total_frames}")
+        else:
+            logging.info("Auto-detecting video properties...")
+            # Detect video properties
+            fps, duration, total_frames = detect_video_properties(args.input)
+        
+        # Auto-set timeout and max_frames if not provided
+        if args.timeout == 0:  # Default timeout
+            args.timeout = int(duration) + 10  # Add 10s buffer
+            logging.info(f"Auto-set timeout: {args.timeout}s")
+        
+        if args.max_frames == 0:  # Default max_frames
+            args.max_frames = total_frames
+            logging.info(f"Auto-set max_frames: {args.max_frames}")
+        
+        logging.info("Adding real-time processing with auto-detection...")
+        hpe.main_loop_realtime(args.timeout, args.max_frames, fps, duration, total_frames)
     elif args.input.isdigit() or args.input == '0':
-        print(f"Webcam detected: {args.input}")
-        print("Processing webcam feed (press Ctrl+C to stop)...")
+        logging.info(f"Webcam detected: {args.input}")
+        logging.info("Processing webcam feed (press Ctrl+C to stop)...")
         hpe.main_loop()
     else:
-        print(f"Video file detected: {args.input}")
-        print("Processing complete video without timeout...")
+        logging.info(f"Video file detected: {args.input}")
+        logging.info("Processing complete video without timeout...")
         hpe.main_loop()
 
 def parse_arguments():
@@ -52,8 +93,10 @@ def parse_arguments():
         parser.add_argument("--save_image", action="store_true", help="Save image with keypoints")
         parser.add_argument('--device', type=str, default="GPU", choices=['GPU', 'CPU'], help="Device to run inference on. Options: CPU, GPU")
         parser.add_argument('--detbatch', type=int, default=5, help="Detection batch size (default=%(default)s)")
-        parser.add_argument('--timeout', type=int, default=300, help="Timeout in seconds for HTTP streams (default=%(default)s)")
-        parser.add_argument('--max_frames', type=int, default=0, help="Maximum number of frames to process (0=unlimited)")
+        parser.add_argument('--timeout', type=int, default=0, help="Timeout in seconds for HTTP streams (default=%(default)s, auto-detected if HTTP)")
+        parser.add_argument('--max_frames', type=int, default=0, help="Maximum number of frames to process (default=%(default)s, auto-detected if HTTP)")
+        parser.add_argument('--video_duration', type=float, default=0, help="Video duration in seconds (overrides auto-detection)")
+        parser.add_argument('--video_fps', type=float, default=0, help="Video FPS (overrides auto-detection)")
         
         return parser
 

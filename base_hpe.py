@@ -6,6 +6,7 @@ import glob
 import time
 import torch
 import numpy as np
+from tqdm import tqdm
 
 try:
     import PyNvCodec as nvc
@@ -517,3 +518,191 @@ class BaseHPE(ABC):
         padded = cv2.resize(padded, (self.pd_w, self.pd_h), interpolation=cv2.INTER_AREA)
 
         return padded
+
+
+    def main_loop_realtime(self, timeout_seconds=300, max_frames=0, video_fps=None, video_duration=None, total_frames=None):
+        """Real-time processing with video properties provided by main.py"""
+        # Load model if not already loaded
+        if not hasattr(self, 'model') or self.model is None:
+            print("Loading model...")
+            self.load_model()
+            print("Model loaded successfully!")
+
+        frame_number = 0
+        start_time = time.time()
+        
+        # Validate required parameters
+        if video_fps is None or video_duration is None or total_frames is None:
+            raise ValueError("Video properties must be provided by main.py auto-detection")
+        
+        # Use provided values from main.py
+        print(f"Using video properties from main.py auto-detection:")
+        print(f"  FPS: {video_fps:.2f}")
+        print(f"  Duration: {video_duration:.1f}s")
+        print(f"  Total frames: {total_frames}")
+        
+        # Calculate target frame interval
+        frame_interval = 1.0 / video_fps
+        
+        print(f"  Target frame interval: {frame_interval*1000:.1f}ms")
+        print(f"Starting real-time processing at {video_fps:.2f} FPS...")
+        
+        # Create progress bar with single-line updates
+        pbar = tqdm(total=total_frames, desc="Processing frames", unit="frame", 
+                   bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]',
+                   ncols=120,  # Fixed width
+                   leave=True,  # Keep progress bar after completion
+                   dynamic_ncols=False,  # Don't resize
+                   position=0,  # Single line
+                   mininterval=0.1)  # Minimum update interval
+
+        if self.input_type == "image":
+            self.process_frame(self.img, frame_number)
+
+        elif self.input_type == "directory":
+            # Get all image files from the directory
+            image_files = glob.glob(os.path.join(self.img_dir, '*.[pjg][np][ge]*'))
+            print(f"Found {len(image_files)} images in {self.img_dir}")
+
+            # Sort files to ensure they are in alphanumeric order
+            image_files = sorted(image_files)
+
+            for image_file in image_files:
+                self.img = cv2.imread(image_file)
+                if self.img is None:
+                    print(f"Could not load image: {image_file}")
+                    continue
+
+                self.process_frame(self.img, frame_number)
+                frame_number += 1
+
+        elif self.is_pynvcodec_enabled:
+            print(f"Starting real-time PyNvCodec processing...")
+            while True:
+                try:
+                    # Check timeout (use video duration if shorter)
+                    effective_timeout = min(timeout_seconds, video_duration)
+                    if time.time() - start_time > effective_timeout:
+                        print(f"Timeout reached ({effective_timeout}s) - stopping processing")
+                        break
+                    
+                    # Check frame limit (use total frames if smaller)
+                    effective_max_frames = min(max_frames, total_frames) if max_frames > 0 else total_frames
+                    if frame_number >= effective_max_frames:
+                        print(f"Max frames reached ({effective_max_frames}) - stopping processing")
+                        break
+                    
+                    # Start timing this frame
+                    frame_start = time.time()
+                    
+                    surface = self.decoder.DecodeSingleFrame(self.demuxer)
+                    if not surface:
+                        print("End of video stream")
+                        break
+
+                    rgb_surface = self.to_rgb_converter.Execute(surface)
+                    frame_tensor = self.to_tensor_converter.Execute(rgb_surface)
+                    
+                    # Process the frame
+                    self.process_frame(frame_tensor, frame_number)
+                    frame_number += 1
+                    
+                    # Calculate how long this frame took
+                    frame_elapsed = time.time() - frame_start
+                    
+                    # Sleep to maintain real-time timing
+                    sleep_time = frame_interval - frame_elapsed
+                    if sleep_time > 0:
+                        time.sleep(sleep_time)
+                    
+                    # Update progress bar and description every 10 frames only
+                    if frame_number % 10 == 0:
+                        pbar.update(10)
+                        elapsed = time.time() - start_time
+                        actual_fps = frame_number / elapsed if elapsed > 0 else 0
+                        
+                        if frame_elapsed > frame_interval:
+                            pbar.set_description(f"Processing frames (SLOW: {frame_elapsed*1000:.1f}ms, {actual_fps:.1f} FPS)")
+                        else:
+                            pbar.set_description(f"Processing frames ({actual_fps:.1f} FPS)")
+                        
+                except Exception as e:
+                    print(f"[ERROR] PyNvCodec decoding error: {e}")
+                    break
+
+        else:
+            if self.cap is None:
+                print(f"[ERROR] Video capture not initialized for {self.__class__.__name__}. This HPE implementation may not support video inputs.")
+                return
+            print("Starting real-time OpenCV processing...")
+            
+            consecutive_failures = 0
+            max_consecutive_failures = 10
+            
+            while True:
+                # Check timeout (use video duration if shorter)
+                effective_timeout = min(timeout_seconds, video_duration)
+                if time.time() - start_time > effective_timeout:
+                    print(f"Timeout reached ({effective_timeout}s) - stopping processing")
+                    break
+                
+                # Check frame limit (use total frames if smaller)
+                effective_max_frames = min(max_frames, total_frames) if max_frames > 0 else total_frames
+                if frame_number >= effective_max_frames:
+                    print(f"Max frames reached ({effective_max_frames}) - stopping processing")
+                    break
+                
+                # Start timing this frame
+                frame_start = time.time()
+                
+                ok, frame = self.cap.read()
+                if not ok:
+                    consecutive_failures += 1
+                    if consecutive_failures >= max_consecutive_failures:
+                        print(f"Stream ended after {consecutive_failures} consecutive read failures")
+                        break
+                    else:
+                        print(f"Frame read failed ({consecutive_failures}/{max_consecutive_failures}), retrying...")
+                        time.sleep(0.1)
+                        continue
+                else:
+                    consecutive_failures = 0
+
+                # Process the frame
+                self.process_frame(frame, frame_number)
+                frame_number += 1
+                
+                # Calculate how long this frame took
+                frame_elapsed = time.time() - frame_start
+                
+                # Sleep to maintain real-time timing
+                sleep_time = frame_interval - frame_elapsed
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+                
+                # Update progress bar and description every 10 frames only
+                if frame_number % 10 == 0:
+                    pbar.update(10)
+                    elapsed = time.time() - start_time
+                    actual_fps = frame_number / elapsed if elapsed > 0 else 0
+                    
+                    if frame_elapsed > frame_interval:
+                        pbar.set_description(f"Processing frames (SLOW: {frame_elapsed*1000:.1f}ms, {actual_fps:.1f} FPS)")
+                    else:
+                        pbar.set_description(f"Processing frames ({actual_fps:.1f} FPS)")
+
+        # Update progress bar to 100% and close
+        remaining_frames = total_frames - frame_number
+        if remaining_frames > 0:
+            pbar.update(remaining_frames)
+        pbar.close()
+        
+        print(f"Real-time processing completed. Total frames processed: {frame_number}")
+        print(f"Total time: {time.time() - start_time:.1f}s")
+        print(f"Average FPS: {frame_number / (time.time() - start_time):.1f}")
+
+        if self.json:
+            save_COCO_format_json(os.path.join(self.output_dir, "COCOformat.json"))
+        if self.csv:
+            save_COCO_format_csv(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_JSON.csv"))
+            save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
