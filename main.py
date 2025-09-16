@@ -63,8 +63,10 @@ def main():
         
         # Auto-set timeout and max_frames if not provided
         if args.timeout == 0:  # Default timeout
-            args.timeout = int(duration) + 10  # Add 10s buffer
-            logging.info(f"Auto-set timeout: {args.timeout}s")
+            # Calculate timeout based on processing speed (assume 2-3 FPS for HRNet)
+            estimated_processing_time = total_frames / 2.5  # Conservative estimate
+            args.timeout = int(estimated_processing_time) + 60  # Add 60s buffer
+            logging.info(f"Auto-set timeout: {args.timeout}s (estimated processing time: {estimated_processing_time:.1f}s)")
         
         if args.max_frames == 0:  # Default max_frames
             args.max_frames = total_frames
