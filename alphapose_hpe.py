@@ -67,7 +67,12 @@ class AlphaPoseHPE(BaseHPE):
 
 
     def load_model(self):
-        self.cfg = update_config(self.cfg)
+        # Handle case where cfg might already be an EasyDict or a file path
+        if isinstance(self.cfg, str):
+            self.cfg = update_config(self.cfg)
+        elif not hasattr(self.cfg, 'MODEL'):
+            # If cfg is not a proper config dict, use default config file
+            self.cfg = update_config(DEFAULT_CFG)
         qsize = 1024
         
         # Load detector model

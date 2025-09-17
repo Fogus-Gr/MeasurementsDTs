@@ -178,6 +178,25 @@ class BaseHPE(ABC):
     def load_model(self):
         pass
     
+    def _init_opencv_video_capture(self, input_src):
+        """Initialize OpenCV video capture for video files and streams"""
+        print(f"Initializing OpenCV video capture for: {input_src}")
+        self.cap = cv2.VideoCapture(input_src)
+        
+        if not self.cap.isOpened():
+            print(f"[ERROR] Could not open video source: {input_src}")
+            self.cap = None
+            return False
+        
+        # Get video properties
+        self.video_fps = int(self.cap.get(cv2.CAP_PROP_FPS)) or 25
+        self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        
+        print(f"Video properties: {self.img_w}x{self.img_h} @ {self.video_fps}fps, {total_frames} frames")
+        return True
+    
     def main_loop(self):
         # Load model if not already loaded
         if not hasattr(self, 'model') or self.model is None:

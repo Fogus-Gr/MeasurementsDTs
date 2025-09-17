@@ -105,6 +105,7 @@ class YOLODetector(BaseDetector):
             if isinstance(dets, int) or dets.shape[0] == 0:
                 return 0
             dets = dets.cpu()
+            orig_dim_list = orig_dim_list.cpu()  # Move to CPU to match dets
 
             orig_dim_list = torch.index_select(orig_dim_list, 0, dets[:, 0].long())
             scaling_factor = torch.min(self.inp_dim / orig_dim_list, 1)[0].view(-1, 1)
