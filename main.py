@@ -26,7 +26,7 @@ def main():
     hpe = get_hpe_method(args)
     hpe.load_model()
     
-    # Add timeout and frame count detection for HTTP streams only
+    # Add timeout and frame count detection for HTTP streams and video files
     if args.input.startswith('http'):
         print(f"HTTP stream detected: {args.input}")
         print("Adding timeout and frame count detection...")
@@ -37,8 +37,12 @@ def main():
         hpe.main_loop()
     else:
         print(f"Video file detected: {args.input}")
-        print("Processing complete video without timeout...")
-        hpe.main_loop()
+        if args.timeout > 0:
+            print(f"Processing video with timeout: {args.timeout}s")
+            hpe.main_loop_with_timeout(args.timeout, args.max_frames)
+        else:
+            print("Processing complete video without timeout...")
+            hpe.main_loop()
 
 def parse_arguments():
         parser = argparse.ArgumentParser()
