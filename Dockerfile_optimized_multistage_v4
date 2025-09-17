@@ -1,0 +1,129 @@
+# syntax=docker/dockerfile:1.6
+
+############################
+# Builder (Focal 20.04)
+############################
+FROM nvidia/cuda:12.2.0-devel-ubuntu20.04 AS builder
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV DEBIAN_FRONTEND=noninteractive
+ENV CUDA_HOME=/usr/local/cuda-12.2
+ENV PATH="$CUDA_HOME/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ENV LD_LIBRARY_PATH="$CUDA_HOME/lib64:${LD_LIBRARY_PATH}"
+
+# Use old-releases (Focal is EOL) and harden APT
+RUN set -eux; \
+  # Use main mirrors over HTTPS (patch ALL .list files)
+  sed -ri 's#http://(archive|security)\.ubuntu\.com/ubuntu#https://\1.ubuntu.com/ubuntu#g' /etc/apt/sources.list || true; \
+  if [ -d /etc/apt/sources.list.d ]; then \
+    find /etc/apt/sources.list.d -name '*.list' -print0 \
+      | xargs -r -0 sed -ri 's#http://(archive|security)\.ubuntu\.com/ubuntu#https://\1.ubuntu.com/ubuntu#g'; \
+  fi; \
+  # Make APT a bit more resilient
+  printf 'Acquire::Retries "5";\nAcquire::ForceIPv4 "true";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' \
+    > /etc/apt/apt.conf.d/99resilient-apt; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends binutils \
+    zlib1g-dev \
+    build-essential pkg-config \
+    gcc-9 g++-9 \
+    ccache \
+    git ca-certificates wget curl \
+    yasm nasm \
+    libx264-dev libx265-dev libvpx-dev libopus-dev \
+    libxml2-dev libssl-dev \
+    autoconf automake libtool make cmake \
+    ; \
+    rm -rf /var/lib/apt/lists/*
+
+# Route host compiler via ccache (also for nvcc's host compiler)
+ENV CC="ccache gcc-9" \
+    CXX="ccache g++-9" \
+    CUDAHOSTCXX="ccache g++-9"
+
+# after installing gcc-9/g++-9 + ccache
+RUN printf '#!/bin/sh\nexec ccache g++-9 "$@"\n' >/usr/local/bin/gxx-ccache && chmod +x /usr/local/bin/gxx-ccache
+ENV CC=/usr/bin/gcc-9 CXX=/usr/bin/g++-9 CUDAHOSTCXX=/usr/local/bin/gxx-ccache
+
+
+# Toolchain sanity check (prevents the “gcc is unable to create an executable” trap)
+RUN printf 'int main(){return 0;}\n' > /tmp/t.c && $CC /tmp/t.c -o /tmp/t && /tmp/t && rm -f /tmp/t /tmp/t.c
+
+# nv-codec headers (for nvenc/nvdec)
+RUN --mount=type=cache,target=/root/.cache/ccache \
+    git clone --depth 1 https://github.com/FFmpeg/nv-codec-headers.git /tmp/nv-codec-headers && \
+    make -C /tmp/nv-codec-headers install PREFIX=/usr/local && \
+    rm -rf /tmp/nv-codec-headers
+
+WORKDIR /tmp
+ARG FFMPEG_VER=8.0
+
+# Preflight: ensure pkg-config sees all the codec/ssl devs
+RUN set -eux; \
+  for p in x264 x265 vpx opus openssl; do \
+    if ! pkg-config --exists "$p"; then \
+      echo "MISSING: $p (install *-dev package)"; exit 42; \
+    fi; \
+    echo "$p: $(pkg-config --modversion "$p")  |  CFLAGS=$(pkg-config --cflags "$p")  |  LIBS=$(pkg-config --libs "$p")"; \
+  done
+
+# Build FFmpeg with CUDA/NPP/NVENC etc.
+RUN set -eux; \
+  wget --retry-connrefused --tries=3 -nv "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VER}.tar.xz"; \
+  tar xf "ffmpeg-${FFMPEG_VER}.tar.xz"; rm "ffmpeg-${FFMPEG_VER}.tar.xz"; \
+  cd "ffmpeg-${FFMPEG_VER}"; \
+  nvcc --version && ls "${CUDA_HOME}/lib64"/libnpp* && ls "${CUDA_HOME}/lib64/stubs/libcuda.so"; \
+  PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${CUDA_HOME}/lib64/pkgconfig" \
+  CC=/usr/bin/gcc-9 CXX=/usr/bin/g++-9 \
+  ./configure \
+    --enable-nonfree --enable-gpl \
+    --enable-shared --disable-static \
+    --enable-cuda-nvcc --enable-nvdec --enable-nvenc --enable-libnpp \
+    --enable-libx264 --enable-libx265 --enable-libvpx --enable-libopus \
+    --enable-openssl \
+    --extra-cflags="-I/usr/local/include -I${CUDA_HOME}/include -fPIC" \
+    --extra-ldflags="-L${CUDA_HOME}/lib64 -L${CUDA_HOME}/lib64/stubs" \
+    --nvccflags="-gencode=arch=compute_86,code=sm_86" \
+    --extra-libs="-lcuda" \
+  || { echo '==== FFmpeg configure failed. Dumping ffbuild/config.log ===='; \
+       test -f ffbuild/config.log && tail -n 200 ffbuild/config.log; \
+       exit 1; }; \
+  make -j"$(nproc)"; make install; ldconfig
+
+
+############################
+# Runtime (Focal 20.04)
+############################
+FROM nvidia/cuda:12.2.0-runtime-ubuntu20.04 AS runtime
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV DEBIAN_FRONTEND=noninteractive
+ENV CUDA_HOME=/usr/local/cuda-12.2
+ENV PATH="$CUDA_HOME/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ENV LD_LIBRARY_PATH="$CUDA_HOME/lib64:${LD_LIBRARY_PATH}"
+
+# Use old-releases (Focal is EOL) and harden APT
+RUN set -eux; \
+  # Use main mirrors over HTTPS (patch ALL .list files)
+  sed -ri 's#http://(archive|security)\.ubuntu\.com/ubuntu#https://\1.ubuntu.com/ubuntu#g' /etc/apt/sources.list || true; \
+  if [ -d /etc/apt/sources.list.d ]; then \
+    find /etc/apt/sources.list.d -name '*.list' -print0 \
+      | xargs -r -0 sed -ri 's#http://(archive|security)\.ubuntu\.com/ubuntu#https://\1.ubuntu.com/ubuntu#g'; \
+  fi; \
+  # Make APT a bit more resilient
+  printf 'Acquire::Retries "5";\nAcquire::ForceIPv4 "true";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' \
+    > /etc/apt/apt.conf.d/99resilient-apt; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends binutils \
+    libx264-155 libx265-179 libvpx6 libopus0 libxml2 libssl1.1 \
+    libgl1-mesa-glx libglib2.0-0 libgomp1 libsm6 libxext6 libxrender1 \
+    libfontconfig1 libice6 openssl clinfo python3 python3-pip \
+    ca-certificates \
+  ; \
+  rm -rf /var/lib/apt/lists/*
+
+# Bring in FFmpeg
+COPY --from=builder /usr/local /usr/local
+RUN ldconfig
+
+ENTRYPOINT ["ffmpeg"]

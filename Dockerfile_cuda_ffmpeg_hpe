@@ -1,0 +1,108 @@
+# ---- FFmpeg + CUDA12.2 stage (already built by you) -------------------------
+FROM ffmpeg-cuda:8.0-focal AS ffmpeg
+
+# ---- Builder: keep your PyTorch toolchain for compiling extensions ----------
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-devel AS builder
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Bring in FFmpeg (binaries, headers, pkgconfig) and CUDA 12.2 libs needed by NPP
+COPY --from=ffmpeg /usr/local /usr/local
+COPY --from=ffmpeg /usr/local/cuda-12.2 /usr/local/cuda-12.2
+
+# Make CUDA 12.2 the one we use for FFmpeg/NPP builds
+ENV CUDA_HOME=/usr/local/cuda-12.2
+ENV PATH=${CUDA_HOME}/bin:$PATH
+ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:$LD_LIBRARY_PATH
+ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:${CUDA_HOME}/lib64/pkgconfig
+
+WORKDIR /app
+
+# Build deps (no CUDA repos here)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc-9 g++-9 make cmake git curl wget pkg-config \
+    python3-dev python3-pip \
+    yasm nasm autoconf automake libtool \
+    libxml2-dev libssl-dev \
+    libgl1-mesa-glx libglib2.0-0 libgomp1 libsm6 libxext6 libxrender1 \
+    libfontconfig1 libice6 ocl-icd-libopencl1 opencl-headers clinfo \
+ && rm -rf /var/lib/apt/lists/*
+
+# (Optional) sanity check: nvcc & NPP from the copied CUDA 12.2
+RUN ${CUDA_HOME}/bin/nvcc --version && ls ${CUDA_HOME}/lib64/libnpp* >/dev/null
+
+# ---- PyAV (build wheel against /usr/local FFmpeg) ---------------------------
+RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel cython
+RUN git clone --depth 1 https://github.com/PyAV-Org/PyAV.git /tmp/PyAV && \
+    cd /tmp/PyAV && \
+    python3 -m pip wheel . -w /wheels && \
+    rm -rf /tmp/PyAV
+
+# ---- NVIDIA Video Processing Framework (PyNvCodec) --------------------------
+RUN git clone --depth 1 https://github.com/NVIDIA/VideoProcessingFramework.git /tmp/VPF && \
+    cd /tmp/VPF && mkdir build && cd build && \
+    cmake .. \
+      -DFFMPEG_ROOT=/usr/local \
+      -DCMAKE_INSTALL_PREFIX=/usr/local && \
+    make -j"$(nproc)" && make install && \
+    cd /tmp/VPF && python3 -m pip wheel . -w /wheels && \
+    rm -rf /tmp/VPF
+
+# ---- (Optional) build AlphaPose CUDA/C++ extensions -------------------------
+COPY models/AlphaPose /app/models/AlphaPose
+RUN bash models/AlphaPose/build_extensions.sh || true && \
+    rm -rf /app/models/AlphaPose/build /app/models/AlphaPose/*.o /app/models/AlphaPose/*.so
+
+# ---- Runtime: PyTorch image + FFmpeg + our wheels/models --------------------
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /app
+
+# Bring in FFmpeg and CUDA 12.2 bits needed by NPP filters at runtime
+COPY --from=ffmpeg /usr/local /usr/local
+COPY --from=ffmpeg /usr/local/cuda-12.2 /usr/local/cuda-12.2
+
+# Make them visible
+ENV CUDA_HOME=/usr/local/cuda-12.2
+ENV PATH=${CUDA_HOME}/bin:$PATH
+ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:$LD_LIBRARY_PATH
+ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:${CUDA_HOME}/lib64/pkgconfig
+ENV TORCH_CUDA_ARCH_LIST=8.6
+
+# Minimal runtime libs
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1-mesa-glx libglib2.0-0 libgomp1 libsm6 libxext6 libxrender1 \
+    libfontconfig1 libice6 libxml2 openssl clinfo wget ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# Python deps: install wheels we built + extras
+COPY --from=builder /wheels /tmp/wheels
+RUN python -m pip install --no-cache-dir --upgrade pip && \
+    python -m pip install --no-cache-dir /tmp/wheels/*.whl && \
+    python -m pip install --no-cache-dir gdown "openvino-dev[onnx,tensorflow2,pytorch,caffe]==2024.2.0"
+
+# Models
+RUN mkdir -p models/AlphaPose/pretrained_models \
+    models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32 \
+    models/OpenVINO/pretrained_models/public/human-pose-estimation-0006/FP32 \
+    models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32 \
+    models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001 \
+    models/MoveNet
+RUN gdown --id 1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI -O models/AlphaPose/pretrained_models/fast_res50_256x192.pth && \
+    gdown --id 1k-9cUGcdH5ZFN1NcMvZrO0ApW241tboD -O models/AlphaPose/detector/yolo/data/yolov3-spp.weights && \
+    gdown --id 15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr -O models/MoveNet/movenet_multipose_lightning_256x256_FP32.bin && \
+    gdown --id 1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.bin && \
+    gdown --id 1ZSdsqgQnWHVymQoZvaXuDFcnOyEEKsexP -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin && \
+    gdown --id 1fko47eVczJZQb9wwA2X7eQ0TuF4PDXzs -O models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.bin
+
+# Your app
+COPY . /app
+
+# Runtime hygiene
+RUN mkdir -p /pids && chmod 777 /pids
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# Avoid the NVIDIA banner/entrypoint; run your script instead
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["python3", "main.py"]

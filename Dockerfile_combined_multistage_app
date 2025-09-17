@@ -1,0 +1,220 @@
+# syntax=docker/dockerfile:1.6
+
+############################
+# Stage 1: Build FFmpeg (CUDA 12.2, Ubuntu 20.04)
+############################
+FROM nvidia/cuda:12.2.0-devel-ubuntu20.04 AS ffmpeg-builder
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV DEBIAN_FRONTEND=noninteractive
+ENV CUDA_HOME=/usr/local/cuda-12.2
+ENV PATH="$CUDA_HOME/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ENV LD_LIBRARY_PATH="$CUDA_HOME/lib64:${LD_LIBRARY_PATH}"
+
+# Use old-releases (Focal is EOL) and harden APT
+RUN set -eux; \
+  sed -ri 's#http://(archive|security)\.ubuntu\.com/ubuntu#https://\1.ubuntu.com/ubuntu#g' /etc/apt/sources.list || true; \
+  if [ -d /etc/apt/sources.list.d ]; then \
+    find /etc/apt/sources.list.d -name '*.list' -print0 \
+      | xargs -r -0 sed -ri 's#http://(archive|security)\.ubuntu\.com/ubuntu#https://\1.ubuntu.com/ubuntu#g'; \
+  fi; \
+  printf 'Acquire::Retries "5";\nAcquire::ForceIPv4 "true";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' \
+    > /etc/apt/apt.conf.d/99resilient-apt; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends \
+    binutils zlib1g-dev \
+    build-essential pkg-config \
+    gcc-9 g++-9 ccache \
+    git ca-certificates wget curl \
+    yasm nasm \
+    libx264-dev libx265-dev libvpx-dev libopus-dev \
+    libxml2-dev libssl-dev \
+    autoconf automake libtool make cmake \
+  ; \
+  rm -rf /var/lib/apt/lists/*
+
+# Route host compiler via ccache (also for nvcc's host compiler)
+ENV CC="ccache gcc-9" \
+    CXX="ccache g++-9" \
+    CUDAHOSTCXX="ccache g++-9"
+
+RUN printf '#!/bin/sh\nexec ccache g++-9 "$@"\n' >/usr/local/bin/gxx-ccache && chmod +x /usr/local/bin/gxx-ccache
+ENV CC=/usr/bin/gcc-9 CXX=/usr/bin/g++-9 CUDAHOSTCXX=/usr/local/bin/gxx-ccache
+
+# Toolchain sanity check
+RUN printf 'int main(){return 0;}\n' > /tmp/t.c && $CC /tmp/t.c -o /tmp/t && /tmp/t && rm -f /tmp/t /tmp/t.c
+
+# nv-codec headers (for nvenc/nvdec)
+RUN --mount=type=cache,target=/root/.cache/ccache \
+    git clone --depth 1 https://github.com/FFmpeg/nv-codec-headers.git /tmp/nv-codec-headers && \
+    make -C /tmp/nv-codec-headers install PREFIX=/usr/local && \
+    rm -rf /tmp/nv-codec-headers
+
+WORKDIR /tmp
+ARG FFMPEG_VER=8.0
+
+# Preflight: ensure pkg-config sees all the codec/ssl devs
+RUN set -eux; \
+  for p in x264 x265 vpx opus openssl; do \
+    if ! pkg-config --exists "$p"; then \
+      echo "MISSING: $p (install *-dev package)"; exit 42; \
+    fi; \
+    echo "$p: $(pkg-config --modversion "$p")  |  CFLAGS=$(pkg-config --cflags "$p")  |  LIBS=$(pkg-config --libs "$p")"; \
+  done
+
+# Build FFmpeg with CUDA/NPP/NVENC etc.
+RUN set -eux; \
+  wget --retry-connrefused --tries=3 -nv "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VER}.tar.xz"; \
+  tar xf "ffmpeg-${FFMPEG_VER}.tar.xz"; rm "ffmpeg-${FFMPEG_VER}.tar.xz"; \
+  cd "ffmpeg-${FFMPEG_VER}"; \
+  nvcc --version && ls "${CUDA_HOME}/lib64"/libnpp* && ls "${CUDA_HOME}/lib64/stubs/libcuda.so"; \
+  PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${CUDA_HOME}/lib64/pkgconfig" \
+  CC=/usr/bin/gcc-9 CXX=/usr/bin/g++-9 \
+  ./configure \
+    --enable-nonfree --enable-gpl \
+    --enable-shared --disable-static \
+    --enable-cuda-nvcc --enable-nvdec --enable-nvenc --enable-libnpp \
+    --enable-libx264 --enable-libx265 --enable-libvpx --enable-libopus \
+    --enable-openssl \
+    --extra-cflags="-I/usr/local/include -I${CUDA_HOME}/include -fPIC" \
+    --extra-ldflags="-L${CUDA_HOME}/lib64 -L${CUDA_HOME}/lib64/stubs" \
+    --nvccflags="-gencode=arch=compute_86,code=sm_86" \
+    --extra-libs="-lcuda" \
+  || { echo '==== FFmpeg configure failed. Dumping ffbuild/config.log ===='; \
+       test -f ffbuild/config.log && tail -n 200 ffbuild/config.log; \
+       exit 1; }; \
+  make -j"$(nproc)"; make install; ldconfig
+
+
+############################
+# Stage 2: App Builder (PyAV, VPF, OpenVINO, Models)
+############################
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-devel AS app-builder
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TORCH_CUDA_ARCH_LIST=8.6
+ENV CUDA_HOME=/usr/local/cuda-12.2
+ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:${CUDA_HOME}/lib64/pkgconfig
+ENV PATH="$CUDA_HOME/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ENV LD_LIBRARY_PATH="$CUDA_HOME/lib64:${LD_LIBRARY_PATH}"
+
+WORKDIR /app
+
+# Minimal build deps and tools
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      gcc-9 g++-9 build-essential cmake git \
+      libgl1-mesa-glx libglib2.0-0 libgomp1 libsm6 libxext6 libxrender1 \
+      libfontconfig1 libice6 libxml2 openssl clinfo \
+      pkg-config yasm nasm ca-certificates curl wget \
+    ; \
+    rm -rf /var/lib/apt/lists/*
+
+# Replace CUDA 12.1 in base with CUDA 12.2 toolkit (to match FFmpeg build)
+RUN set -eux; \
+    apt-get update; \
+    (apt-get remove -y --purge "*cuda*" "*cublas*" "*cufft*" "*curand*" "*cusolver*" \
+      "*cusparse*" "*npp*" "*nvjpeg*" "cuda" "nsight*" || true); \
+    rm -rf /usr/local/cuda* /var/cuda-repo-* /etc/apt/sources.list.d/cuda*; \
+    apt-get clean; rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/*; \
+    echo "debconf debconf/frontend select Noninteractive" | debconf-set-selections; \
+    wget --retry-connrefused --tries=3 https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin; \
+    mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600; \
+    wget --retry-connrefused --tries=3 https://developer.download.nvidia.com/compute/cuda/12.2.0/local_installers/cuda-repo-ubuntu2004-12-2-local_12.2.0-535.54.03-1_amd64.deb; \
+    dpkg -i cuda-repo-ubuntu2004-12-2-local_12.2.0-535.54.03-1_amd64.deb; \
+    cp /var/cuda-repo-ubuntu2004-12-2-local/cuda-*-keyring.gpg /usr/share/keyrings/; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends cuda-toolkit-12-2 libnpp-12-2; \
+    rm cuda-repo-ubuntu2004-12-2-local_12.2.0-535.54.03-1_amd64.deb; \
+    apt-get clean; rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/*
+
+# Bring in FFmpeg built in the first stage
+COPY --from=ffmpeg-builder /usr/local /usr/local
+RUN ldconfig && ffmpeg -hide_banner -version || true
+
+# Install PyAV against the installed FFmpeg
+RUN git clone --depth 1 https://github.com/PyAV-Org/PyAV.git /tmp/PyAV && \
+    cd /tmp/PyAV && \
+    sed -i 's/license = "BSD-3-Clause"/license = { file = "LICENSE" }/' pyproject.toml && \
+    pip install --no-cache-dir cython setuptools wheel && \
+    CFLAGS="-O0 -Wno-incompatible-pointer-types -Wno-unreachable-code" python setup.py build_ext --inplace && \
+    pip install . && \
+    cd / && rm -rf /tmp/PyAV
+
+# Install NVIDIA Video Processing Framework (PyNvCodec)
+RUN git clone --depth 1 https://github.com/NVIDIA/VideoProcessingFramework.git /tmp/VideoProcessingFramework && \
+    cd /tmp/VideoProcessingFramework && mkdir build && cd build && \
+    cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local \
+             -DFFMPEG_ROOT=/usr/local \
+             -DPYTHON_INCLUDE_DIR=$(python3 -c "from distutils.sysconfig import get_python_inc; print(get_python_inc())") \
+             -DPYTHON_LIBRARY=$(python3 -c "import distutils.sysconfig as sysconfig; print(sysconfig.get_config_var('LIBDIR'))") && \
+    make -j"$(nproc)" && make install && \
+    cd /tmp/VideoProcessingFramework && pip install .[samples] && \
+    cd / && rm -rf /tmp/VideoProcessingFramework
+
+# Install OpenVINO and gdown
+RUN pip install --no-cache-dir openvino-dev[onnx,tensorflow2,pytorch,caffe]==2024.2.0 gdown && \
+    apt-get update && apt-get install -y --no-install-recommends clinfo && \
+    apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/* && \
+    mkdir -p /opt/intel/openvino_2024 && \
+    /opt/intel/openvino_2024/setupvars.sh || true
+
+# Create model directories and fetch models
+RUN mkdir -p models/AlphaPose/pretrained_models \
+    models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32 \
+    models/OpenVINO/pretrained_models/public/human-pose-estimation-0006/FP32 \
+    models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32 \
+    models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001 \
+    models/MoveNet
+
+RUN gdown --id 1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI -O models/AlphaPose/pretrained_models/fast_res50_256x192.pth && \
+    gdown --id 1k-9cUGcdH5ZFN1NcMvZrO0ApW241tboD -O models/AlphaPose/detector/yolo/data/yolov3-spp.weights && \
+    gdown --id 15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr -O models/MoveNet/movenet_multipose_lightning_256x256_FP32.bin && \
+    gdown --id 1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.bin && \
+    gdown --id 1ZSdsqgQnWHVymQoZvaXuDFcnOyEEKsexP -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin && \
+    gdown --id 1fko47eVczJZQb9wWA2X7eQ0TuF4PDXzs -O models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.bin || true
+
+# Copy AlphaPose sources and build extensions
+COPY models/AlphaPose /app/models/AlphaPose
+RUN bash models/AlphaPose/build_extensions.sh && \
+    rm -rf /app/models/AlphaPose/build /app/models/AlphaPose/*.o /app/models/AlphaPose/*.so || true
+
+
+############################
+# Stage 3: Runtime
+############################
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-devel AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TORCH_CUDA_ARCH_LIST=8.6
+ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/cuda-12.2/lib64/pkgconfig
+ENV PATH=/usr/local/cuda-12.2/bin:$PATH
+ENV LD_LIBRARY_PATH=/usr/local/cuda-12.2/lib64:$LD_LIBRARY_PATH
+
+WORKDIR /app
+
+# Minimal runtime deps and CUDA 12.2
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1-mesa-glx libglib2.0-0 libgomp1 libsm6 libxext6 libxrender1 \
+    libfontconfig1 libice6 libxml2 openssl clinfo \
+    cuda-toolkit-12-2 libnpp-12-2 && \
+    apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/*
+
+# Copy built artifacts from app-builder (also includes FFmpeg from stage 1)
+COPY --from=app-builder /usr/local /usr/local
+COPY --from=app-builder /opt/intel/openvino_2024 /opt/intel/openvino_2024
+COPY --from=app-builder /app/models /app/models
+
+# Copy application files
+COPY . /app
+
+# Create PID directory and set entrypoint
+RUN mkdir -p /pids && chmod 777 /pids
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["python3", "main.py"]
+
