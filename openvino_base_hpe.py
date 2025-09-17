@@ -27,7 +27,7 @@ MODEL_CONFIGS = {
         "gpu_supported": True,
     },
     "efficienthrnet1": {
-        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP32/human-pose-estimation-0005.xml",
+        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.xml",
         "input_size": (288, 288),
         "architecture": "HPE-associative-embedding",
         "gpu_supported": True,
@@ -87,6 +87,8 @@ class OpenVINOBaseHPE(BaseHPE):
 
     def _init_opencv_video_capture(self, input_src):
         """Initialize OpenCV video capture for fallback when PyNvCodec is not available."""
+        print(f"Initializing OpenCV video capture for: {input_src}")
+        
         # Handle both string and integer inputs
         if isinstance(input_src, str) and input_src.isdigit():
             self.cap = cv2.VideoCapture(int(input_src))
@@ -96,7 +98,17 @@ class OpenVINOBaseHPE(BaseHPE):
             self.cap = cv2.VideoCapture(input_src)
 
         if not self.cap.isOpened():
-            raise ValueError(f"Failed to open video capture: {input_src}")
+            print(f"[ERROR] Could not open video source: {input_src}")
+            # For streaming URLs, set default dimensions and continue
+            if isinstance(input_src, str) and input_src.startswith("http"):
+                print("[INFO] Setting default dimensions for streaming URL")
+                self.img_w = 640
+                self.img_h = 480
+                self.video_fps = 25
+                self.cap = None  # Will be initialized later when needed
+                return
+            else:
+                raise ValueError(f"Failed to open video capture: {input_src}")
 
         self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -105,6 +117,24 @@ class OpenVINOBaseHPE(BaseHPE):
             self.video_fps = 25
 
         print(f"Video capture initialized: {self.img_w}x{self.img_h} @ {self.video_fps} FPS")
+
+    def _ensure_video_capture(self):
+        """Ensure video capture is initialized for streaming URLs"""
+        if self.cap is None and hasattr(self, 'input_src') and isinstance(self.input_src, str) and self.input_src.startswith("http"):
+            print(f"Initializing video capture for streaming URL: {self.input_src}")
+            self.cap = cv2.VideoCapture(self.input_src)
+            if not self.cap.isOpened():
+                print(f"[WARNING] Could not open streaming URL: {self.input_src}")
+                return False
+            # Update dimensions from the actual stream
+            self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            self.video_fps = self.cap.get(cv2.CAP_PROP_FPS)
+            if self.video_fps == 0:
+                self.video_fps = 25
+            print(f"Stream dimensions: {self.img_w}x{self.img_h} @ {self.video_fps} FPS")
+            return True
+        return self.cap is not None
 
     def _configure_core(self, core):
         """Configure OpenVINO core with performance settings"""
@@ -268,6 +298,86 @@ class OpenVINOBaseHPE(BaseHPE):
                 bodies.append(body)
 
         return bodies
+
+    def main_loop(self):
+        """Override main_loop to handle streaming URLs properly"""
+        # Load model if not already loaded
+        if not hasattr(self, 'model') or self.model is None:
+            print("Loading model...")
+            self.load_model()
+            print("Model loaded successfully!")
+
+        frame_number = 0
+
+        if self.input_type == "image":
+            self.process_frame(self.img, frame_number)
+
+        elif self.input_type == "directory":
+            # Get all image files from the directory
+            import glob
+            image_files = glob.glob(os.path.join(self.img_dir, '*.[pjg][np][ge]*'))
+            print(f"Found {len(image_files)} images in {self.img_dir}")
+
+            # Sort files to ensure they are in alphanumeric order
+            image_files = sorted(image_files)
+            
+            total_frames = len(image_files)
+            for image_file in image_files:
+                print(f"Processing {frame_number+1}/{total_frames}")
+                self.img = cv2.imread(image_file)
+                if self.img is None:
+                    print(f"Failed to load image: {image_file}")
+                    continue
+
+                self.img_h, self.img_w = self.img.shape[:2]
+                self.set_padding()
+                self.process_frame(self.img, frame_number)
+
+                frame_number += 1
+        
+        elif self.is_pynvcodec_enabled: # PyNvCodec path
+            print(f"Starting processing video/stream data with PyNvCodec on GPU {self.gpu_id}. Press CTR+C to exit")
+            while True:
+                try:
+                    # Decode a frame
+                    surface = self.decoder.DecodeSingleFrame(self.demuxer)
+                    if surface.Empty():
+                        break
+
+                    # Convert to PyTorch tensor
+                    frame_tensor = self.surface_to_tensor(surface)
+                    self.process_frame(frame_tensor, frame_number)
+                    frame_number += 1
+
+                except KeyboardInterrupt:
+                    print("\nStopping video processing...")
+                    break
+                except Exception as e:
+                    print(f"Error processing frame: {e}")
+                    break
+
+        else:   # OpenCV video/webcam/stream fallback
+            # Ensure video capture is initialized for streaming URLs
+            if not self._ensure_video_capture():
+                print(f"[ERROR] Video capture not initialized for {self.__class__.__name__}. This HPE implementation may not support video inputs.")
+                return
+            print("Starting processing video/webcam data with OpenCV. Press CTR+C to exit")
+            while True:
+                ok, frame = self.cap.read()
+                if not ok:
+                    break
+
+                self.process_frame(frame, frame_number)
+
+                frame_number += 1
+
+        if self.json:
+            from utils.json_utils import save_COCO_format_json
+            save_COCO_format_json(os.path.join(self.output_dir, "COCOformat.json"))
+        if self.csv:
+            from utils.csv_utils import save_COCO_format_csv, save_Tx_csv_data
+            save_COCO_format_csv(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_JSON.csv"))
+            save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
 
 class AsyncOpenVINOBaseHPE(OpenVINOBaseHPE):
     """Async version of OpenVINO HPE with frame buffering and parallel processing"""
