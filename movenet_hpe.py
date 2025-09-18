@@ -36,7 +36,12 @@ class MoveNetHPE(BaseHPE):
             self.cap = cv2.VideoCapture(int(input_src))
         else:
             # Video file or HTTP stream
-            self.cap = cv2.VideoCapture(input_src)
+            if isinstance(input_src, str) and input_src.startswith("http"):
+                print(f"Using FFmpeg backend for HTTP stream: {input_src}")
+                self.cap = cv2.VideoCapture(input_src, cv2.CAP_FFMPEG)
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency for real-time streams
+            else:
+                self.cap = cv2.VideoCapture(input_src)
 
         if not self.cap.isOpened():
             raise ValueError(f"Failed to open video capture: {input_src}")

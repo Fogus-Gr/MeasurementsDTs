@@ -54,10 +54,10 @@ class OpenPose(ImageModel):
                              'of second dimension of another output')
 
         paf = paf.inputs()[0].get_source_output().get_node()
-        paf.get_output_tensor(0).set_names({self.pafs_blob_name})
+        paf.get_output_tensor(0).set_names({'Mconv7_stage2_L1'})
         heatmap = heatmap.inputs()[0].get_source_output().get_node()
 
-        heatmap.get_output_tensor(0).set_names({self.heatmaps_blob_name})
+        heatmap.get_output_tensor(0).set_names({'Mconv7_stage2_L2'})
 
         # The original OpenPose model already has heatmaps and pafs.
         # The NMS layer for pooled_heatmaps is added dynamically by this wrapper.
@@ -70,6 +70,13 @@ class OpenPose(ImageModel):
         # Ensure heatmaps_blob_name and pafs_blob_name are correctly set to the actual model outputs
         self.heatmaps_blob_name = 'Mconv7_stage2_L2'
         self.pafs_blob_name = 'Mconv7_stage2_L1'
+
+        # Verify required output keys exist
+        if self.heatmaps_blob_name not in self.outputs:
+            raise KeyError(f"Required output '{self.heatmaps_blob_name}' not found in model outputs")
+        
+        if self.pafs_blob_name not in self.outputs:
+            raise KeyError(f"Required output '{self.pafs_blob_name}' not found in model outputs")
 
         self.output_scale = self.inputs[self.image_blob_name].shape[-2] / self.outputs[self.heatmaps_blob_name].shape[-2]
 

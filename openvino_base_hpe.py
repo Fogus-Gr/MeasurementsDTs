@@ -73,10 +73,16 @@ class OpenVINOBaseHPE(BaseHPE):
         env_threads = os.getenv("OV_THREADS")
         env_mode = os.getenv("OV_MODE")
         env_streams = os.getenv("OV_STREAMS")
+        env_cpu_pinning = os.getenv("OV_CPU_PINNING")
+        env_hyper_threading = os.getenv("OV_HYPER_THREADING")
 
-        self.ov_threads = int(ov_threads if ov_threads is not None else (env_threads or 3))
-        self.ov_mode = (ov_mode or env_mode or "throughput").lower()
+        self.ov_threads = int(ov_threads if ov_threads is not None else (env_threads or 1))
+        self.ov_mode = (ov_mode or env_mode or "latency").lower()
         self.ov_streams = int(env_streams) if (ov_streams is None and env_streams and env_streams.isdigit()) else ov_streams
+        
+        # CPU pinning and hyper-threading configuration
+        self.ov_cpu_pinning = env_cpu_pinning.lower() == "true" if env_cpu_pinning else False
+        self.ov_hyper_threading = env_hyper_threading.lower() == "true" if env_hyper_threading else False
 
         if self.device == "GPU" and not self.model_cfg["gpu_supported"]:
             print(f"[INFO] Model '{self.model_type}' is not supported on GPU. Falling back to CPU.")
@@ -95,7 +101,13 @@ class OpenVINOBaseHPE(BaseHPE):
         elif isinstance(input_src, int):
             self.cap = cv2.VideoCapture(input_src)
         else:
-            self.cap = cv2.VideoCapture(input_src)
+            # Use FFmpeg backend for HTTP streams for better reliability
+            if isinstance(input_src, str) and input_src.startswith("http"):
+                print(f"Using FFmpeg backend for HTTP stream: {input_src}")
+                self.cap = cv2.VideoCapture(input_src, cv2.CAP_FFMPEG)
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency for real-time streams
+            else:
+                self.cap = cv2.VideoCapture(input_src)
 
         if not self.cap.isOpened():
             print(f"[ERROR] Could not open video source: {input_src}")
@@ -122,7 +134,9 @@ class OpenVINOBaseHPE(BaseHPE):
         """Ensure video capture is initialized for streaming URLs"""
         if self.cap is None and hasattr(self, 'input_src') and isinstance(self.input_src, str) and self.input_src.startswith("http"):
             print(f"Initializing video capture for streaming URL: {self.input_src}")
-            self.cap = cv2.VideoCapture(self.input_src)
+            print(f"Using FFmpeg backend for HTTP stream: {self.input_src}")
+            self.cap = cv2.VideoCapture(self.input_src, cv2.CAP_FFMPEG)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency for real-time streams
             if not self.cap.isOpened():
                 print(f"[WARNING] Could not open streaming URL: {self.input_src}")
                 return False
@@ -149,8 +163,8 @@ class OpenVINOBaseHPE(BaseHPE):
         cpu_props = {
             props.hint.performance_mode: perf,
             props.inference_num_threads: int(self.ov_threads),
-            props.hint.enable_cpu_pinning: True,
-            props.hint.enable_hyper_threading: False,
+            props.hint.enable_cpu_pinning: self.ov_cpu_pinning,
+            props.hint.enable_hyper_threading: self.ov_hyper_threading,
         }
         if self.ov_streams is not None:
             cpu_props[props.num_streams] = int(self.ov_streams)
@@ -372,10 +386,10 @@ class OpenVINOBaseHPE(BaseHPE):
                 frame_number += 1
 
         if self.json:
-            from utils.json_utils import save_COCO_format_json
+            from utils.evaluator import save_COCO_format_json
             save_COCO_format_json(os.path.join(self.output_dir, "COCOformat.json"))
         if self.csv:
-            from utils.csv_utils import save_COCO_format_csv, save_Tx_csv_data
+            from utils.evaluator import save_COCO_format_csv, save_Tx_csv_data
             save_COCO_format_csv(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_JSON.csv"))
             save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
 
@@ -616,8 +630,8 @@ def run_async_openvino_hpe(model_type="efficienthrnet1", device="CPU", input_src
         model_type=model_type,
         device=device,
         input_src=input_src,
-        ov_threads=kwargs.get('ov_threads', 3),
-        ov_mode=kwargs.get('ov_mode', 'throughput'),
+        ov_threads=kwargs.get('ov_threads', None),
+        ov_mode=kwargs.get('ov_mode', None),
         **{k: v for k, v in kwargs.items() if k not in ['ov_threads', 'ov_mode']}
     )
 
@@ -631,8 +645,8 @@ if __name__ == "__main__":
                        choices=['openpose', 'efficienthrnet1', 'efficienthrnet2', 'efficienthrnet3', 'higherhrnet'])
     parser.add_argument('--device', type=str, default='CPU', choices=['CPU', 'GPU'])
     parser.add_argument('--input', type=str, default='0', help='Input source (webcam, video file, etc.)')
-    parser.add_argument('--ov_threads', type=int, default=3, help='OpenVINO threads')
-    parser.add_argument('--ov_mode', type=str, default='throughput', choices=['throughput', 'latency'])
+    parser.add_argument('--ov_threads', type=int, default=None, help='OpenVINO threads (overrides OV_THREADS env var)')
+    parser.add_argument('--ov_mode', type=str, default=None, choices=['throughput', 'latency'], help='OpenVINO mode (overrides OV_MODE env var)')
     
     args = parser.parse_args()
     run_async_openvino_hpe(**vars(args))

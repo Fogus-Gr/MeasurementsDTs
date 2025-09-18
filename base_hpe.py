@@ -181,7 +181,14 @@ class BaseHPE(ABC):
     def _init_opencv_video_capture(self, input_src):
         """Initialize OpenCV video capture for video files and streams"""
         print(f"Initializing OpenCV video capture for: {input_src}")
-        self.cap = cv2.VideoCapture(input_src)
+        
+        # Use FFmpeg backend for HTTP streams for better reliability
+        if isinstance(input_src, str) and input_src.startswith("http"):
+            print(f"Using FFmpeg backend for HTTP stream: {input_src}")
+            self.cap = cv2.VideoCapture(input_src, cv2.CAP_FFMPEG)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency for real-time streams
+        else:
+            self.cap = cv2.VideoCapture(input_src)
         
         if not self.cap.isOpened():
             print(f"[ERROR] Could not open video source: {input_src}")
