@@ -51,8 +51,14 @@ class EPICCPUOptimizer:
         """Detect detailed CPU capabilities for optimization."""
         
         # Get basic CPU info
-        physical_cores = psutil.cpu_count(logical=False)
+        # In virtualized environments, use logical cores as the primary count
+        # since vCPUs are what we can actually use
         logical_cores = psutil.cpu_count(logical=True)
+        physical_cores = psutil.cpu_count(logical=False)
+        
+        # For virtualized environments, treat logical cores as available cores
+        # since that's what the VM can actually use
+        available_cores = logical_cores
         
         # Try to get CPU frequency info
         try:
@@ -80,7 +86,7 @@ class EPICCPUOptimizer:
             numa_nodes = 1
         
         return CPUCapabilities(
-            physical_cores=physical_cores,
+            physical_cores=available_cores,  # Use available cores for virtualized environments
             logical_cores=logical_cores,
             base_frequency=base_freq,
             max_frequency=max_freq,
@@ -94,8 +100,10 @@ class EPICCPUOptimizer:
     def _calculate_optimal_config(self) -> Dict:
         """Calculate optimal OpenVINO configuration for EPIC processor."""
         
-        # 4 vCPU cloud instance optimizations
-        if self.capabilities.physical_cores <= 4:
+        # Cloud instance optimizations based on available cores
+        available_cores = self.capabilities.physical_cores
+        
+        if available_cores <= 4:
             # Low core count cloud optimizations - maximize utilization
             
             # Use all available cores for inference (cloud instances are dedicated)
@@ -127,6 +135,44 @@ class EPICCPUOptimizer:
             }
             
             # Model-specific tuning based on your benchmark data
+            if self.target_model:
+                return self._tune_for_model(configs)
+            else:
+                return configs['balanced']
+        
+        elif available_cores == 8:
+            # 8 vCPU cloud instance optimizations - fine-tuned for 5.0 FPS
+            configs = {
+                'throughput_heavy': {
+                    'inference_threads': 8,  # Use all 8 vCPUs
+                    'streams': 1,  # Single stream for AE1 model
+                    'performance_hint': 'THROUGHPUT',
+                    'enable_cpu_pinning': False,  # Less effective in cloud
+                    'enable_hyper_threading': False,  # EPYC 7551P doesn't have hyper-threading
+                    'batch_size': 1,
+                    'memory_pattern': 'bandwidth_optimized',  # Better memory access
+                },
+                'latency_optimized': {
+                    'inference_threads': 7,  # Leave 1 for OS (like your manual setup)
+                    'streams': 1,
+                    'performance_hint': 'LATENCY',
+                    'enable_cpu_pinning': False,
+                    'enable_hyper_threading': False,
+                    'batch_size': 1,
+                    'memory_pattern': 'latency_optimized',  # Match your manual setup
+                },
+                'balanced': {
+                    'inference_threads': 7,  # Use 7 threads like your manual setup
+                    'streams': 1,  # Single stream optimal for AE1
+                    'performance_hint': 'LATENCY',  # Match your manual setup
+                    'enable_cpu_pinning': False,
+                    'enable_hyper_threading': False,
+                    'batch_size': 1,
+                    'memory_pattern': 'latency_optimized',  # Match your manual setup
+                }
+            }
+            
+            # Model-specific tuning
             if self.target_model:
                 return self._tune_for_model(configs)
             else:
@@ -213,6 +259,34 @@ class EPICCPUOptimizer:
                     'memory_pattern': 'bandwidth_optimized'
                 }
             }
+        elif self.capabilities.physical_cores == 8:
+            # 8 vCPU optimizations - your current setup
+            model_optimizations = {
+                'openpose': {
+                    'preferred_config': 'throughput_heavy',
+                    'inference_threads': 8,  # Use all 8 vCPUs
+                    'streams': 1,  # Single stream for stability
+                    'batch_size': 1,
+                    'memory_pattern': 'bandwidth_optimized'
+                },
+                
+                'efficienthrnet1': {  # ae1 - your main model
+                    'preferred_config': 'latency_optimized',  # Use latency config for better FPS
+                    'inference_threads': 7,  # Match your manual setup (7 threads)
+                    'streams': 1,  # Single stream optimal for AE1
+                    'batch_size': 1,
+                    'memory_pattern': 'latency_optimized',  # Match your manual setup
+                    'performance_hint': 'LATENCY'  # Explicitly set latency mode
+                },
+                
+                'higherhrnet': {
+                    'preferred_config': 'throughput_heavy',
+                    'inference_threads': 8,  # Use all 8 vCPUs
+                    'streams': 1,  # Single stream for heavy model
+                    'batch_size': 1,
+                    'memory_pattern': 'bandwidth_optimized'
+                }
+            }
         else:
             # High core count optimizations (original settings)
             model_optimizations = {
@@ -264,7 +338,7 @@ class EPICCPUOptimizer:
         
         config = self.optimal_config
         
-        # Core CPU properties
+        # Core CPU properties - fine-tuned for 5.0 FPS
         cpu_props = {
             props.inference_num_threads: config['inference_threads'],
             props.hint.performance_mode: (
@@ -275,6 +349,22 @@ class EPICCPUOptimizer:
             props.hint.enable_cpu_pinning: config['enable_cpu_pinning'],
             props.hint.enable_hyper_threading: config['enable_hyper_threading'],
         }
+        
+        # Fine-tuning parameters for better FPS
+        if config.get('memory_pattern') == 'latency_optimized':
+            cpu_props.update({
+                props.hint.num_requests: 1,  # Single request for latency
+            })
+        elif config.get('memory_pattern') == 'bandwidth_optimized':
+            cpu_props.update({
+                props.hint.num_requests: 1,  # Single request
+            })
+        
+        # Additional fine-tuning for 8 vCPU setup
+        if self.capabilities.physical_cores == 8:
+            cpu_props.update({
+                props.hint.scheduling_core_type: props.hint.SchedulingCoreType.ANY_CORE,
+            })
         
         # Add streams configuration if specified
         if 'streams' in config:

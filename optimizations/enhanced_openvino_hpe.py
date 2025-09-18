@@ -195,20 +195,6 @@ class OptimizedOpenVINOHPE(OpenVINOBaseHPE):
             print(f"  • Batch Size: {config['batch_size']}")
         
         print("")
-        print("Expected Performance Improvements:")
-        
-        # Model-specific improvement estimates
-        improvements = {
-            'openpose': "20-30% faster (16.7 → 20-22 FPS)",
-            'efficienthrnet1': "25-35% faster (12.5 → 16-17 FPS)",
-            'higherhrnet': "40-60% faster (2.4 → 3.4-3.8 FPS)",
-        }
-        
-        if self.model_type in improvements:
-            print(f"  • {improvements[self.model_type]}")
-        else:
-            print(f"  • 20-40% performance improvement expected")
-        
         print("="*60)
     
     def get_performance_stats(self):
