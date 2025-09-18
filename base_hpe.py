@@ -498,6 +498,28 @@ class BaseHPE(ABC):
             # Now, we have start_time and stop_time. Let's use the end of inference for timestamp.
             append_COCO_format_csv(bodies, self.score_thresh, frame_number, stop_time, self.measurement_interval_ms)
 
+        # --- PoseMonitor integration: update metrics and print periodically ---
+        try:
+            if hasattr(self, 'pose_monitor') and self.pose_monitor is not None:
+                keypoints_batch = []
+                if bodies:
+                    for b in bodies:
+                        # Combine keypoints with their scores as [x, y, conf]
+                        person_kps = []
+                        if hasattr(b, 'keypoints') and hasattr(b, 'keypoints_score'):
+                            for (x, y), s in zip(b.keypoints, b.keypoints_score):
+                                person_kps.append([float(x), float(y), float(s)])
+                        keypoints_batch.append(person_kps)
+
+                # Update monitor (safe with empty list -> only FPS is updated)
+                self.pose_monitor.update(keypoints_batch if keypoints_batch is not None else None)
+
+                # Print every 30 frames
+                if frame_number % 30 == 0:
+                    self.pose_monitor.print_metrics()
+        except Exception as e:
+            print(f"[WARNING] PoseMonitor update failed: {e}")
+
         if self.save_image or self.save_video:
             # Ensure that LINES_BODY is defined in the child class
             if not hasattr(self, 'LINES_BODY'):

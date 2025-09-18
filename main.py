@@ -10,6 +10,7 @@ import argparse
 from movenet_hpe import MoveNetHPE
 from openvino_base_hpe import OpenVINOBaseHPE
 from alphapose_hpe import AlphaPoseHPE
+from pose_monitor import PoseMonitor
 import logging
 
 class _HideAspectWarn(logging.Filter):
@@ -23,7 +24,11 @@ def main():
     parser = parse_arguments()
     args = parser.parse_args()
 
+    # Initialize and attach PoseMonitor for runtime metrics
+    pose_monitor = PoseMonitor(window_size=30, log_file='pose_metrics.csv')
+
     hpe = get_hpe_method(args)
+    hpe.pose_monitor = pose_monitor
     hpe.load_model()
     
     # Add timeout and frame count detection for HTTP streams and video files
