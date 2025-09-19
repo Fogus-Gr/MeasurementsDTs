@@ -43,12 +43,16 @@ services:
     # Add these lines for GPU support
     runtime: nvidia
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      # - OPENCV_FFMPEG_CAPTURE_OPTIONS=${OPENCV_FFMPEG_CAPTURE_OPTIONS:-video_codec;mjpeg,tcp|stimeout;5000000'}
+      - OPENCV_FFMPEG_DEBUG=1 # Enable FFMPEG debug logging
+      - OPENCV_LOG_LEVEL=DEBUG
       - PYTHONUNBUFFERED=1
       - WAIT_HOSTS=h264-streaming-server:8089
       - WAIT_HOSTS_TIMEOUT=30
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
       # Add these lines for CPU optimization
       # - OV_MODE="latency"
       # - OV_STREAMS="1"
@@ -63,7 +67,6 @@ services:
     volumes:
       - ./results:/output:rw
       - ../videos:/videos:ro
-    shm_size: 8gb  # Adjust based on your model requirements
     healthcheck:
       test: ["CMD", "pgrep", "-f", "python.*main.py"]
       interval: 30s
