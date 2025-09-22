@@ -52,6 +52,7 @@ class BaseHPE(ABC):
         self.show_scores = show_scores
         self.show_bounding_box = show_bounding_box
         self.univ_time = 0
+        self.frame_number = 0
         
         self.img_w = 0
         self.img_h = 0
@@ -136,10 +137,10 @@ class BaseHPE(ABC):
         pass
     
     def main_loop(self):
-        frame_number = 0
+        image_id = 0
 
         if self.input_type == "image":
-            self.process_frame(self.img, frame_number)
+            self.process_frame(self.img, image_id)
 
         elif self.input_type == "directory":
             # Get all image files from the directory
@@ -151,7 +152,7 @@ class BaseHPE(ABC):
             
             total_frames = len(image_files)
             for image_file in image_files:
-                print(f"Processing {frame_number+1}/{total_frames}")
+                print(f"Processing {image_id+1}/{total_frames}")
                 self.img = cv2.imread(image_file)
                 if self.img is None:
                     print(f"Failed to load image: {image_file}")
@@ -159,9 +160,9 @@ class BaseHPE(ABC):
 
                 self.img_h, self.img_w = self.img.shape[:2]
                 self.set_padding()
-                self.process_frame(self.img, frame_number)
+                self.process_frame(self.img, image_id)
 
-                frame_number += 1
+                image_id += 1
         
         else:   # webcam, video or stream
             print("Starting processing video/webcam data. Press CTR+C to exit")
@@ -171,10 +172,11 @@ class BaseHPE(ABC):
                     break
 
                 self.univ_time = self.cap.get(cv2.CAP_PROP_POS_MSEC)  # timestamp of current frame, in milliseconds
+                self.frame_number = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
 
-                self.process_frame(frame, frame_number)
+                self.process_frame(frame, image_id)
 
-                frame_number += 1
+                image_id += 1
 
         if self.json:
             save_COCO_format_json(os.path.join(self.output_dir, "COCOformat.json"))
@@ -182,7 +184,7 @@ class BaseHPE(ABC):
             save_COCO_format_csv(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_JSON.csv"))
             save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
 
-    def process_frame(self, frame, frame_number):
+    def process_frame(self, frame, image_id):
         timestamp = time.time()
 
         padded = self.pad_and_resize(frame)
@@ -190,9 +192,9 @@ class BaseHPE(ABC):
         bodies = self.postprocess(predictions)
 
         if self.json:
-            append_COCO_format_json(bodies, self.score_thresh, frame_number, self.univ_time)
+            append_COCO_format_json(bodies, self.score_thresh, image_id, self.univ_time, self.frame_number)
         if self.csv:
-            append_COCO_format_csv(bodies, self.score_thresh, frame_number, timestamp, self.measurement_interval_ms)
+            append_COCO_format_csv(bodies, self.score_thresh, image_id, timestamp, self.measurement_interval_ms)
 
         if self.save_image or self.save_video:
             # Ensure that LINES_BODY is defined in the child class
@@ -207,7 +209,7 @@ class BaseHPE(ABC):
                 self.output.write(frame)
 
             elif self.save_image:
-                filename = os.path.join(self.output_dir, f"frame_{frame_number:04d}.jpg")
+                filename = os.path.join(self.output_dir, f"frame_{image_id:04d}.jpg")
                 cv2.imwrite(filename, frame)
     
     @abstractmethod

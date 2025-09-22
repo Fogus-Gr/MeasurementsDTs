@@ -1,9 +1,8 @@
 import numpy as np
 import cv2
 
-def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_box):
+def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_box, show_numbering=False, isGroundTruth = False, color_skeleton = (255, 180, 90)):
         thickness = 3 
-        color_skeleton = (255, 180, 90)
         color_box = (0,255,255)
 
         for body in bodies:                
@@ -42,6 +41,16 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
                                 cv2.FONT_HERSHEY_SIMPLEX, 
                                 0.4,  # Font scale
                                 color,  # Use the same color as the keypoint
+                                1,  # Thickness
+                                cv2.LINE_AA)
+                    if show_numbering:
+                        score_text = f"{i}"
+                        cv2.putText(frame, 
+                                score_text, 
+                                (int(x_y[0]) - 5, int(x_y[1]) - 10),  # Offset slightly from the circle
+                                cv2.FONT_HERSHEY_SIMPLEX, 
+                                0.4,  # Font scale
+                                (255,255,255),  # Use the same color as the keypoint
                                 1,  # Thickness
                                 cv2.LINE_AA)
 

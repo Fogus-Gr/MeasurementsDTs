@@ -9,7 +9,7 @@ ultimate_ms = None
 json_buffer = ""
 interval_msec = None
 
-def create_COCO_format(bodies, score_thresh, frame_number, univ_time = None):
+def create_COCO_format(bodies, score_thresh, image_id, univ_time = None, frame_number = None):
     # Flags for COCO format
     CATEGORY_PERSON = 1
     NOT_LABELED = 0
@@ -25,11 +25,15 @@ def create_COCO_format(bodies, score_thresh, frame_number, univ_time = None):
             keypoints.extend([float(x), float(y), v])
 
         result_enty = {
-            "image_id": frame_number,
+            "image_id": image_id,
             "category_id": CATEGORY_PERSON,
             "keypoints": keypoints,
             "score": float(body.score)
         }
+
+
+        if frame_number is not None:
+            result_enty["frame_number"] = frame_number
 
         if univ_time is not None:
             result_enty["univ_time"] = float(univ_time) 
@@ -38,17 +42,17 @@ def create_COCO_format(bodies, score_thresh, frame_number, univ_time = None):
 
     return results
 
-def append_COCO_format_json(bodies, score_thresh, frame_number, univ_time):
+def append_COCO_format_json(bodies, score_thresh, image_id, univ_time, frame_number):
     global coco_results
 
-    coco_results.extend(create_COCO_format(bodies, score_thresh, frame_number, univ_time))
+    coco_results.extend(create_COCO_format(bodies, score_thresh, image_id, univ_time, frame_number))
 
-def append_COCO_format_csv(bodies, score_thresh, frame_number, timestamp, measurement_interval_ms):
+def append_COCO_format_csv(bodies, score_thresh, image_id, timestamp, measurement_interval_ms):
     global csv_rows
 
-    results = create_COCO_format(bodies, score_thresh, frame_number)
+    results = create_COCO_format(bodies, score_thresh, image_id)
     json_string = json.dumps(results)
-    csv_rows.append([frame_number, timestamp, json_string])
+    csv_rows.append([image_id, timestamp, json_string])
 
     append_Tx_csv_data(json_string, timestamp, measurement_interval_ms)    
 
@@ -102,7 +106,7 @@ def save_COCO_format_csv(filepath):
     print(f"Saving file {filepath}")
     with open(filepath, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(["frame_number", "timestamp", "json_output"])  # header
+        writer.writerow(["image_id", "timestamp", "json_output"])  # header
         writer.writerows(csv_rows)  # write all data rows
 
 def save_Tx_csv_data(filepath):
