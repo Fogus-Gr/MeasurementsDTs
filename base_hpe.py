@@ -7,6 +7,9 @@ import time
 import torch
 import numpy as np
 import logging
+import requests
+import re
+import json
 
 try:
     import PyNvCodec as nvc
@@ -35,6 +38,22 @@ class Body:
 #               The padding is done on one side (bottom or right) of the image.
 # padded_w (resp. padded_h): width (resp. height) of the image after padding
 Padding = namedtuple('Padding', ['w', 'h', 'padded_w',  'padded_h'])
+
+def extract_x_metadata(header_region):
+    match = re.search(b'X-Metadata: (.+?)\r\n', header_region)
+
+    if match:
+        metadata_json = match.group(1)
+        metadata = json.loads(metadata_json.decode())
+        frame_number = metadata.get('frame_number')
+        server_timestamp = metadata.get("server_timestamp")
+        elapsed_time = metadata.get("elapsed_time")
+    else:
+        frame_number = None
+        server_timestamp = None
+        elapsed_time = None
+
+    return frame_number
 
 class BaseHPE(ABC):
     input_type = None
@@ -273,363 +292,139 @@ class BaseHPE(ABC):
             self.load_model()
             print("Model loaded successfully!")
 
-        frame_number = 0
-        start_time = time.time()
-        
-        if timeout_seconds > 0:
+        try: 
+            frame_idx = 0
+            start_time = time.time()
+            
             print(f"Starting processing with timeout: {timeout_seconds}s, max_frames: {max_frames if max_frames > 0 else 'unlimited'}")
-        else:
-            print(f"Starting processing with unlimited timeout, max_frames: {max_frames if max_frames > 0 else 'unlimited'}")
 
-        if self.input_type == "image":
-            self.process_frame(self.img, frame_number)
+            if self.input_type == "image":
+                self.process_frame(self.img, frame_idx)
 
-        elif self.input_type == "directory":
-            # Get all image files from the directory
-            image_files = glob.glob(os.path.join(self.img_dir, '*.[pjg][np][ge]*'))
-            print(f"Found {len(image_files)} images in {self.img_dir}")
+            elif self.input_type == "directory":
+                # Get all image files from the directory
+                image_files = glob.glob(os.path.join(self.img_dir, '*.[pjg][np][ge]*'))
+                print(f"Found {len(image_files)} images in {self.img_dir}")
 
-            # Sort files to ensure they are in alphanumeric order
-            image_files = sorted(image_files)
+                # Sort files to ensure they are in alphanumeric order
+                image_files = sorted(image_files)
 
-            for image_file in image_files:
-                self.img = cv2.imread(image_file)
-                if self.img is None:
-                    print(f"Could not load image: {image_file}")
-                    continue
-
-                self.process_frame(self.img, frame_number)
-                frame_number += 1
-
-        elif self.is_pynvcodec_enabled: # PyNvCodec path
-            print(f"Starting processing video/stream data with PyNvCodec on GPU {self.gpu_id}. Press CTR+C to exit")
-            
-            # Timing variables for PyNvCodec
-            frame_decoding_times = []
-            frame_processing_times = []
-            last_frame_time = time.time()
-            
-            while True:
-                try:
-                    # Check timeout (only if timeout is set)
-                    if timeout_seconds > 0 and time.time() - start_time > timeout_seconds:
-                        print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
-                        break
-                    
-                    # Check max frames
-                    if max_frames > 0 and frame_number >= max_frames:
-                        print(f"Max frames reached ({max_frames}) - stopping processing")
-                        break
-                    
-                    # Measure frame decoding time
-                    decoding_start = time.time()
-                    surface = self.decoder.DecodeSingleFrame(self.demuxer)
-                    if not surface:
-                        print("End of video stream")
-                        break # End of video
-
-                    # Convert NV12 surface to RGB surface
-                    rgb_surface = self.to_rgb_converter.Execute(surface)
-                    
-                    # Convert RGB surface to PyTorch tensor on GPU
-                    frame_tensor = self.to_tensor_converter.Execute(rgb_surface)
-                    decoding_time = time.time() - decoding_start
-                    frame_decoding_times.append(decoding_time)
-                    
-                    # Calculate frame interval
-                    current_time = time.time()
-                    frame_interval = current_time - last_frame_time
-                    last_frame_time = current_time
-                    
-                    # Measure frame processing time
-                    processing_start = time.time()
-                    self.process_frame(frame_tensor, frame_number)
-                    processing_time = time.time() - processing_start
-                    frame_processing_times.append(processing_time)
-                    
-                    # Log detailed timing every 10 frames
-                    if frame_number % 10 == 0:
-                        avg_decoding = sum(frame_decoding_times[-10:]) / min(10, len(frame_decoding_times))
-                        avg_processing = sum(frame_processing_times[-10:]) / min(10, len(frame_processing_times))
-                        print(f"Frame {frame_number}: Decoding={decoding_time*1000:.1f}ms, Processing={processing_time*1000:.1f}ms, Interval={frame_interval*1000:.1f}ms")
-                        print(f"  Last 10 avg: Decoding={avg_decoding*1000:.1f}ms, Processing={avg_processing*1000:.1f}ms")
-                    
-                    frame_number += 1
-                    
-                    # Progress update every 100 frames
-                    if frame_number % 100 == 0:
-                        elapsed = time.time() - start_time
-                        print(f"Processed {frame_number} frames in {elapsed:.1f}s")
-                        
-                except Exception as e:
-                    print(f"[ERROR] PyNvCodec decoding error: {e}")
-                    break # Exit loop on error
-            
-            # Print final timing statistics for PyNvCodec
-            if frame_decoding_times and frame_processing_times:
-                print("\n" + "="*60)
-                print("PYNVCODEC TIMING STATISTICS")
-                print("="*60)
-                
-                # Frame decoding statistics
-                avg_decoding = sum(frame_decoding_times) / len(frame_decoding_times)
-                min_decoding = min(frame_decoding_times)
-                max_decoding = max(frame_decoding_times)
-                print(f"Frame Decoding (PyNvCodec):")
-                print(f"  Average: {avg_decoding*1000:.2f}ms")
-                print(f"  Min: {min_decoding*1000:.2f}ms")
-                print(f"  Max: {max_decoding*1000:.2f}ms")
-                
-                # Frame processing statistics
-                avg_processing = sum(frame_processing_times) / len(frame_processing_times)
-                min_processing = min(frame_processing_times)
-                max_processing = max(frame_processing_times)
-                print(f"Frame Processing (HPE inference):")
-                print(f"  Average: {avg_processing*1000:.2f}ms")
-                print(f"  Min: {min_processing*1000:.2f}ms")
-                print(f"  Max: {max_processing*1000:.2f}ms")
-                
-                # Overall performance
-                total_processing_time = sum(frame_processing_times)
-                total_decoding_time = sum(frame_decoding_times)
-                overhead_time = (time.time() - start_time) - total_processing_time - total_decoding_time
-                
-                print(f"Performance Breakdown:")
-                print(f"  Total time: {time.time() - start_time:.2f}s")
-                print(f"  Processing time: {total_processing_time:.2f}s ({total_processing_time/(time.time() - start_time)*100:.1f}%)")
-                print(f"  Decoding time: {total_decoding_time:.2f}s ({total_decoding_time/(time.time() - start_time)*100:.1f}%)")
-                print(f"  Other overhead: {overhead_time:.2f}s ({overhead_time/(time.time() - start_time)*100:.1f}%)")
-                print("="*60)
-
-        else:   # OpenCV video/webcam/stream fallback
-            if self.cap is None:
-                print(f"[ERROR] Video capture not initialized for {self.__class__.__name__}. This HPE implementation may not support video inputs.")
-                return
-            print("Starting processing video/webcam data with OpenCV. Press CTR+C to exit")
-            
-            consecutive_failures = 0
-            max_consecutive_failures = 10
-            
-            # Granular timing variables for detailed analysis
-            http_request_times = []
-            mjpeg_decoding_times = []
-            opencv_processing_times = []
-            network_latency_times = []
-            ffmpeg_overhead_times = []
-            frame_processing_times = []
-            last_frame_time = time.time()
-            
-            # For network latency measurement
-            last_http_request_time = None
-            
-            while True:
-                # Check timeout (only if timeout is set)
-                if timeout_seconds > 0 and time.time() - start_time > timeout_seconds:
-                    print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
-                    break
-                
-                # Check max frames
-                if max_frames > 0 and frame_number >= max_frames:
-                    print(f"Max frames reached ({max_frames}) - stopping processing")
-                    break
-                
-                # Read frame first
-                ok, frame = self.cap.read()
-                
-                if not ok:
-                    consecutive_failures += 1
-                    if consecutive_failures >= max_consecutive_failures:
-                        print(f"Stream ended after {consecutive_failures} consecutive read failures")
-                        break
-                    else:
-                        print(f"Frame read failed ({consecutive_failures}/{max_consecutive_failures}), retrying...")
-                        time.sleep(0.1)
+                for image_file in image_files:
+                    self.img = cv2.imread(image_file)
+                    if self.img is None:
+                        print(f"Could not load image: {image_file}")
                         continue
-                else:
-                    consecutive_failures = 0  # Reset on successful read
-                    
-                    # Granular timing measurements for HTTP streams
-                    if self.input_type == "video" and hasattr(self, 'input_src') and self.input_src.startswith('http'):
-                        # Calculate network latency (time between requests)
-                        current_time = time.time()
-                        if last_http_request_time is not None:
-                            network_latency = current_time - last_http_request_time
-                            network_latency_times.append(network_latency)
-                        last_http_request_time = current_time
+
+                    self.process_frame(self.img, frame_idx)
+                    frame_idx += 1
+
+            elif self.is_pynvcodec_enabled: # PyNvCodec path
+                print(f"Starting processing video/stream data with PyNvCodec on GPU {self.gpu_id}. Press CTR+C to exit")
+                while True:
+                    try:
+                        # Check timeout
+                        if time.time() - start_time > timeout_seconds:
+                            print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
+                            break
                         
-                        # For HTTP streams, we can't easily measure individual components
-                        # since cap.read() does everything internally. We'll estimate them.
-                        # This is a simplified approach - in reality, cap.read() does:
-                        # 1. HTTP request
-                        # 2. MJPEG decoding
-                        # 3. OpenCV processing
+                        # Check max frames
+                        if max_frames > 0 and frame_idx >= max_frames:
+                            print(f"Max frames reached ({max_frames}) - stopping processing")
+                            break
                         
-                        # Estimate HTTP request time (network + basic processing)
-                        http_request_time = 0.002  # 2ms estimate for HTTP request
-                        http_request_times.append(http_request_time)
+                        # Decode a frame
+                        surface = self.decoder.DecodeSingleFrame(self.demuxer)
+                        if not surface:
+                            print("End of video stream")
+                            break # End of video
+
+                        # Convert NV12 surface to RGB surface
+                        rgb_surface = self.to_rgb_converter.Execute(surface)
                         
-                        # Estimate MJPEG decoding time
-                        mjpeg_decoding_time = 0.008  # 8ms estimate for MJPEG decoding
-                        mjpeg_decoding_times.append(mjpeg_decoding_time)
+                        # Convert RGB surface to PyTorch tensor on GPU
+                        frame_tensor = self.to_tensor_converter.Execute(rgb_surface)
                         
-                        # Estimate OpenCV processing time
-                        opencv_processing_time = 0.002  # 2ms estimate for OpenCV processing
-                        opencv_processing_times.append(opencv_processing_time)
+                        self.process_frame(frame_tensor, frame_idx)
+                        frame_idx += 1
                         
-                        # Estimate FFmpeg overhead
-                        ffmpeg_overhead_time = 0.001  # 1ms estimate for FFmpeg overhead
-                        ffmpeg_overhead_times.append(ffmpeg_overhead_time)
-                        
-                    else:
-                        # For non-HTTP streams, measure actual read time
-                        frame_arrival_time = 0.001  # Minimal read time for local files
-                        http_request_times.append(frame_arrival_time)
-                    
-                    # Calculate frame interval (time between frames)
-                    current_time = time.time()
-                    frame_interval = current_time - last_frame_time
-                    last_frame_time = current_time
-                    
-                    # Measure total frame processing time
-                    frame_processing_start = time.time()
-                    self.process_frame(frame, frame_number)
-                    frame_processing_time = time.time() - frame_processing_start
-                    frame_processing_times.append(frame_processing_time)
-                    
-                    # Log detailed timing every 10 frames
-                    if frame_number % 10 == 0:
-                        if self.input_type == "video" and hasattr(self, 'input_src') and self.input_src.startswith('http'):
-                            # Granular timing for HTTP streams
-                            avg_http = sum(http_request_times[-10:]) / min(10, len(http_request_times))
-                            avg_mjpeg = sum(mjpeg_decoding_times[-10:]) / min(10, len(mjpeg_decoding_times))
-                            avg_opencv = sum(opencv_processing_times[-10:]) / min(10, len(opencv_processing_times))
-                            avg_network = sum(network_latency_times[-10:]) / min(10, len(network_latency_times)) if network_latency_times else 0
-                            avg_ffmpeg = sum(ffmpeg_overhead_times[-10:]) / min(10, len(ffmpeg_overhead_times))
-                            avg_processing = sum(frame_processing_times[-10:]) / min(10, len(frame_processing_times))
+                        # Progress update every 100 frames
+                        if frame_idx % 100 == 0:
+                            elapsed = time.time() - start_time
+                            print(f"Processed {frame_idx} frames in {elapsed:.1f}s")
                             
-                            print(f"Frame {frame_number}: HTTP={http_request_time*1000:.1f}ms, MJPEG={mjpeg_decoding_time*1000:.1f}ms, OpenCV={opencv_processing_time*1000:.1f}ms, Processing={frame_processing_time*1000:.1f}ms")
-                            print(f"  Last 10 avg: HTTP={avg_http*1000:.1f}ms, MJPEG={avg_mjpeg*1000:.1f}ms, OpenCV={avg_opencv*1000:.1f}ms, Network={avg_network*1000:.1f}ms, FFmpeg={avg_ffmpeg*1000:.1f}ms, Processing={avg_processing*1000:.1f}ms")
+                    except Exception as e:
+                        print(f"[ERROR] PyNvCodec decoding error: {e}")
+                        break # Exit loop on error
+
+            else:   # video/webcam/stream fallback   
+                url = self.input_src
+                r = requests.get(url, stream=True)
+                buffer = b""
+
+                print("Starting processing video/webcam data from HTTP stream. Press CTRL+C to exit")
+
+                consecutive_failures = 0
+                max_consecutive_failures = 10
+
+                for chunk in r.iter_content(chunk_size=1024):
+                    buffer += chunk
+                    while True:
+                        # Check timeout
+                        if time.time() - start_time > timeout_seconds:
+                            print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
+                            break
+
+                        # Check max frames
+                        if max_frames > 0 and frame_idx >= max_frames:
+                            print(f"Max frames reached ({max_frames}) - stopping processing")
+                            break
+
+                        soi = buffer.find(b'\xFF\xD8')
+                        eoi = buffer.find(b'\xFF\xD9', soi + 2)
+
+                        if soi != -1 and eoi != -1:
+                            header_region = buffer[max(0, soi-200):soi]  # look back 200 bytes
+                            frame_number = extract_x_metadata(header_region)
+                            
+                            frame_data = buffer[soi:eoi+2]
+                            buffer = buffer[eoi+2:]
+
+                            frame = cv2.imdecode(np.frombuffer(frame_data, np.uint8), cv2.IMREAD_COLOR)
+                            if frame is None:
+                                consecutive_failures += 1
+                                print(f"Frame decode failed ({consecutive_failures}/{max_consecutive_failures})")
+                                if consecutive_failures >= max_consecutive_failures:
+                                    print("Too many decode failures, stopping.")
+                                    break
+                                else:
+                                    print(f"Frame read failed ({consecutive_failures}/{max_consecutive_failures}), retrying...")
+                                    time.sleep(0.1)
+                                continue
+                            else:
+                                consecutive_failures = 0  # Reset on successful read
+
+                            self.process_frame(frame, frame_number)
+                            frame_idx += 1
+                    
+                            # Progress update every 100 frames
+                            if frame_idx % 100 == 0:
+                                elapsed = time.time() - start_time
+                                fps = frame_idx / elapsed if elapsed > 0 else 0
+                                print(f"Processed {frame_idx} frames in {elapsed:.1f}s (avg {fps:.1f} FPS)")
                         else:
-                            # Simple timing for non-HTTP streams
-                            avg_http = sum(http_request_times[-10:]) / min(10, len(http_request_times))
-                            avg_processing = sum(frame_processing_times[-10:]) / min(10, len(frame_processing_times))
-                            print(f"Frame {frame_number}: Read={frame_arrival_time*1000:.1f}ms, Processing={frame_processing_time*1000:.1f}ms, Interval={frame_interval*1000:.1f}ms")
-                            print(f"  Last 10 avg: Read={avg_http*1000:.1f}ms, Processing={avg_processing*1000:.1f}ms")
-                    
-                    frame_number += 1
-                
-                # Progress update every 100 frames
-                if frame_number % 100 == 0:
-                    elapsed = time.time() - start_time
-                    fps = frame_number / elapsed if elapsed > 0 else 0
-                    print(f"Processed {frame_number} frames in {elapsed:.1f}s (avg {fps:.1f} FPS)")
-            
-            # Print final timing statistics
-            if http_request_times and frame_processing_times:
-                print("\n" + "="*80)
-                print("DETAILED FRAME TIMING STATISTICS")
-                print("="*80)
-                
-                if self.input_type == "video" and hasattr(self, 'input_src') and self.input_src.startswith('http'):
-                    # Granular statistics for HTTP streams
-                    print("HTTP STREAM COMPONENT BREAKDOWN:")
-                    print("-" * 50)
-                    
-                    # HTTP Request statistics
-                    if http_request_times:
-                        avg_http = sum(http_request_times) / len(http_request_times)
-                        min_http = min(http_request_times)
-                        max_http = max(http_request_times)
-                        print(f"HTTP Request (Total cap.read()):")
-                        print(f"  Average: {avg_http*1000:.2f}ms")
-                        print(f"  Min: {min_http*1000:.2f}ms")
-                        print(f"  Max: {max_http*1000:.2f}ms")
-                    
-                    # MJPEG Decoding statistics
-                    if mjpeg_decoding_times:
-                        avg_mjpeg = sum(mjpeg_decoding_times) / len(mjpeg_decoding_times)
-                        min_mjpeg = min(mjpeg_decoding_times)
-                        max_mjpeg = max(mjpeg_decoding_times)
-                        print(f"MJPEG Decoding (Estimated):")
-                        print(f"  Average: {avg_mjpeg*1000:.2f}ms")
-                        print(f"  Min: {min_mjpeg*1000:.2f}ms")
-                        print(f"  Max: {max_mjpeg*1000:.2f}ms")
-                    
-                    # OpenCV Processing statistics
-                    if opencv_processing_times:
-                        avg_opencv = sum(opencv_processing_times) / len(opencv_processing_times)
-                        min_opencv = min(opencv_processing_times)
-                        max_opencv = max(opencv_processing_times)
-                        print(f"OpenCV Processing:")
-                        print(f"  Average: {avg_opencv*1000:.2f}ms")
-                        print(f"  Min: {min_opencv*1000:.2f}ms")
-                        print(f"  Max: {max_opencv*1000:.2f}ms")
-                    
-                    # Network Latency statistics
-                    if network_latency_times:
-                        avg_network = sum(network_latency_times) / len(network_latency_times)
-                        min_network = min(network_latency_times)
-                        max_network = max(network_latency_times)
-                        print(f"Network Latency (Between requests):")
-                        print(f"  Average: {avg_network*1000:.2f}ms")
-                        print(f"  Min: {min_network*1000:.2f}ms")
-                        print(f"  Max: {max_network*1000:.2f}ms")
-                    
-                    # FFmpeg Overhead statistics
-                    if ffmpeg_overhead_times:
-                        avg_ffmpeg = sum(ffmpeg_overhead_times) / len(ffmpeg_overhead_times)
-                        min_ffmpeg = min(ffmpeg_overhead_times)
-                        max_ffmpeg = max(ffmpeg_overhead_times)
-                        print(f"FFmpeg Overhead:")
-                        print(f"  Average: {avg_ffmpeg*1000:.2f}ms")
-                        print(f"  Min: {min_ffmpeg*1000:.2f}ms")
-                        print(f"  Max: {max_ffmpeg*1000:.2f}ms")
-                    
-                else:
-                    # Simple statistics for non-HTTP streams
-                    print("VIDEO FILE COMPONENT BREAKDOWN:")
-                    print("-" * 50)
-                    
-                    # Frame read statistics
-                    avg_read = sum(http_request_times) / len(http_request_times)
-                    min_read = min(http_request_times)
-                    max_read = max(http_request_times)
-                    print(f"Frame Read (OpenCV):")
-                    print(f"  Average: {avg_read*1000:.2f}ms")
-                    print(f"  Min: {min_read*1000:.2f}ms")
-                    print(f"  Max: {max_read*1000:.2f}ms")
-                
-                # Frame processing statistics (common for all)
-                avg_processing = sum(frame_processing_times) / len(frame_processing_times)
-                min_processing = min(frame_processing_times)
-                max_processing = max(frame_processing_times)
-                print(f"\nHPE Processing (Inference):")
-                print(f"  Average: {avg_processing*1000:.2f}ms")
-                print(f"  Min: {min_processing*1000:.2f}ms")
-                print(f"  Max: {max_processing*1000:.2f}ms")
-                
-                # Overall performance breakdown
-                total_processing_time = sum(frame_processing_times)
-                total_read_time = sum(http_request_times)
-                overhead_time = (time.time() - start_time) - total_processing_time - total_read_time
-                
-                print(f"\nPERFORMANCE BREAKDOWN:")
-                print("-" * 50)
-                print(f"Total time: {time.time() - start_time:.2f}s")
-                print(f"Frame reading: {total_read_time:.2f}s ({total_read_time/(time.time() - start_time)*100:.1f}%)")
-                print(f"HPE processing: {total_processing_time:.2f}s ({total_processing_time/(time.time() - start_time)*100:.1f}%)")
-                print(f"Other overhead: {overhead_time:.2f}s ({overhead_time/(time.time() - start_time)*100:.1f}%)")
-                print("="*80)
+                            break
 
-        print(f"Processing completed. Total frames processed: {frame_number}")
-        print(f"Total time: {time.time() - start_time:.1f}s")
-        
+            print(f"Processing completed. Total frames processed: {frame_idx}")
+            print(f"Total time: {time.time() - start_time:.1f}s")
 
-        if self.json:
-            save_COCO_format_json(os.path.join(self.output_dir, "COCOformat.json"))
-        if self.csv:
-            save_COCO_format_csv(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_JSON.csv"))
-            save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
+        except Exception as e:
+            print(f"[ERROR] Processing failed: {e}")
+        finally:    # always save results
+            if self.json:
+                save_COCO_format_json(os.path.join(self.output_dir, "COCOformat.json"))
+            if self.csv:
+                save_COCO_format_csv(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_JSON.csv"))
+                save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
 
     def process_frame(self, frame, frame_number):
         # Start timing

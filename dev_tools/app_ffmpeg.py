@@ -1,4 +1,6 @@
 import os
+import json
+import time
 import subprocess
 import logging
 from flask import Flask, Response, request
@@ -14,7 +16,7 @@ logging.basicConfig(
 app = Flask(__name__)
 
 # Get video path from environment variable with fallback
-video_path = os.environ.get("VIDEO_PATH", "hd_00_00_8M_trimmed_25fps.mp4")
+video_path = os.environ.get("VIDEO_PATH", "/mnt/data/panoptic-toolbox/scripts/171204_pose1_backup/hdVideos/hd_00_00.mp4")
 logging.info(f"Using video path: {video_path}")
 
 def get_video_conversion_info(video_path_arg, target_fps=25):
@@ -90,13 +92,15 @@ def generate_frames():
         '-re',                          # Real-time playback
         '-i', video_path,
         '-f', 'mjpeg',                  # MJPEG format
-        '-r', '25',                     # Target input video FPS
+        #'-r', '25',                     # Target input video FPS
         '-vf', 'scale=1280:720',        # Simulate 720p webcam resolution
         '-q:v', '3',                    # Video quality (0-5, lower is better quality)
         '-'                             # Output to stdout
     ]
     pipe = None
     buffer = b''
+    frame_counter = 0
+    start_time = time.time()
     try:
         pipe = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
@@ -137,10 +141,25 @@ def generate_frames():
                     # Found both SOI and EOI markers. This is a complete JPEG frame.
                     # The frame data is from the SOI marker up to and including the EOI marker.
                     frame_data = buffer[soi_marker_pos : eoi_marker_pos + 2]
+
+                    # Calculate and create current time and frame metadata
+                    current_time = time.time()
+                    elapsed_time = current_time - start_time
+                    frame_counter += 1
+
+                    metadata = {
+                        'frame_number': frame_counter,
+                        'server_timestamp': current_time,
+                        'elapsed_time': elapsed_time
+                    }
+                    
+                    metadata_json = json.dumps(metadata)
                     
                     # Yield the complete frame data with multipart boundaries
                     yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
+                           b'Content-Type: image/jpeg\r\n'
+                           b'X-Metadata: ' + metadata_json.encode() + b'\r\n\r\n' +
+                           frame_data + b'\r\n')
                     
                     # Remove the processed frame data from the buffer
                     buffer = buffer[eoi_marker_pos + 2:]
