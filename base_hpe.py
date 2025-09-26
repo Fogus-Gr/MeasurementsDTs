@@ -19,6 +19,8 @@ class Body:
         self.keypoints_norm = keypoints_norm # keypoints normalized ([0,1]) coordinates (x,y) in the input image
         self.keypoints = keypoints # keypoints coordinates (x,y) in pixels in the input image
 
+        self.correctness = None
+
 # Padding (all values are in pixel) :
 # w (resp. h): horizontal (resp. vertical) padding on the source image to make its ratio same as Movenet model input. 
 #               The padding is done on one side (bottom or right) of the image.
