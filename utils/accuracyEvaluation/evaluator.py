@@ -94,16 +94,6 @@ class Evaluator:
 
         return bodies
 
-    
-    def get_frame_data(self, frame_number = None):
-        results = {}
-
-        results["ground_truth"] = self.ground_truth.get_frame(frame_number)
-        for pd in self.predictions:
-            results[pd.source_name] = pd.get_frame(frame_number)
-
-        return results
-
     def evaluate_frame(self, bodies):
         gt = bodies['ground_truth']
 
@@ -153,20 +143,24 @@ class Evaluator:
             print("Quitting loop.")
             exit(0)
 
-    def main_loop(self):
-        render_out=True
+    def get_frame_data(self, frame_number):
+        results = {}
 
+        results["ground_truth"] = self.ground_truth.get_frame(frame_number)
+        for pd in self.predictions:
+            results[pd.source_name] = pd.get_frame(frame_number)
+
+        return results
+
+    def frame_generator(self):
         if self.input_type == "video":
             if self.singleFrameFromVideo >= 0:
-                frame = get_frame_from_video(self.cap, self.singleFrameFromVideo)
+                frame_number = self.singleFrameFromVideo
+                frame = get_frame_from_video(self.cap, frame_number)
                 if frame is None:
-                    exit(0)
-
-                keypoint_list = self.get_frame_data(self.singleFrameFromVideo)
-                bodies = self.update_body_format(keypoint_list)
-                self.evaluate_frame(bodies)
-                if render_out:
-                    self.plot_keypoints(frame, bodies)                
+                    raise RuntimeError(f"Could not get frame {frame_number}")
+                
+                yield frame_number, frame
             else:
                 while True:
                     ok, frame = self.cap.read()
@@ -174,10 +168,26 @@ class Evaluator:
                         break
 
                     frame_number = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
-                    print(f"Processing frame {frame_number}")
+                    yield frame_number, frame
+        else:
+            raise NotImplementedError("Input selected not supported")
 
-                    keypoint_list = self.get_frame_data(frame_number = frame_number)
-                    bodies = self.update_body_format(keypoint_list)
-                    self.evaluate_frame(bodies)
-                    if render_out:
-                        self.plot_keypoints(frame, bodies)
+
+    def main_loop(self):
+        render_out = True
+
+        try:
+            for frame_number, frame in self.frame_generator():
+                print(f"Processing frame {frame_number}")
+
+                keypoint_list = self.get_frame_data(frame_number)
+                bodies = self.update_body_format(keypoint_list)
+                self.evaluate_frame(bodies)
+
+                if render_out:
+                    self.plot_keypoints(frame, bodies)
+
+        finally:
+            if self.input_type == "video" and hasattr(self, "cap"):
+                self.cap.release()
+            cv2.destroyAllWindows()
