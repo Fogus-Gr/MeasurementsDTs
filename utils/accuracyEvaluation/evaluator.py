@@ -115,6 +115,7 @@ class Evaluator:
 
     def evaluate_frame(self, bodies):
         gt = bodies['ground_truth']
+        pck_results = {}
 
         for method_name, prediction_bodies in bodies.items():
             if method_name == 'ground_truth':
@@ -136,10 +137,9 @@ class Evaluator:
                 pck, correctness = self.pck_eval.evaluate(gt_body, pred_body)
 
             pred_body.correctness = correctness
-            print(f"{method_name} PCK: {pck:.2f}")
-            #print(f"{method_name} pred_body.correctness: {pred_body.correctness}")
+            pck_results[method_name] = pck
 
-        return
+        return pck_results
 
     def plot_keypoints(self, frame, bodies):
         if frame is None:
@@ -212,11 +212,16 @@ class Evaluator:
 
         try:
             for frame_number, frame in self.frame_generator():
-                print(f"Processing frame {frame_number}")
 
                 keypoint_list = self.get_frame_data(frame_number)
                 bodies = self.update_body_format(keypoint_list)
-                self.evaluate_frame(bodies)
+                pck_results = self.evaluate_frame(bodies)
+
+                pck_str = ""
+                if pck_results:
+                    pck_str = "=> "
+                    pck_str += ", ".join([f"{method}: {pck:.2f}" for method, pck in pck_results.items()])
+                print(f"Frame {frame_number} {pck_str}")
 
                 if render_out:
                     self.plot_keypoints(frame, bodies)

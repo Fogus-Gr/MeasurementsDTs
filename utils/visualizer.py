@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+from utils.constants import LABELED_VISIBLE
 
 def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_box, show_numbering=False, isGroundTruth = False, color_skeleton = (255, 180, 90)):
         thickness = 3 
@@ -12,8 +13,8 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
                 # Check if keypoints in line exist and have valid scores
                 if (len(body.keypoints) > line[0] and len(body.keypoints) > line[1] and 
                     len(body.keypoints_score) > line[0] and len(body.keypoints_score) > line[1] and 
-                    body.keypoints_score[line[0]] > score_thresh and 
-                    body.keypoints_score[line[1]] > score_thresh):
+                    body.keypoints_score[line[0]] == LABELED_VISIBLE and 
+                    body.keypoints_score[line[1]] == LABELED_VISIBLE):
                     
                     # Map keypoint positions to integer coordinates for drawing
                     point_coords = [list(map(int, body.keypoints[point])) for point in line]
@@ -23,35 +24,56 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
             cv2.polylines(frame, lines, False, color_skeleton, 2, cv2.LINE_AA)
             
             for i,x_y in enumerate(body.keypoints):
-                if body.keypoints_score[i] > score_thresh:
-                    if i % 2 == 1:
-                        color = (0,255,0) 
-                    elif i == 0:
-                        color = (0,255,255)
-                    else:
-                        color = (0,0,255)
-                    cv2.circle(frame, (int(x_y[0]), int(x_y[1])), 4, color, -11)
+                v = body.keypoints_score[i]
 
-                    if show_scores:
-                        score_text = f"{body.keypoints_score[i]:.1f}"
-                        cv2.putText(frame, 
-                                score_text, 
-                                (int(x_y[0]) + 5, int(x_y[1]) - 5),  # Offset slightly from the circle
-                                cv2.FONT_HERSHEY_SIMPLEX, 
-                                fontScale = 0.8,
-                                color = (255,255,255),
-                                thickness = 2,
-                                lineType =cv2.LINE_AA)
-                    if show_numbering:
-                        score_text = f"{i}"
-                        cv2.putText(frame, 
-                                score_text, 
-                                (int(x_y[0]) - 5, int(x_y[1]) - 10),  # Offset slightly from the circle
-                                cv2.FONT_HERSHEY_SIMPLEX, 
-                                fontScale = 0.8,
-                                color = (255,255,255),
-                                thickness = 2,
-                                lineType =cv2.LINE_AA)
+                if v != LABELED_VISIBLE:
+                    continue
+
+                if isGroundTruth:
+                    color = (0,255,0)
+                else:
+                    x, y = x_y
+                    if body.correctness is not None and i < len(body.correctness):
+                        if body.correctness[i]:
+                            # Correct: green circle
+                            color = (0, 255, 0)
+                            cv2.circle(frame, (int(x), int(y)), 5, color, -1)
+                        else:
+                            # Incorrect: red cross
+                            color = (0, 0, 255)
+                            cross_size = 5
+                            x_int, y_int = int(x), int(y)
+                            cv2.line(frame, (x_int - cross_size, y_int - cross_size),
+                                            (x_int + cross_size, y_int + cross_size),
+                                            color, 2)
+                            cv2.line(frame, (x_int - cross_size, y_int + cross_size),
+                                            (x_int + cross_size, y_int - cross_size),
+                                            color, 2)
+                    else:
+                        # fallback yellow circle if correctness unknown
+                        color = (0, 255, 255)
+                        cv2.circle(frame, (int(x), int(y)), 5, color, -1)
+
+                if show_scores:
+                    score_text = f"{v:.1f}"
+                    cv2.putText(frame, 
+                            score_text, 
+                            (int(x_y[0]) + 5, int(x_y[1]) - 5),  # Offset slightly from the circle
+                            cv2.FONT_HERSHEY_SIMPLEX, 
+                            fontScale = 0.8,
+                            color = (255,255,255),
+                            thickness = 2,
+                            lineType =cv2.LINE_AA)
+                if show_numbering:
+                    score_text = f"{i}"
+                    cv2.putText(frame, 
+                            score_text, 
+                            (int(x_y[0]) - 5, int(x_y[1]) - 10),  # Offset slightly from the circle
+                            cv2.FONT_HERSHEY_SIMPLEX, 
+                            fontScale = 0.8,
+                            color = (255,255,255),
+                            thickness = 2,
+                            lineType =cv2.LINE_AA)
 
             if show_bounding_box:
                 cv2.rectangle(frame, (body.xmin, body.ymin), (body.xmax, body.ymax), color_box, thickness)
