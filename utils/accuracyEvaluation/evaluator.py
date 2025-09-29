@@ -1,9 +1,21 @@
 import cv2
 import numpy as np
 from base_hpe import Body
-from utils.visualizer import render
+from utils.visualizer import render, draw_legend
 from utils.accuracyEvaluation.keypointsDataset import KeypointsDataset
 from utils.accuracyEvaluation.metrics.pck import PCKEvaluator
+
+PALETTE = [
+    (255, 0, 0),
+    #(0, 255, 0), -> ground_truth
+    (0, 0, 255),
+    (255, 255, 0),
+    (255, 0, 255),
+    (0, 255, 255),
+    (128, 0, 128),
+    (255, 165, 0),
+    (0, 128, 128),
+]
     
 def get_frame_from_video(cap, frame_number):
     cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
@@ -29,6 +41,7 @@ class Evaluator:
 
         self.pck_eval = PCKEvaluator(threshold_type="torso", alpha=0.2)
 
+        self.method_colors = {}  # method_name → BGR color tuple
         self.LINES_BODY = [
         [4,2], [2,0], [0,1], [1,3],
         [10,8], [8,6], [6,5], [5,7], [7,9],
@@ -135,12 +148,22 @@ class Evaluator:
         for method_name, prediction_bodies in bodies.items():
             is_gt = (method_name == "ground_truth")
             
-            # TODO - different color for each pd
-            render(frame, prediction_bodies, self.LINES_BODY, score_thresh = 0.2, show_scores = False, show_bounding_box = False, show_numbering = True, isGroundTruth = is_gt)              
+            color = (0, 255, 0) if is_gt else self._get_color_for_method(method_name)
+
+            render(frame, 
+                   prediction_bodies, 
+                   self.LINES_BODY, 
+                   score_thresh = 0.2, 
+                   show_scores = False, 
+                   show_bounding_box = False, 
+                   show_numbering = True, 
+                   isGroundTruth = is_gt, 
+                   color_skeleton = color)              
                 
+        draw_legend(frame, self.method_colors)
         cv2.imwrite(self.output, frame)
         #print("Saved:", os.path.abspath(filename))
-        resized_image = cv2.resize(frame, (640, 480)) 
+        resized_image = cv2.resize(frame, (2*640, 2*480)) 
         cv2.imshow("Frame", resized_image)
 
         # Press 'q' to quit early
@@ -176,6 +199,12 @@ class Evaluator:
                     yield frame_number, frame
         else:
             raise NotImplementedError("Input selected not supported")
+        
+    def _get_color_for_method(self, method_name):
+        if method_name not in self.method_colors:
+            idx = len(self.method_colors) % len(PALETTE)
+            self.method_colors[method_name] = PALETTE[idx]
+        return self.method_colors[method_name]
 
 
     def main_loop(self):
