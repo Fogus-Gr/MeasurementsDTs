@@ -16,12 +16,18 @@ def get_frame_from_video(cap, frame_number):
     return frame
 
 class Evaluator:
-    def __init__(self, ground_truth: KeypointsDataset, predictions: list, input_src, output, singleFrameFromVideo = -1, tolerance=0.05):
-        self.ground_truth = ground_truth
-        self.predictions = predictions
+    def __init__(self, ground_truth_file, predictions_file_list: list, input_src, output, singleFrameFromVideo = -1, tolerance=0.05):
+        self.ground_truth = KeypointsDataset(ground_truth_file, "ground_truth")
+
+        self.predictions = []
+        for method, path in predictions_file_list.items():
+            self.predictions.append(KeypointsDataset(path, method))
+
         self.input_src = input_src
         self.output = output
         self.singleFrameFromVideo = singleFrameFromVideo
+
+        self.pck_eval = PCKEvaluator(threshold_type="torso", alpha=0.2)
 
         self.LINES_BODY = [
         [4,2], [2,0], [0,1], [1,3],
@@ -105,21 +111,20 @@ class Evaluator:
                 continue
 
             # TODO - For now: single person assumption
-            gt_kpts = gt[0].keypoints
+            gt_body = gt[0]
             pred_body = prediction_bodies[0]
 
             if not prediction_bodies:
-                num_joints = gt_kpts.shape[0]
+                num_joints = gt_body.keypoints.shape[0]
 
                 pck = 0.0
                 correctness = np.zeros(num_joints, dtype=bool)
             else:
-                pck_eval = PCKEvaluator(threshold_type="torso", alpha=0.2)
-                pck, correctness = pck_eval.evaluate(gt_kpts, pred_body.keypoints)
+                pck, correctness = self.pck_eval.evaluate(gt_body, pred_body)
 
             pred_body.correctness = correctness
             print(f"{method_name} PCK: {pck:.2f}")
-            print(f"{method_name} pred_body.correctness: {pred_body.correctness}")
+            #print(f"{method_name} pred_body.correctness: {pred_body.correctness}")
 
         return
 

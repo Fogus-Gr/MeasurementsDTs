@@ -1,4 +1,5 @@
 import numpy as np
+from utils.constants import LABELED_VISIBLE
 
 class PCKEvaluator:
     def __init__(self, threshold_type="torso", alpha=0.2):
@@ -14,12 +15,17 @@ class PCKEvaluator:
             raise ValueError("Invalid threshold_type")
 
     # pck = (Number of keypoints in the threshold) / (Number of total keypoints)
-    def evaluate(self, gt_kpts, pred_kpts):
+    def evaluate(self, gt_body, pred_body):
+        gt_kpts = gt_body.keypoints
+        pred_kpts = pred_body.keypoints
+        gt_v = gt_body.keypoints_score
+        gt_vis = gt_v == LABELED_VISIBLE
+
         norm_dist = self._get_norm_dist(gt_kpts)
         threshold = self.alpha * norm_dist
 
         dists = np.linalg.norm(gt_kpts - pred_kpts, axis=1)
-        valid = ~np.isnan(dists)
+        valid = gt_vis & ~np.isnan(dists)
         
         correctness = np.zeros_like(dists, dtype=bool)
         correctness[valid] = dists[valid] <= threshold

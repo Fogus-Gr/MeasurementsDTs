@@ -39,9 +39,9 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
                                 score_text, 
                                 (int(x_y[0]) + 5, int(x_y[1]) - 5),  # Offset slightly from the circle
                                 cv2.FONT_HERSHEY_SIMPLEX, 
-                                0.4,  # Font scale
+                                0.8,  # Font scale
                                 color,  # Use the same color as the keypoint
-                                1,  # Thickness
+                                2,  # Thickness
                                 cv2.LINE_AA)
                     if show_numbering:
                         score_text = f"{i}"
@@ -49,9 +49,9 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
                                 score_text, 
                                 (int(x_y[0]) - 5, int(x_y[1]) - 10),  # Offset slightly from the circle
                                 cv2.FONT_HERSHEY_SIMPLEX, 
-                                0.4,  # Font scale
+                                0.8,  # Font scale
                                 (255,255,255),  # Use the same color as the keypoint
-                                1,  # Thickness
+                                2,  # Thickness
                                 cv2.LINE_AA)
 
             if show_bounding_box:

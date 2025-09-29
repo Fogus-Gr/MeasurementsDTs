@@ -1,6 +1,6 @@
 import json
 import csv
-import os
+from utils.constants import LABELED_VISIBLE, LABELED_NOT_VISIBLE, CATEGORY_PERSON
 
 coco_results = []
 csv_rows = []
@@ -10,12 +10,6 @@ json_buffer = ""
 interval_msec = None
 
 def create_COCO_format(bodies, score_thresh, image_id, univ_time = None, frame_number = None):
-    # Flags for COCO format
-    CATEGORY_PERSON = 1
-    NOT_LABELED = 0
-    LABELED_NOT_VISIBLE = 1
-    LABELED_VISIBLE = 2
-
     results = []
 
     for body in bodies:

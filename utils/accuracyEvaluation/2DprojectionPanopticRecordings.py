@@ -3,6 +3,7 @@ import json
 import numpy as np
 from glob import glob
 import argparse
+from utils.constants import LABELED_VISIBLE, LABELED_NOT_VISIBLE
 
 selected_cam = (0, 0)  # example: camera panel=0, node=5
 
@@ -48,11 +49,17 @@ panoptic_to_coco = {
 }
 
 # Convert Panoptic joints19 (x,y,c) to COCO joints17 (x,y,c)
-def panoptic_to_coco17(joints19):
+def panoptic_to_coco17(joints19, img_w, img_h):
     coco17 = [0.0] * (17*3)
     for coco_idx, pan_idx in panoptic_to_coco.items():
         x, y, c = joints19[pan_idx*3: pan_idx*3+3]
-        coco17[coco_idx*3:coco_idx*3+3] = [x, y, c]
+
+        if 0 <= x < img_w and 0 <= y < img_h:
+            v = LABELED_VISIBLE
+        else:
+            v = LABELED_NOT_VISIBLE
+
+        coco17[coco_idx*3:coco_idx*3+3] = [x, y, v]
     return coco17
 
 # === panutils.py ===
@@ -135,21 +142,12 @@ for jf in json_files:
     # build new JSON
     out_json = []
     for body in new_bodies:
-        '''out_json.append({
-            "image_id": image_id,
-            "frame": frame_idx,
-            "category_id": 1,
-            "person_id": body["id"],
-            "keypoints": body["keypoints19_2d"],
-            "keypoint_format": "keypoints19",
-            "univTime": frame_data["univTime"],
-        })'''
         out_json.append({
             "image_id": image_id,
             "frame_number": frame_idx,
             "category_id": 1,
             "person_id": body["id"],
-            "keypoints": panoptic_to_coco17(body["keypoints19_2d"]),
+            "keypoints": panoptic_to_coco17(body["keypoints19_2d"], resolution_w, resolution_h),
             "keypoint_format": "coco17",
             "univTime": frame_data["univTime"],
         })
