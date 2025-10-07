@@ -31,6 +31,8 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
 
                 if isGroundTruth:
                     color = (0,255,0)
+                    x, y = x_y
+                    cv2.circle(frame, (int(x), int(y)), 5, color, -1)
                 else:
                     x, y = x_y
                     if body.correctness is not None and i < len(body.correctness):

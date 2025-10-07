@@ -28,7 +28,7 @@ def get_frame_from_video(cap, frame_number):
     return frame
 
 class Evaluator:
-    def __init__(self, ground_truth_file, predictions_file_list: list, input_src, output, singleFrameFromVideo = -1, tolerance=0.05):
+    def __init__(self, ground_truth_file, predictions_file_list: list, input_src, output, singleFrameFromVideo = -1, frame_number_offset = 0):
         self.ground_truth = KeypointsDataset(ground_truth_file, "ground_truth")
 
         self.predictions = []
@@ -64,6 +64,9 @@ class Evaluator:
                 print(f"self.video_fps: {self.video_fps}")
                 self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                 self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        self.frame_number_adjustor = self.ground_truth.gt_fps / self.video_fps
+        self.frame_number_offset = frame_number_offset
         
     
     # Convert COCO17 keypoints into Body objects
@@ -126,17 +129,16 @@ class Evaluator:
 
             # TODO - For now: single person assumption
             gt_body = gt[0]
-            pred_body = prediction_bodies[0]
 
             if not prediction_bodies:
                 num_joints = gt_body.keypoints.shape[0]
-
                 pck = 0.0
                 correctness = np.zeros(num_joints, dtype=bool)
             else:
+                pred_body = prediction_bodies[0]
                 pck, correctness = self.pck_eval.evaluate(gt_body, pred_body)
-
-            pred_body.correctness = correctness
+                pred_body.correctness = correctness
+                
             pck_results[method_name] = pck
 
         return pck_results
@@ -174,11 +176,17 @@ class Evaluator:
     def get_frame_data(self, frame_number):
         results = {}
 
-        results["ground_truth"] = self.ground_truth.get_frame(frame_number)
+        adjusted_gt_frame_number = self.adjust_frame_number(frame_number)
+        results["ground_truth"] = self.ground_truth.get_frame(adjusted_gt_frame_number)
+
         for pd in self.predictions:
             results[pd.source_name] = pd.get_frame(frame_number)
 
         return results
+    
+    def adjust_frame_number(self, frame_number: int) -> int:
+        return int(self.frame_number_adjustor * frame_number) + self.frame_number_offset
+
 
     def frame_generator(self):
         if self.input_type == "video":
@@ -212,7 +220,6 @@ class Evaluator:
 
         try:
             for frame_number, frame in self.frame_generator():
-
                 keypoint_list = self.get_frame_data(frame_number)
                 bodies = self.update_body_format(keypoint_list)
                 pck_results = self.evaluate_frame(bodies)

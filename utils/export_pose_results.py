@@ -16,10 +16,10 @@ def create_COCO_format(bodies, score_thresh, image_id, univ_time = None, frame_n
         keypoints = []
         for (x, y), score in zip(body.keypoints, body.keypoints_score):
             v = LABELED_VISIBLE if score >=score_thresh else LABELED_NOT_VISIBLE
-            keypoints.extend([float(x), float(y), v])
+            keypoints.extend([round(float(x), 2), round(float(y), 2), int(v)])
 
         result_enty = {
-            "image_id": image_id,
+            "image_id": int(image_id),
             "category_id": CATEGORY_PERSON,
             "keypoints": keypoints,
             "score": float(body.score)

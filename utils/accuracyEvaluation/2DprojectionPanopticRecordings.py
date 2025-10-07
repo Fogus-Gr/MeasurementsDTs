@@ -150,6 +150,7 @@ for jf in json_files:
             "keypoints": panoptic_to_coco17(body["keypoints19_2d"], resolution_w, resolution_h),
             "keypoint_format": "coco17",
             "univTime": frame_data["univTime"],
+            "fpsType": frame_data["fpsType"]
         })
 
         
