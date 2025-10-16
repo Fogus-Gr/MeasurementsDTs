@@ -19,11 +19,13 @@ class PoseMonitor:
         
         # Initialize deques for moving statistics
         self.fps_history = deque(maxlen=window_size)
+        self.inference_time_history = deque(maxlen=window_size)
         self.x_history = deque(maxlen=window_size)
         self.y_history = deque(maxlen=window_size)
         
         # Initialize counters
-        self.frame_count = 0
+        self.frame_count = 0  # Frames in current second
+        self.total_frames = 0  # Total frames processed
         self.last_update_time = time.time()
         self.start_time = time.time()
         
@@ -38,17 +40,19 @@ class PoseMonitor:
                 writer.writerow([
                     'timestamp',
                     'fps_avg', 'fps_min', 'fps_max', 'fps_std',
+                    'inference_time_avg', 'inference_time_min', 'inference_time_max', 'inference_time_std',
                     'x_avg', 'x_min', 'x_max', 'x_std',
                     'y_avg', 'y_min', 'y_max', 'y_std',
                     'frame_count'
                 ])
     
-    def update(self, keypoints=None):
+    def update(self, keypoints=None, inference_time=None):
         """
         Update the monitor with new frame data.
         
         Args:
             keypoints: List of keypoints from pose estimation model
+            inference_time: Inference time in seconds (float)
         """
         current_time = time.time()
         elapsed = current_time - self.last_update_time
@@ -57,6 +61,10 @@ class PoseMonitor:
         if elapsed > 0:
             fps = 1.0 / elapsed
             self.fps_history.append(fps)
+        
+        # Store inference time if provided
+        if inference_time is not None:
+            self.inference_time_history.append(inference_time)
         
         # Process keypoints if available
         if keypoints is not None and len(keypoints) > 0:
@@ -80,11 +88,15 @@ class PoseMonitor:
         
         self.last_update_time = current_time
         self.frame_count += 1
+        self.total_frames += 1
     
     def _log_metrics(self, timestamp):
         """Calculate and log metrics to CSV."""
         # Calculate FPS statistics
         fps_stats = self._calculate_stats(self.fps_history)
+        
+        # Calculate inference time statistics
+        inference_stats = self._calculate_stats(self.inference_time_history)
         
         # Calculate X-coordinate statistics
         x_stats = self._calculate_stats(self.x_history)
@@ -99,6 +111,8 @@ class PoseMonitor:
                 datetime.now().isoformat(),
                 fps_stats.get('avg', 0), fps_stats.get('min', 0), 
                 fps_stats.get('max', 0), fps_stats.get('std', 0),
+                inference_stats.get('avg', 0), inference_stats.get('min', 0), 
+                inference_stats.get('max', 0), inference_stats.get('std', 0),
                 x_stats.get('avg', 0), x_stats.get('min', 0), 
                 x_stats.get('max', 0), x_stats.get('std', 0),
                 y_stats.get('avg', 0), y_stats.get('min', 0), 
@@ -123,9 +137,11 @@ class PoseMonitor:
         """Get current metrics as a dictionary."""
         return {
             'fps': self._calculate_stats(self.fps_history),
+            'inference_time': self._calculate_stats(self.inference_time_history),
             'x': self._calculate_stats(self.x_history),
             'y': self._calculate_stats(self.y_history),
-            'frame_count': self.frame_count
+            'frame_count': self.frame_count,
+            'total_frames': self.total_frames
         }
     
     def print_metrics(self):
@@ -136,6 +152,10 @@ class PoseMonitor:
         print(f"FPS: {metrics['fps']['avg']:.1f} (min: {metrics['fps']['min']:.1f}, "
               f"max: {metrics['fps']['max']:.1f}, std: {metrics['fps']['std']:.1f})")
         
+        if self.inference_time_history:
+            print(f"Inference Time: {metrics['inference_time']['avg']*1000:.1f}ms (min: {metrics['inference_time']['min']*1000:.1f}ms, "
+                  f"max: {metrics['inference_time']['max']*1000:.1f}ms, std: {metrics['inference_time']['std']*1000:.1f}ms)")
+        
         if self.x_history:
             print(f"X-Coord: {metrics['x']['avg']:.1f} (min: {metrics['x']['min']:.1f}, "
                   f"max: {metrics['x']['max']:.1f}, std: {metrics['x']['std']:.1f})")
@@ -144,5 +164,6 @@ class PoseMonitor:
             print(f"Y-Coord: {metrics['y']['avg']:.1f} (min: {metrics['y']['min']:.1f}, "
                   f"max: {metrics['y']['max']:.1f}, std: {metrics['y']['std']:.1f})")
         
-        print(f"Frames processed: {self.frame_count}")
+        print(f"Frames in current second: {self.frame_count}")
+        print(f"Total frames processed: {self.total_frames}")
         print("=" * 40)

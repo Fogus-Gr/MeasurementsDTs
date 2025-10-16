@@ -3,8 +3,12 @@ import subprocess
 import logging
 from flask import Flask, Response, request
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
+# Configure logging with timestamps
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S %Y-%m-%d'
+)
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -13,13 +17,12 @@ app = Flask(__name__)
 video_path = os.environ.get("VIDEO_PATH", "hd_00_00_8M_trimmed_25fps.mp4")
 logging.info(f"Using video path: {video_path}")
 
-def log_video_details(video_path_arg):
-    """Logs FPS, total frames, and duration of the video using ffprobe."""
+def get_video_conversion_info(video_path_arg, target_fps=25):
+    """Get video details and calculate converted frame count for target FPS."""
     try:
         # Ensure we have an absolute path for ffprobe
         abs_video_path = os.path.abspath(video_path_arg)
-        logging.info(f"Probing video file at: {abs_video_path}")
-
+        
         # Get FPS
         fps_cmd = ['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=avg_frame_rate', '-of', 'default=noprint_wrappers=1:nokey=1', abs_video_path]
         fps_process = subprocess.run(fps_cmd, capture_output=True, text=True, check=True)
@@ -38,18 +41,31 @@ def log_video_details(video_path_arg):
 
         if fps > 0:
             duration = total_frames / fps
-            logging.info(f"Video details: {total_frames} frames, {fps:.2f} FPS, duration: {duration:.2f} seconds")
+            # Calculate frames after conversion to target FPS
+            converted_frames = int(duration * target_fps)
+            return {
+                'original_fps': fps,
+                'original_frames': total_frames,
+                'duration': duration,
+                'target_fps': target_fps,
+                'converted_frames': converted_frames
+            }
         else:
             logging.warning("Could not determine video FPS or total frames.")
+            return None
 
-    except FileNotFoundError:
-        logging.error("ffprobe command not found. Cannot log video details.")
-    except subprocess.CalledProcessError as e:
-        logging.error(f"ffprobe command failed to execute: {e}")
-    except ValueError:
-        logging.error(f"Could not parse video details from ffprobe output: FPS='{fps_str}', Frames='{total_frames}'")
     except Exception as e:
-        logging.error(f"An unexpected error occurred while logging video details: {e}")
+        logging.error(f"Error getting video conversion info: {e}")
+        return None
+
+def log_video_details(video_path_arg):
+    """Logs FPS, total frames, and duration of the video using ffprobe."""
+    info = get_video_conversion_info(video_path_arg)
+    if info:
+        logging.info(f"Video details: {info['original_frames']} frames, {info['original_fps']:.2f} FPS, duration: {info['duration']:.2f} seconds")
+        logging.info(f"After conversion to {info['target_fps']} FPS: {info['converted_frames']} frames")
+    else:
+        logging.warning("Could not determine video details.")
 
 # Check if ffmpeg is available
 try:
@@ -168,19 +184,47 @@ def video_feed():
     return Response(generate_frames(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
+@app.route('/video_info')
+def video_info():
+    """API endpoint to get video conversion information"""
+    info = get_video_conversion_info(video_path)
+    if info:
+        return {
+            'original_fps': info['original_fps'],
+            'original_frames': info['original_frames'],
+            'duration': info['duration'],
+            'target_fps': info['target_fps'],
+            'converted_frames': info['converted_frames']
+        }
+    else:
+        return {'error': 'Could not determine video information'}, 500
+
 @app.route('/')
 def index():
+    # Get video info for display
+    info = get_video_conversion_info(video_path)
+    video_info_display = ""
+    if info:
+        video_info_display = f"""
+          <div class="video-info">
+            <strong>Original:</strong> {info['original_frames']} frames @ {info['original_fps']:.2f} FPS<br>
+            <strong>Duration:</strong> {info['duration']:.2f} seconds<br>
+            <strong>Streamed:</strong> {info['converted_frames']} frames @ {info['target_fps']} FPS
+          </div>
+        """
+    
     # Simplified index page for the ffmpeg stream
-    return '''
+    return f'''
     <html>
       <head>
         <title>Video Stream Player (FFmpeg)</title>
         <style>
-          body { font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }
-          .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
-          h2 { color: #333; text-align: center; }
-          .status { background: #e8f5e8; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
-          img { display: block; margin: 0 auto; border: 2px solid #ddd; border-radius: 5px; }
+          body {{ font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }}
+          .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }}
+          h2 {{ color: #333; text-align: center; }}
+          .status {{ background: #e8f5e8; padding: 10px; border-radius: 5px; margin-bottom: 20px; }}
+          .video-info {{ background: #f0f8ff; padding: 10px; border-radius: 5px; margin-bottom: 20px; font-family: monospace; }}
+          img {{ display: block; margin: 0 auto; border: 2px solid #ddd; border-radius: 5px; }}
         </style>
       </head>
       <body>
@@ -191,6 +235,7 @@ def index():
             <strong>Source:</strong> Video file playback via FFmpeg<br>
             <strong>Protocol:</strong> MJPEG over HTTP
           </div>
+          {video_info_display}
           <img src="/video_feed" width="640" alt="Video stream" />
         </div>
       </body>
