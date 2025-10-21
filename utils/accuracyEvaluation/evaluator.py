@@ -4,6 +4,7 @@ from base_hpe import Body
 from utils.visualizer import render, draw_legend
 from utils.accuracyEvaluation.keypointsDataset import KeypointsDataset
 from utils.accuracyEvaluation.metrics.pck import PCKEvaluator
+from utils.accuracyEvaluation.matching import Matcher
 
 PALETTE = [
     (255, 0, 0),
@@ -28,7 +29,7 @@ def get_frame_from_video(cap, frame_number):
     return frame
 
 class Evaluator:
-    def __init__(self, ground_truth_file, predictions_file_list: list, input_src, output, singleFrameFromVideo = -1, frame_number_offset = 0):
+    def __init__(self, ground_truth_file, predictions_file_list: list, input_src, output, matching_method="iou", singleFrameFromVideo = -1, frame_number_offset = 0):
         self.ground_truth = KeypointsDataset(ground_truth_file, "ground_truth")
 
         self.predictions = []
@@ -40,6 +41,7 @@ class Evaluator:
         self.singleFrameFromVideo = singleFrameFromVideo
 
         self.pck_eval = PCKEvaluator(threshold_type="torso", alpha=0.2)
+        self.matcher = Matcher(method=matching_method)
 
         self.method_colors = {}  # method_name → BGR color tuple
         self.LINES_BODY = [
@@ -127,19 +129,15 @@ class Evaluator:
             if not gt:
                 continue
 
-            # TODO - For now: single person assumption
-            gt_body = gt[0]
+            matches = self.matcher.match(gt, prediction_bodies)
+            pck_values = []
 
-            if not prediction_bodies:
-                num_joints = gt_body.keypoints.shape[0]
-                pck = 0.0
-                correctness = np.zeros(num_joints, dtype=bool)
-            else:
-                pred_body = prediction_bodies[0]
+            for gt_body, pred_body in matches:
                 pck, correctness = self.pck_eval.evaluate(gt_body, pred_body)
                 pred_body.correctness = correctness
+                pck_values.append(pck)
                 
-            pck_results[method_name] = pck
+            pck_results[method_name] = np.mean(pck_values) if pck_values else 0.0
 
         return pck_results
 
@@ -185,7 +183,7 @@ class Evaluator:
         return results
     
     def adjust_frame_number(self, frame_number: int) -> int:
-        return int(self.frame_number_adjustor * frame_number) + self.frame_number_offset
+        return int(round(self.frame_number_adjustor * frame_number)) + self.frame_number_offset
 
 
     def frame_generator(self):
