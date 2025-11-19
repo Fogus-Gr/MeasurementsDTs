@@ -2,6 +2,43 @@ import numpy as np
 import cv2
 from utils.constants import LABELED_VISIBLE
 
+"""
+Computes TP/shown keypoints and draws text above the person.
+Returns the text string (e.g. '12/17').
+"""
+def draw_kpi_stats(frame, body, text_color=(0,255,255)):
+    # Get visible keypoints (GT logic)
+    visible_idxs = [i for i, c in enumerate(body.keypoints_score) if c != 0]
+    num_shown = len(visible_idxs)
+
+    # Compute TP count (if correctness exists)
+    if body.correctness is not None:
+        num_tp = sum(body.correctness[i] for i in visible_idxs)
+    else:
+        num_tp = 0
+
+    text = f"{num_tp}/{num_shown}"
+
+    # Position where text will be drawn
+    visible_points = [body.keypoints[i] for i in visible_idxs]
+    if visible_points:
+        top_left_point = min(visible_points, key=lambda p: (p[1], p[0]))
+        top_x, top_y = top_left_point
+
+        cv2.putText(frame, text,
+            (int(top_x) - 50, int(top_y) - 50),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6, (0, 0, 0), 4, cv2.LINE_AA)   # black outline
+
+        cv2.putText(frame, text,
+            (int(top_x) - 50, int(top_y) - 50),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6, text_color, 2, cv2.LINE_AA) # original text
+
+    return text
+
+# Thinks that already change to if keypoints_score < score thresh => keypoints_score = 0 
+# ==> So body.keypoints_score[line[0]] > 0.0 keeps only above threshold values
 def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_box, show_numbering=False, isGroundTruth = False, color_skeleton = (255, 180, 90)):
         thickness = 3 
         color_box = (0,255,255)
@@ -13,8 +50,8 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
                 # Check if keypoints in line exist and have valid scores
                 if (len(body.keypoints) > line[0] and len(body.keypoints) > line[1] and 
                     len(body.keypoints_score) > line[0] and len(body.keypoints_score) > line[1] and 
-                    body.keypoints_score[line[0]] == LABELED_VISIBLE and 
-                    body.keypoints_score[line[1]] == LABELED_VISIBLE):
+                    body.keypoints_score[line[0]] > 0.0 and 
+                    body.keypoints_score[line[1]] > 0.0):
                     
                     # Map keypoint positions to integer coordinates for drawing
                     point_coords = [list(map(int, body.keypoints[point])) for point in line]
@@ -22,11 +59,14 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
             
             # Draw all valid skeleton lines
             cv2.polylines(frame, lines, False, color_skeleton, 2, cv2.LINE_AA)
+
+            if not isGroundTruth:   # only for predictions
+                draw_kpi_stats(frame, body, color_skeleton)
             
             for i,x_y in enumerate(body.keypoints):
-                v = body.keypoints_score[i]
+                c = body.keypoints_score[i]
 
-                if v != LABELED_VISIBLE:
+                if c == 0:
                     continue
 
                 if isGroundTruth:
@@ -57,7 +97,7 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
                         cv2.circle(frame, (int(x), int(y)), 5, color, -1)
 
                 if show_scores:
-                    score_text = f"{v:.1f}"
+                    score_text = f"{c:.1f}"
                     cv2.putText(frame, 
                             score_text, 
                             (int(x_y[0]) + 5, int(x_y[1]) - 5),  # Offset slightly from the circle
