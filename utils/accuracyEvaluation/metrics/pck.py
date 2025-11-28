@@ -15,6 +15,12 @@ class PCKEvaluator:
         self.threshold_type = threshold_type
         self.alpha = alpha
 
+        if not isinstance(alpha, (int, float)):
+            raise ValueError("confidence_threshold (alpha) must be numeric")
+
+        if alpha < 0 or alpha > 1:
+            raise ValueError("confidence_threshold (alpha) must be in [0,1]")
+
     def _get_norm_dist(self, gt_kpts):
         if self.threshold_type == "torso":
             return np.linalg.norm(gt_kpts[5] - gt_kpts[12]) # Shoulder L - Hips R
