@@ -2,8 +2,8 @@ import cv2
 import numpy as np
 from base_hpe import Body
 from utils.visualizer import render, draw_legend
+from abc import ABC, abstractmethod
 from utils.accuracyEvaluation.keypointsDataset import KeypointsDataset
-from utils.accuracyEvaluation.metrics.pck import PCKEvaluator
 from utils.accuracyEvaluation.matching import Matcher
 
 PALETTE = [
@@ -28,34 +28,54 @@ def get_frame_from_video(cap, frame_number):
     cap.release()
     return frame
 
-class Evaluator:
-    def __init__(self, ground_truth_file, predictions_file_list: list, input_src, output, matching_method = "iou", pck_threshold = 0.2, confidence_threshold = 0.2, render_out = False, singleFrameFromVideo = -1, frame_number_offset = 0, verbose = False):
-        print("Loading json files...")
-        self.ground_truth = KeypointsDataset(ground_truth_file, "ground_truth")
+class BaseEvaluator(ABC):
+    def __init__(self, ground_truth_file, predictions_file_list: list, input_src, last_frame_output = None, matching_method = "iou", confidence_threshold = 0.2, render_out = False, singleFrameFromVideo = -1, frame_number_offset = 0, verbose = False):
+        super().__init__()
 
+        self.config = {
+            'ground_truth_file': ground_truth_file,
+            'predictions_file_list': predictions_file_list,
+            'confidence_threshold': confidence_threshold,
+            'input_src': input_src,
+            'last_frame_output': last_frame_output,
+            'verbose': verbose,
+            'render_out': render_out,
+            'singleFrameFromVideo': singleFrameFromVideo,
+            'frame_number_offset': frame_number_offset
+        }
+
+        # Initialized after file loaded
+        self.ground_truth = None
         self.predictions = []
-        for method, path in predictions_file_list.items():
-            self.predictions.append(KeypointsDataset(path, method))
+        self.cap = None
+        self.video_fps = None
+        self.img_w = None
+        self.img_h = None
+        self.frame_number_adjustor = None
+        self.input_type = None
 
-        print("Continuing process...")
-        self.input_src = input_src
-        self.output = output
-        self.singleFrameFromVideo = singleFrameFromVideo
-
-        self.pck_eval = PCKEvaluator(threshold_type="torso", alpha=pck_threshold)
-        self.matcher = Matcher(method=matching_method)
-
-        self.confidence_threshold = confidence_threshold
-
-        self.render_out = render_out
+        # Visualization Settings
         self.method_colors = {}  # method_name → BGR color tuple
         self.LINES_BODY = [
         [4,2], [2,0], [0,1], [1,3],
         [10,8], [8,6], [6,5], [5,7], [7,9],
         [6,12], [12,11], [11,5],
         [12,14], [14,16], [11,13], [13,15]
-    ]
-        
+        ]
+
+        self.matcher = Matcher(method=matching_method)
+
+    def initialize(self):
+        print("Loading json files...")
+        self.ground_truth = KeypointsDataset(self.config['ground_truth_file'], "ground_truth")
+
+        self.predictions = []
+        for method, path in self.config['predictions_file_list'].items():
+            self.predictions.append(KeypointsDataset(path, method))
+
+        print("Continuing initialization...")
+
+        input_src = self.config['input_src']
         if input_src:
             if input_src.endswith('.jpg') or input_src.endswith('.png'):
                 self.input_type = "image"
@@ -64,21 +84,19 @@ class Evaluator:
 
             elif input_src.endswith('.mp4') or input_src.endswith('.avi'):
                 self.input_type = "video"
-                self.cap = cv2.VideoCapture(input_src)
-                self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
-                self.cap.set(cv2.CAP_PROP_FOCUS, 0)
-                self.video_fps = self.cap.get(cv2.CAP_PROP_FPS)
-                #print(f"self.video_fps: {self.video_fps}")
-                self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                temp_cap = cv2.VideoCapture(input_src)
+                self.video_fps = temp_cap.get(cv2.CAP_PROP_FPS)
+                self.img_w = int(temp_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                self.img_h = int(temp_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                temp_cap.release()
 
         self.frame_number_adjustor = self.ground_truth.gt_fps / self.video_fps
-        self.frame_number_offset = frame_number_offset
-        self.verbose = verbose
+
+        return self
         
     
     # Convert COCO17 keypoints into Body objects
-    def update_body_format(self, keypoint_list, img_w = 640, img_h = 480):   # TODO -> Not hardcoded/default values
+    def update_body_format(self, keypoint_list, img_w = 640, img_h = 480):
         bodies = {}
 
         for method_name, keypoint_item in keypoint_list.items():
@@ -94,7 +112,7 @@ class Evaluator:
                 keypoints_score = kps[:, 2]
 
                 if not method_name == "ground_truth":
-                    keypoints_score[keypoints_score < self.confidence_threshold] = 0.0
+                    keypoints_score[keypoints_score < self.config['confidence_threshold']] = 0.0
 
                 # Normalize keypoints
                 keypoints_norm = keypoints / np.array([img_w, img_h])
@@ -127,28 +145,13 @@ class Evaluator:
 
         return bodies
 
+    @abstractmethod
     def evaluate_frame(self, bodies):
-        gt = bodies['ground_truth']
-        pck_results = {}
+        pass
 
-        for method_name, prediction_bodies in bodies.items():
-            if method_name == 'ground_truth':
-                continue
-
-            if not gt:
-                continue
-
-            matches = self.matcher.match(gt, prediction_bodies)
-            pck_values = []
-
-            for gt_body, pred_body in matches:
-                pck, correctness, _ = self.pck_eval.evaluate(gt_body, pred_body)
-                pred_body.correctness = correctness
-                pck_values.append(pck)
-                
-            pck_results[method_name] = np.mean(pck_values) if pck_values else 0.0
-
-        return pck_results
+    @abstractmethod
+    def print_results(self, frame_number, metric_results):
+        pass
 
     def plot_keypoints(self, frame, bodies):
         if frame is None:
@@ -170,7 +173,8 @@ class Evaluator:
                    color_skeleton = color)              
                 
         draw_legend(frame, self.method_colors)
-        cv2.imwrite(self.output, frame)
+        if self.config['last_frame_output'] is not None:
+            cv2.imwrite(self.config['last_frame_output'], frame)    # Overwrite
         #print("Saved:", os.path.abspath(filename))
         resized_image = cv2.resize(frame, (2*640, 2*480)) 
         cv2.imshow("Frame", resized_image)
@@ -192,13 +196,13 @@ class Evaluator:
         return results
     
     def adjust_frame_number(self, frame_number: int) -> int:
-        return int(round(self.frame_number_adjustor * frame_number)) + self.frame_number_offset
+        return int(round(self.frame_number_adjustor * frame_number)) + self.config['frame_number_offset']
 
 
     def frame_generator(self):
         if self.input_type == "video":
-            if self.singleFrameFromVideo >= 0:
-                frame_number = self.singleFrameFromVideo
+            if self.config['singleFrameFromVideo'] >= 0:
+                frame_number = self.config['singleFrameFromVideo']
                 frame = get_frame_from_video(self.cap, frame_number)
                 if frame is None:
                     raise RuntimeError(f"Could not get frame {frame_number}")
@@ -222,28 +226,29 @@ class Evaluator:
         return self.method_colors[method_name]
 
 
-    def main_loop(self):
-        pck_per_method = {}
+    def run_evaluation(self):
+        if self.input_type == "video":
+            self.cap = cv2.VideoCapture(self.config['input_src']) # main loop can be called multiple times in the same instant
+            self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+            self.cap.set(cv2.CAP_PROP_FOCUS, 0)
+
+        evaluation_per_method = {}
 
         try:
             for frame_number, frame in self.frame_generator():
                 keypoint_list = self.get_frame_data(frame_number)
                 bodies = self.update_body_format(keypoint_list)
-                pck_results = self.evaluate_frame(bodies)
+                metric_eval = self.evaluate_frame(bodies)
 
-                if self.verbose:
-                    pck_str = ""
-                    if pck_results:
-                        pck_str = "=> "
-                        pck_str += ", ".join([f"{method}: {pck:.2f}" for method, pck in pck_results.items()])
-                    print(f"Frame {frame_number} {pck_str}")
+                if self.config['verbose']:
+                    self.print_results(frame_number, metric_eval)
 
-                for method, pck in pck_results.items():
-                    if method not in pck_per_method:
-                        pck_per_method[method] = []
-                    pck_per_method[method].append(pck)
+                for method, metric in metric_eval.items():
+                    if method not in evaluation_per_method:
+                        evaluation_per_method[method] = []
+                    evaluation_per_method[method].append(metric)
 
-                if self.render_out:
+                if self.config['render_out']:
                     self.plot_keypoints(frame, bodies)
         finally:
             if self.input_type == "video" and hasattr(self, "cap"):
@@ -252,7 +257,7 @@ class Evaluator:
 
 
         mean_dict = {}
-        for method, vals in pck_per_method.items():
+        for method, vals in evaluation_per_method.items():
             mean_dict[method] = float(np.mean(vals))
 
         return mean_dict

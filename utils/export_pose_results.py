@@ -1,6 +1,6 @@
 import json
 import csv
-from utils.constants import LABELED_VISIBLE, LABELED_NOT_VISIBLE, CATEGORY_PERSON
+from utils.constants import CATEGORY_PERSON
 
 coco_results = []
 csv_rows = []
@@ -15,8 +15,7 @@ def create_COCO_format(bodies, score_thresh, image_id, univ_time = None, frame_n
     for body in bodies:
         keypoints = []
         for (x, y), score in zip(body.keypoints, body.keypoints_score):
-            v = LABELED_VISIBLE if score >=score_thresh else LABELED_NOT_VISIBLE
-            keypoints.extend([round(float(x), 2), round(float(y), 2), int(v)])
+            keypoints.extend([round(float(x), 2), round(float(y), 2), round(float(score), 3)])
 
         result_enty = {
             "image_id": int(image_id),

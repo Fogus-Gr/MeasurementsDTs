@@ -174,7 +174,7 @@ class BaseHPE(ABC):
                     break
 
                 self.univ_time = self.cap.get(cv2.CAP_PROP_POS_MSEC)  # timestamp of current frame, in milliseconds
-                self.frame_number = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+                self.frame_number = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1 # CAP_PROP_POS_FRAMES is 1-ahead
 
                 self.process_frame(frame, image_id)
 

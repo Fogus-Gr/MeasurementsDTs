@@ -3,17 +3,18 @@ from utils.constants import LABELED_VISIBLE, LABELED_NOT_VISIBLE
 
 class OKSEvaluator:
     def __init__(self, confidence_threshold):
-        if not isinstance(confidence_threshold, (int, float)):
-            raise ValueError("confidence_threshold must be numeric")
-
-        if confidence_threshold < 0 or confidence_threshold > 1:
-            raise ValueError("confidence_threshold must be in [0,1]")
-        
-        self.confidence_threshold = confidence_threshold
+        self.set_threshold(confidence_threshold)
 
         # COCO person keypoint constants (17 keypoints)
         self.k = np.array([.026, .025, .025, .035, .035, .079, .079, .072, .072, .062, .062, .107, .107, .087, .087, .089, .089])
         self.k_squared = self.k ** 2
+
+    def set_threshold(self, confidence_threshold: float):
+        if not isinstance(confidence_threshold, (int, float)):
+            raise ValueError("threshold must be numeric")
+        if confidence_threshold < 0 or confidence_threshold > 1:
+            raise ValueError("threshold must be in [0,1]")
+        self.confidence_threshold = confidence_threshold
 
     # Segmentation Mask approximation => s = bounding_box^(1/2)
     # returns s^2

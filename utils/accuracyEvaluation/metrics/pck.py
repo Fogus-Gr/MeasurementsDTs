@@ -13,13 +13,16 @@ from utils.constants import LABELED_VISIBLE, LABELED_NOT_VISIBLE
 class PCKEvaluator:
     def __init__(self, threshold_type="torso", alpha=0.2):
         self.threshold_type = threshold_type
-        self.alpha = alpha
-
+        self.set_alpha(alpha)
+        
+    def set_alpha(self, alpha: float):
         if not isinstance(alpha, (int, float)):
             raise ValueError("confidence_threshold (alpha) must be numeric")
 
         if alpha < 0 or alpha > 1:
             raise ValueError("confidence_threshold (alpha) must be in [0,1]")
+        
+        self.alpha = alpha
 
     def _get_norm_dist(self, gt_kpts):
         if self.threshold_type == "torso":
