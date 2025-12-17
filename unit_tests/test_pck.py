@@ -40,6 +40,29 @@ def test_pck_invalid_threshold_type2():
         evaluator = PCKEvaluator(threshold_type="torso", alpha=-0.2)
         evaluator.evaluate(gt, pred)
 
+def test_pck_alpha_zero_behavior():
+    """
+    PCK with alpha = 0.0 should only count exactly correct keypoints.
+    """
+    gt_kpts = np.zeros((17, 2))
+    pred_kpts_exact = gt_kpts.copy()
+    pred_kpts_off = gt_kpts + 0.1
+    
+    gt = DummyBody(gt_kpts, np.full(17, LABELED_VISIBLE))
+    pred_exact = DummyBody(pred_kpts_exact, np.full(17, LABELED_VISIBLE))
+    pred_off = DummyBody(pred_kpts_off, np.full(17, LABELED_VISIBLE))
+    
+    evaluator = PCKEvaluator(threshold_type="torso", alpha=0.0)
+    
+    # Perfect match → PCK = 1.0
+    pck_exact, _, _ = evaluator.evaluate(gt, pred_exact)
+    assert np.isclose(pck_exact, 1.0)
+    
+    # Small error → PCK = 0.0
+    pck_off, _, _ = evaluator.evaluate(gt, pred_off)
+    assert np.isclose(pck_off, 0.0)
+
+
 def test_pck_no_valid_keypoints():
     """
     Test when no keypoints are included in denominator.
@@ -267,3 +290,81 @@ def test_pck_mixed_scenario():
     assert np.array_equal(included, [True, True, True, True, False] + [True] * 12)
     assert np.array_equal(correctness, [True, False, True, False, False] + [True] * 12)
     assert np.isclose(pck, 0.875)  
+
+
+def test_pck_golden_1():
+        """
+        Golden test: Compare one pair from frame 10
+        """
+        gt_0_kpts = np.array([[1629.56, 367.38], [1612.36, 337.09], [1650.83, 344.0], [1560.72, 310.15], [1655.3, 324.27], [1480.17, 435.91], [1658.41, 428.14], [1463.49, 599.63], [1725.03, 638.45], [1636.73, 616.44], [1748.03, 626.4], [1546.02, 818.51], [1654.32, 855.73], [1561.75, 1054.97], [1688.38, 1087.12], [1563.59, 1294.85], [1515.26, 1321.52]])
+        pd_1_kpts = np.array([[1633.44, 333.24], [1613.1, 303.15], [1650.16, 313.03], [1574.19, 301.05], [1656.52, 323.51], [1462.59, 419.2], [1671.74, 434.84], [1489.96, 600.19], [1729.05, 651.04], [1714.74, 578.62], [1766.95, 611.91], [1499.47, 802.03], [1625.89, 810.15], [1555.16, 1050.95], [1705.14, 1049.46], [1550.16, 1054.34], [1642.63, 1061.36]])
+        gt_vis      = np.array([   2.,   2.,    2.,    2.,    2.,    2.,   2.,    2.,    2.,    2.,    2.,    2.,    2.,    2.,    1.,  1., 1.])
+        pd_1_scores = np.array([0.471, 0.39, 0.542, 0.507, 0.655, 0.703, 0.61, 0.373, 0.692, 0.275, 0.483, 0.728, 0.715, 0.646, 0.707, 0.0, 0.0])
+
+        # Evaluation parameters
+        conf_thresh = 0.71
+        
+        # Only indices 11 (0.728) and 12 (0.715) have score > 0.71
+        passing_indices = np.where(pd_1_scores >= conf_thresh)[0]
+        assert np.array_equal(passing_indices, [11, 12])
+        
+        total_gt_visible = np.sum(gt_vis == LABELED_VISIBLE)
+        assert total_gt_visible == 14
+        
+        threshold = np.linalg.norm(gt_0_kpts[5] - gt_0_kpts[12]) # LShoulder - LHip
+        dists = np.linalg.norm(gt_0_kpts - pd_1_kpts, axis=1)
+
+        # Run PCK
+        pd_1_scores = np.array([0]*11 + [1, 1, 0, 0, 0, 0])
+        gt = DummyBody(gt_0_kpts, gt_vis)
+        pred = DummyBody(pd_1_kpts, pd_1_scores)
+
+        evaluator = PCKEvaluator(threshold_type="torso")
+        calculated_pck = []
+        for alpha in [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30]:
+            evaluator.set_alpha(alpha)
+            pck, _, _ = evaluator.evaluate(gt, pred)
+            calculated_pck.append(pck)
+        
+        # Assert
+        expected_pck_curve = np.array([0, 0, 0, 2/14, 2/14, 2/14, 2/14])
+        np.testing.assert_allclose(calculated_pck, expected_pck_curve, atol=1e-3, err_msg="High confidence PCK calculation failed manual verification")
+
+    
+def test_pck_golden_2():
+        """
+        Golden test: Compare other pair from frame 10
+        """
+        gt_1_kpts = np.array([[983.41, 409.8], [986.72, 394.83], [966.41, 393.85], [969.26, 405.93], [921.29, 404.06], [1001.51, 481.51], [868.5, 489.84], [1025.67, 586.68], [819.34, 591.23], [1065.95, 649.66], [859.48, 683.59], [1002.56, 701.89], [912.24, 712.18], [1002.28, 862.96], [915.65, 863.93], [993.6, 1018.39], [916.58, 997.54]])
+        pd_0_kpts = np.array([[973.68, 410.14], [976.85, 397.81], [955.09, 395.6], [958.68, 399.17], [911.47, 401.46], [1002.33, 483.33], [859.42, 483.38], [1020.72, 571.15], [816.42, 601.41], [1058.11, 658.96], [848.94, 690.28], [987.34, 683.89], [902.52, 691.48], [1009.8, 864.55], [910.04, 867.61], [988.33, 1006.85], [917.45, 1006.12]])
+        gt_vis      = np.array([   2.,   2.,    2.,    2.,    2.,    2.,    2.,    2.,    2.,    2.,   2.,    2.,    2.,    2.,    2.,    2.,    2.])
+        pd_0_scores = np.array([0.698, 0.691, 0.47, 0.681, 0.734, 0.805, 0.766, 0.659, 0.633, 0.719, 0.67, 0.754, 0.717, 0.753, 0.768, 0.825, 0.812])
+
+        # Evaluation parameters
+        conf_thresh = 0.71
+        
+        # Only indices 11 (0.728) and 12 (0.715) have score > 0.71
+        passing_indices = np.where(pd_0_scores >= conf_thresh)[0]
+        assert np.array_equal(passing_indices, [4, 5, 6, 9, 11, 12, 13, 14, 15, 16])
+        
+        total_gt_visible = np.sum(gt_vis == LABELED_VISIBLE)
+        assert total_gt_visible == 17
+        
+        threshold = np.linalg.norm(gt_1_kpts[5] - gt_1_kpts[12]) # LShoulder - LHip
+        dists = np.linalg.norm(gt_1_kpts - pd_0_kpts, axis=1)
+
+        # Run PCK
+        pd_0_scores = np.array([0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1])
+        gt = DummyBody(gt_1_kpts, gt_vis)
+        pred = DummyBody(pd_0_kpts, pd_0_scores)
+
+        evaluator = PCKEvaluator(threshold_type="torso")
+        calculated_pck = []
+        for alpha in [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30]:
+            evaluator.set_alpha(alpha)
+            pck, _, _ = evaluator.evaluate(gt, pred)
+            calculated_pck.append(pck)
+        
+        # Assert
+        expected_pck_curve = np.array([0, 7/17, 10/17, 10/17, 10/17, 10/17, 10/17])
+        np.testing.assert_allclose(calculated_pck, expected_pck_curve, atol=1e-3, err_msg="High confidence PCK calculation failed manual verification")

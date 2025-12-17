@@ -1,26 +1,46 @@
 from .base_evaluator import BaseEvaluator
 from utils.accuracyEvaluation.metrics.pck import PCKEvaluator, draw_curve
+from utils.constants import LABELED_VISIBLE
 import numpy as np
 
 class AUCEvaluator(BaseEvaluator):
-    def __init__(self, pck_alpha_threshold = 0.2, start_threshold = 0, stop_threshold  = 0.5, step_threshold  = 0.01, **kwargs):
+    def __init__(self, start_threshold = 0, stop_threshold  = 0.5, step_threshold  = 0.01, **kwargs):
         super().__init__(**kwargs)
+        
+        self.pck_eval = None
 
-        self.pck_alpha_threshold = pck_alpha_threshold
+        self.set_threshold(start_threshold, stop_threshold, step_threshold)
+
+    def set_threshold(self, start_threshold, stop_threshold, step_threshold):
+        if step_threshold <= 0:
+            raise ValueError("step_threshold must be > 0")
+
+        if start_threshold > 1 or stop_threshold > 1:
+            raise ValueError("thresholds must be <= 1")
+        
+        if start_threshold < 0 or stop_threshold < 0:
+            raise ValueError("thresholds must be >= 0")
+
+        if start_threshold > stop_threshold:
+            raise ValueError("start_threshold must be <= stop_threshold")
+
         self.start_threshold = start_threshold
         self.stop_threshold = stop_threshold
         self.step_threshold = step_threshold
         
-        self.thresholds = np.arange(self.start_threshold, 
+        if start_threshold == stop_threshold:
+            self.thresholds = np.array([start_threshold])
+        else:
+            self.thresholds = np.arange(self.start_threshold, 
                                    self.stop_threshold + 1e-10,  # Small epsilon
                                    self.step_threshold)
-        
-        self.pck_eval = None
+            
+        self.thresholds = np.round(self.thresholds, 6)
 
     def initialize(self):
         super().initialize()
 
-        self.pck_eval = PCKEvaluator(threshold_type="torso", alpha=self.pck_alpha_threshold)
+        self.pck_eval = PCKEvaluator(threshold_type="torso", alpha=self.start_threshold)
 
         return self
 
@@ -37,14 +57,29 @@ class AUCEvaluator(BaseEvaluator):
                 continue
 
             matches = self.matcher.match(gt, prediction_bodies)
-            pck_values = []
 
+            # Keep track of which GT bodies were matched so we can find the missed ones
+            matched_gt_bodies = set()
+
+            TP_count = 0
+            GT_visible_count = 0
+
+            # --- PART 1: Process Matches ---
             for gt_body, pred_body in matches:
-                pck, correctness, _ = self.pck_eval.evaluate(gt_body, pred_body)
+                matched_gt_bodies.add(gt_body)
+
+                _, correctness, included_in_denominator = self.pck_eval.evaluate(gt_body, pred_body)
                 pred_body.correctness = correctness
-                pck_values.append(pck)
+                TP_count += np.sum(correctness[included_in_denominator])
+                GT_visible_count += np.sum(included_in_denominator)
+
+            # --- PART 2: Process Missed GT ---
+            for body in gt:
+                if body not in matched_gt_bodies:                   
+                    visible_kpts = np.sum(body.keypoints_score == LABELED_VISIBLE)
+                    GT_visible_count += visible_kpts
                 
-            pck_results[method_name] = np.mean(pck_values) if pck_values else 0.0
+            pck_results[method_name] = pck_results[method_name] = TP_count / GT_visible_count if GT_visible_count > 0 else 0.0
 
         return pck_results
     
@@ -70,12 +105,24 @@ class AUCEvaluator(BaseEvaluator):
         print(self.thresholds)
         print(pck_values)
         
+        auc_scores = {}
+
         methods = pck_values[0].keys()
         for method in methods:
             pck_numeric = np.array([d[method] for d in pck_values])
-            auc = (1 / (self.stop_threshold - self.start_threshold)) * np.sum(pck_numeric) * self.step_threshold
+
+            if len(self.thresholds) == 1:   # Single threshold
+                auc = pck_numeric[0]
+            else:
+                x_range = self.stop_threshold - self.start_threshold
+                auc_raw = np.trapz(pck_numeric, self.thresholds)
+                auc = auc_raw / x_range
+
+            # Formula: PCK = sum(pck_i, pck_i+1)/2 * step_size
+            # PCK_normal = PCK / range
             print(f"AUC ({method}) = {auc}")
+            auc_scores[method] = auc
 
         draw_curve(pck_values, self.thresholds)
 
-        return
+        return auc_scores, pck_values, self.thresholds

@@ -36,33 +36,41 @@ class PCKEvaluator:
         gt_kpts = gt_body.keypoints
         pred_kpts = pred_body.keypoints
         gt_v = gt_body.keypoints_score
+        pred_scores = pred_body.keypoints_score
 
+        # 1. Standardize Visibility
+        # GT Visible (v=2) are the ones we MUST recall.
         is_visible = (gt_v == LABELED_VISIBLE)
-        out_of_border = (gt_v == LABELED_NOT_VISIBLE)
-
+        
+        # 2. Calculate Thresholds
         norm_dist = self._get_norm_dist(gt_kpts)
         threshold = self.alpha * norm_dist
-
         dists = np.linalg.norm(gt_kpts - pred_kpts, axis=1)
 
+        # 3. Calculate Correctness
         correctness = np.zeros_like(dists, dtype=bool)
         
-        # Handle visible points: check distance
-        correctness[is_visible] = dists[is_visible] <= threshold
+        # Check A: Distance is within threshold
+        spatially_correct = dists <= threshold
         
-        # Handle out-of-border points:
-        # - If predicted (score != 0), check if prediction is reasonable
-        # - If not predicted (score == 0), exclude from calculation
-        out_of_border_predicted = out_of_border & (pred_body.keypoints_score != 0)
-                
-        # Treat predicted out-of-border keypoints like visible ones
-        correctness[out_of_border_predicted] = dists[out_of_border_predicted] <= threshold
+        # Check B: Prediction actually exists (Score > 0 or Conf Thresh)
+        is_predicted = pred_scores > 0 
         
-        # Create mask for keypoints that should be included in denominator
-        # Include: visible points + out-of-border points that were predicted
+        # Combine: Must be Visible + Spatially Close + Predicted
+        correctness[is_visible] = spatially_correct[is_visible] & is_predicted[is_visible]
+
+        # --- Handling "Out of Border" / Occluded (Optional based on your logic) ---
+        out_of_border = (gt_v == LABELED_NOT_VISIBLE)
+        out_of_border_predicted = out_of_border & is_predicted
+        
+        if np.any(out_of_border_predicted):
+             correctness[out_of_border_predicted] = spatially_correct[out_of_border_predicted]
+        
+        # --- Denominator ---
+        # Denominator = All Visible GT + Any Invisible GT that we attempted to predict
         included_in_denominator = is_visible | out_of_border_predicted
         
-        if np.any(included_in_denominator):
+        if np.sum(included_in_denominator) > 0:
             pck = np.mean(correctness[included_in_denominator])
         else:
             pck = 0.0

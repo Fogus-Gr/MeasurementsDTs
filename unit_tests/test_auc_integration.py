@@ -22,7 +22,7 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
         
         # Expected test files
         cls.video_path = os.path.join(cls.test_dir, 'video2sec', '160422_ultimatum_hd_00_00_2s.mp4')
-        cls.gt_path = os.path.join(cls.test_dir, 'video2sec', 'all_body2DScenes_326_367.json')
+        cls.gt_path = os.path.join(cls.test_dir, 'video2sec', 'all_body2DScenes_499_540.json')
         cls.pred_path = os.path.join(cls.test_dir, 'video2sec', 'pd_movenet.json')
         
         # Check if test data exists
@@ -120,7 +120,7 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
             self.assertIsNotNone(gt_frame, f"GT frame {frame_id} should exist")
             self.assertIsNotNone(pred_frame, f"Pred frame {frame_id} should exist")
 
-    def test_04_threshold_calculation(self):
+    def test_04_threshold_calculation_regular(self):
         """Test that thresholds are calculated correctly with floating-point safety"""
 
         test_cases = [
@@ -142,7 +142,72 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
             np.testing.assert_array_almost_equal(evaluator.thresholds, expected, 
                                             err_msg=f"Failed for start={start}, stop={stop}, step={step}")
 
+
+    def test_04_threshold_single_value(self):
+        """Edge Case Test: Handling single value"""
+
+        evaluator = self.AUCEvaluator(
+            ground_truth_file=self.gt_path,
+            predictions_file_list={"MoveNet": self.pred_path},
+            input_src=self.video_path,
+        )
+
+        evaluator.set_threshold(0.25, 0.25, 0.1)
+
+        self.assertEqual(len(evaluator.thresholds), 1)
+        self.assertAlmostEqual(evaluator.thresholds[0], 0.25)
+
+
+    def test_04_threshold_invalid_step(self):
+        """Edge Case Test: Handling invalid thresholds step"""
+
+        evaluator = self.AUCEvaluator(
+            ground_truth_file=self.gt_path,
+            predictions_file_list={"MoveNet": self.pred_path},
+            input_src=self.video_path,
+        )
+
+        for invalid_step in [0, -0.1]:
+            with self.assertRaises(ValueError):
+                evaluator.set_threshold(0.0, 0.5, invalid_step)
+
     
+    def test_04_threshold_invalid(self):
+        """Edge Case Test: Handling invalid thresholds"""
+
+        for invalid_threshold in [-0.5, 1.3]:
+            with self.assertRaises(ValueError):
+                evaluator = self.AUCEvaluator(
+                    start_threshold=invalid_threshold,
+                    stop_threshold=0.8,
+                    ground_truth_file=self.gt_path,
+                    predictions_file_list={"MoveNet": self.pred_path},
+                    input_src=self.video_path
+                )
+
+            with self.assertRaises(ValueError):
+                evaluator = self.AUCEvaluator(
+                    start_threshold=0.1,
+                    stop_threshold=invalid_threshold,
+                    ground_truth_file=self.gt_path,
+                    predictions_file_list={"MoveNet": self.pred_path},
+                    input_src=self.video_path
+                )
+
+    
+    def test_04_threshold_start_greater_than_stop(self):
+        """Edge Case Test: Handling invalid thresholds"""
+
+        evaluator = self.AUCEvaluator(
+            ground_truth_file=self.gt_path,
+            predictions_file_list={"MoveNet": self.pred_path},
+            input_src=self.video_path,
+        )
+
+        with self.assertRaises(ValueError):
+            evaluator.set_threshold(0.5, 0.1, 0.1)
+
+
     def test_05_smoke_test_single_frame_evaluation(self):
         """Smoke Test: Single frame"""
         
@@ -150,7 +215,7 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
             ground_truth_file=self.gt_path,
             predictions_file_list={"MoveNet": self.pred_path},
             input_src=self.video_path,
-            frame_number_offset=325,
+            frame_number_offset=499,
             singleFrameFromVideo=10,  # frame 10
             render_out=False,
             verbose=False
@@ -178,7 +243,7 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
             ground_truth_file=self.gt_path,
             predictions_file_list={"MoveNet": self.pred_path},
             input_src=self.video_path,
-            frame_number_offset=325,
+            frame_number_offset=499,
             singleFrameFromVideo=-1,  # All frames
             render_out=False,
             verbose=False
@@ -202,14 +267,19 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
         """Functional Test: Check different confidences"""
         
         # Test with 3 different confidence thresholds
+        # AUC() usually runs over a range of error thresholds (0.0 to 0.5).
+        # run_evaluation() runs a single PCK calculation at a specific error threshold
+        # If we don't spesifically set start threshold > 0 => all pck = 0
         results = {}        
         for confidence in [0.1, 0.5, 0.9, 1.0]:
             evaluator = self.AUCEvaluator(
+                start_threshold = 0.3, 
+                stop_threshold  = 0.3, 
                 ground_truth_file=self.gt_path,
                 predictions_file_list={"MoveNet": self.pred_path},
                 input_src=self.video_path,
                 confidence_threshold=confidence,
-                frame_number_offset=325,
+                frame_number_offset=499,
                 singleFrameFromVideo=10,
                 render_out=False,
                 verbose=False
@@ -231,13 +301,14 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
         """Functional Test: Check pck alpha threshold"""
         
         results = {}
-        for pck_alpha_threshold in [0.1, 0.3, 0.5]:
+        for start_threshold, stop_threshold in [(0.1, 0.1), (0.3, 0.3), (0.5, 0.5)]:
             evaluator = self.AUCEvaluator(
                 ground_truth_file=self.gt_path,
                 predictions_file_list={"MoveNet": self.pred_path},
                 input_src=self.video_path,
-                pck_alpha_threshold=pck_alpha_threshold,
-                frame_number_offset=325,
+                start_threshold=start_threshold,
+                stop_threshold=stop_threshold,
+                frame_number_offset=499,
                 singleFrameFromVideo=7,
                 render_out=False,
                 verbose=False
@@ -245,8 +316,8 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
             
             evaluator.initialize()
             result = evaluator.run_evaluation()
-            results[pck_alpha_threshold] = result.get("MoveNet", 0.0)
-            print(f"   - PCK threshold {pck_alpha_threshold}: PCK = {results[pck_alpha_threshold]:.3f}")
+            results[start_threshold] = result.get("MoveNet", 0.0)
+            print(f"   - PCK threshold {start_threshold}: PCK = {results[start_threshold]:.3f}")
         
         # PCK must be non-decreasing with α
         self.assertLessEqual(results[0.1], results[0.3], "PCK should not decrease when alpha increases")
@@ -281,26 +352,9 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
         finally:
             # Clean up temp file
             os.unlink(empty_pred_path)
+            
     
-    def test_10_invalid_alpha_pck(self):
-        """Edge Case Test: Handling invalid pck alpha thresholds"""
-
-        for invalid_alpha in [-0.5, 1.3]:
-            with self.assertRaises(ValueError):
-                evaluator = self.AUCEvaluator(
-                    ground_truth_file=self.gt_path,
-                    predictions_file_list={"MoveNet": self.pred_path},
-                    input_src=self.video_path,
-                    pck_alpha_threshold=invalid_alpha,
-                    frame_number_offset=325,
-                    singleFrameFromVideo=7,
-                    render_out=False,
-                    verbose=False
-                )
-                evaluator.initialize()  # should trigger ValueError via PCKEvaluator
-        
-    
-    def test_11_smoke_test_auc_method(self):
+    def test_10_smoke_test_auc_method(self):
         """Smoke Test: Full AUC pipeline on all frames (no rendering)"""
 
         evaluator = self.AUCEvaluator(
@@ -311,7 +365,7 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
             start_threshold=0.1,
             stop_threshold=0.3,
             step_threshold=0.1,
-            frame_number_offset=325,
+            frame_number_offset=499,
             singleFrameFromVideo=-1,
             render_out=False,
             verbose=False
@@ -338,7 +392,7 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
             # Draw curve must be called once
             mock_draw.assert_called_once()
 
-    def test_12_functional_test_auc_calculation(self):
+    def test_11_functional_test_auc_calculation(self):
         """Functional Test: Verify AUC calculation is correct"""
         
         # Test parameters
@@ -354,7 +408,7 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
             start_threshold=start_threshold,
             stop_threshold=stop_threshold,
             step_threshold=step_threshold,
-            frame_number_offset=325,
+            frame_number_offset=499,
             singleFrameFromVideo=-1,
             render_out=False,
             verbose=False
@@ -362,41 +416,25 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
         
         evaluator.initialize()
         
-        # Capture output to analyze
-        import io
-        from contextlib import redirect_stdout
-        
         with patch('utils.accuracyEvaluation.auc_evaluator.draw_curve'):
-            f = io.StringIO()
-            with redirect_stdout(f):
-                evaluator.AUC()
+            auc_scores, pck_values, thresholds = evaluator.AUC()
             
-            output = f.getvalue()
         
         # Parse the output to get PCK values
-        lines = output.split('\n')
-        pck_values = []
-        
-        for line in lines:
-            if "PCK = " in line:
-                # Extract the dictionary from the line
-                dict_str = line.split('=', 1)[1].strip()
-                pck_dict = eval(dict_str)  # Be careful with eval in production!
-                pck_values.append(pck_dict.get("MoveNet", 0.0))
+        movenet_pcks = [x['MoveNet'] for x in pck_values]
         
         # Should have 3 PCK values for 3 thresholds
-        self.assertEqual(len(pck_values), 3, f"Expected 3 PCK values, got {len(pck_values)}")
+        self.assertEqual(len(movenet_pcks), 3, f"Expected 3 PCK values, got {len(movenet_pcks)}")
         
-        # Calculate AUC manually using the same formula
-        pck_numeric = np.array(pck_values)
-        expected_auc = (1 / (stop_threshold - start_threshold)) * np.sum(pck_numeric) * step_threshold
+        # Calculate AUC manually using the Trapezoidal Rule
+        area = np.trapz(y=movenet_pcks, x=thresholds)
+
+        # Normalize by the X-axis length (stop - start) to get the average score
+        x_range = stop_threshold - start_threshold
+        expected_auc = area / x_range
         
         # Extract AUC from output
-        actual_auc = None
-        for line in lines:
-            if "AUC (MoveNet) = " in line:
-                actual_auc = float(line.split('=')[1].strip())
-                break
+        actual_auc = auc_scores['MoveNet']
         
         self.assertIsNotNone(actual_auc, "Could not find AUC value in output")
         
@@ -409,7 +447,7 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
         )
         
 
-    def test_13_pck_curve_properties(self):
+    def test_12_pck_curve_properties(self):
         """Test mathematical properties of PCK curve"""
         from utils.accuracyEvaluation.auc_evaluator import AUCEvaluator
         
@@ -420,7 +458,7 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
             start_threshold=0.1,
             stop_threshold=0.5,
             step_threshold=0.1,  # 5 thresholds: 0.1, 0.2, 0.3, 0.4, 0.5
-            frame_number_offset=325,
+            frame_number_offset=499,
             singleFrameFromVideo=10,
             render_out=False,
             verbose=False
@@ -451,7 +489,7 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
             )
 
 
-    def test_14_visualization_output_mocked(self):
+    def test_13_visualization_output_mocked(self):
         """Test that visualization creates output file (mock cv2 display)"""
 
         output_file = os.path.join(self.test_dir, "visualization_output_mocked.jpg")
@@ -465,7 +503,7 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
             predictions_file_list={"MoveNet": self.pred_path},
             input_src=self.video_path,
             last_frame_output=output_file,
-            frame_number_offset=325,
+            frame_number_offset=499,
             singleFrameFromVideo=10,
             render_out=True,  # Enable rendering
             verbose=False
@@ -488,3 +526,61 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
 
         # Clean up (optional)
         os.remove(output_file)
+
+
+    def test_14_golden_auc_single_frame(self):
+        """Golden test: Compare against known good PCK value for frame 10"""
+        confidences = [0, 0.2, 0.71]
+        expected_thresholds = np.array([0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30])
+        expected_pck = np.array([
+            [0.0, 16/34, 29/34, 31/34, 32/34, 32/34, 32/34],    # confidence = 0.0
+            [0.0, 16/32, 29/32, 31/32, 32/32, 32/32, 32/32],    # confidence = 0.2
+            [0.0,  7/31, 10/31, 10/31, 10/31, 10/31, 10/31]     # confidence = 0.71 => In the second person we find max 2 points so there is no match (needed >= 4)
+        ])
+        
+        # Calculate expected AUC from the PCK curves above
+        # Formula: PCK = sum(pck_i, pck_i+1)/2 * step_size
+        # PCK_normal = PCK / range
+        # Range = 0.3 - 0.0 = 0.3
+        # Step = 0.05
+        # Factor = 0.05 / 0.3 = 1/6
+        expected_auc = [
+            0.7647,    # confidence = 0.0 => 0.2294118 / 0.3 = 0.76
+            0.8125,    # confidence = 0.2
+            0.2796     # confidence = 0.71
+        ]
+
+        # Run AUC
+        auc_scores_predicted = []
+        for i, confidence in enumerate(confidences):
+            evaluator = self.AUCEvaluator(
+                start_threshold=0.0,
+                stop_threshold=0.3,
+                step_threshold=0.05,
+                ground_truth_file=self.gt_path,
+                predictions_file_list={"MoveNet": self.pred_path},
+                input_src=self.video_path,
+                frame_number_offset=499,
+                singleFrameFromVideo=10,
+                confidence_threshold=confidence,
+                render_out=False,
+                verbose=False
+            )
+
+            evaluator.initialize()
+
+            with patch('utils.accuracyEvaluation.auc_evaluator.draw_curve'):
+                auc_scores, pck_values, thresholds = evaluator.AUC()
+
+            auc_scores_predicted.append(auc_scores["MoveNet"])
+
+            # 1. Check Thresholds
+            np.testing.assert_allclose(thresholds, expected_thresholds, atol=1e-6)
+
+            # 2. Check PCK Curve
+            pck_curve = np.array([d["MoveNet"] for d in pck_values])
+            np.testing.assert_allclose(pck_curve, expected_pck[i], atol=1e-4, err_msg=f"PCK mismatch at confidence={confidence}")
+
+        # 3. Check AUC
+        print(auc_scores_predicted)
+        np.testing.assert_allclose(auc_scores_predicted, expected_auc, atol=1e-4, err_msg="Final AUC scores mismatch")

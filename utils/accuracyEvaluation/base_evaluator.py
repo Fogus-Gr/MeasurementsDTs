@@ -214,7 +214,7 @@ class BaseEvaluator(ABC):
                     if not ok:
                         break
 
-                    frame_number = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+                    frame_number = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1 # CAP_PROP_POS_FRAMES is 1-ahead
                     yield frame_number, frame
         else:
             raise NotImplementedError("Input selected not supported")
