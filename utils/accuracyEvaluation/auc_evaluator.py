@@ -70,6 +70,7 @@ class AUCEvaluator(BaseEvaluator):
 
                 _, correctness, included_in_denominator = self.pck_eval.evaluate(gt_body, pred_body)
                 pred_body.correctness = correctness
+                pred_body.included_in_denominator = included_in_denominator
                 TP_count += np.sum(correctness[included_in_denominator])
                 GT_visible_count += np.sum(included_in_denominator)
 

@@ -8,7 +8,7 @@ from utils.accuracyEvaluation.matching import Matcher
 
 PALETTE = [
     (255, 0, 0),
-    #(0, 255, 0), -> ground_truth
+    #(0, 255, 0), -> correct keypoints 
     (0, 0, 255),
     (255, 255, 0),
     (255, 0, 255),
@@ -160,7 +160,7 @@ class BaseEvaluator(ABC):
         for method_name, prediction_bodies in bodies.items():
             is_gt = (method_name == "ground_truth")
             
-            color = (0, 255, 0) if is_gt else self._get_color_for_method(method_name)
+            color = (225,255,254) if is_gt else self._get_color_for_method(method_name)
 
             render(frame, 
                    prediction_bodies, 

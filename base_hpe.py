@@ -20,6 +20,7 @@ class Body:
         self.keypoints = keypoints # keypoints coordinates (x,y) in pixels in the input image
 
         self.correctness = None
+        self.included_in_denominator = None
 
 # Padding (all values are in pixel) :
 # w (resp. h): horizontal (resp. vertical) padding on the source image to make its ratio same as Movenet model input. 

@@ -9,15 +9,16 @@ Returns the text string (e.g. '12/17').
 def draw_kpi_stats(frame, body, text_color=(0,255,255)):
     # Get visible keypoints (GT logic)
     visible_idxs = [i for i, c in enumerate(body.keypoints_score) if c != 0]
-    num_shown = len(visible_idxs)
 
     # Compute TP count (if correctness exists)
     if body.correctness is not None:
         num_tp = sum(body.correctness[i] for i in visible_idxs)
+        num_visible_gt = sum(body.included_in_denominator)
+        text = f"{num_tp}/{num_visible_gt}"
     else:
         num_tp = 0
-
-    text = f"{num_tp}/{num_shown}"
+        num_visible_gt = 0
+        text = "Unmatched pd"
 
     # Position where text will be drawn
     visible_points = [body.keypoints[i] for i in visible_idxs]
@@ -70,7 +71,7 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
                     continue
 
                 if isGroundTruth:
-                    color = (0,255,0)
+                    color = (225,255,254)
                     x, y = x_y
                     cv2.circle(frame, (int(x), int(y)), 5, color, -1)
                 else:
@@ -149,7 +150,7 @@ def draw_legend(frame, method_colors, size="normal"):
     swatch_size = int(12 * s)
 
     # Sort legend entries so ground_truth is always first
-    legend_items = [('ground_truth', (0, 255, 0))] + [
+    legend_items = [('ground_truth', (225,255,254))] + [
         (name, color) for name, color in method_colors.items()
         if name != 'ground_truth'
     ]
