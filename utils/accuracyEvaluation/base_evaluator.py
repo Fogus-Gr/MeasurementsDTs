@@ -164,8 +164,7 @@ class BaseEvaluator(ABC):
 
             render(frame, 
                    prediction_bodies, 
-                   self.LINES_BODY, 
-                   score_thresh = 0.2, 
+                   self.LINES_BODY,
                    show_scores = False, 
                    show_bounding_box = False, 
                    show_numbering = True, 

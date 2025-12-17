@@ -21,6 +21,7 @@ class Body:
 
         self.correctness = None
         self.included_in_denominator = None
+        self.thresh_radius = None
 
 # Padding (all values are in pixel) :
 # w (resp. h): horizontal (resp. vertical) padding on the source image to make its ratio same as Movenet model input. 
@@ -204,7 +205,7 @@ class BaseHPE(ABC):
             if not hasattr(self, 'LINES_BODY'):
                 raise ValueError("LINES_BODY is not defined in the child class.")
             
-            render(frame, bodies, self.LINES_BODY, self.score_thresh, self.show_scores, self.show_bounding_box)
+            render(frame, bodies, self.LINES_BODY, self.show_scores, self.show_bounding_box)
 
             if self.save_video:
                 if not self.output.isOpened():

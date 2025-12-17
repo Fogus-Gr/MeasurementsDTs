@@ -12,6 +12,8 @@ class DummyBody:
         self.keypoints = np.array(keypoints, dtype=float)
         self.keypoints_score = np.array(keypoints_score, dtype=float)
 
+        self.thresh_radius = None
+        
 
 # ----------------------------------------------------
 # Tests

@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
-from utils.constants import LABELED_VISIBLE
+
+GT_COLOR = (225,255,254)
 
 """
 Computes TP/shown keypoints and draws text above the person.
@@ -38,9 +39,29 @@ def draw_kpi_stats(frame, body, text_color=(0,255,255)):
 
     return text
 
+def draw_threshold_circles(frame, body, color=(255, 255, 254)):
+    """
+    Draws the acceptance threshold circles around keypoints.
+    """
+    if body.thresh_radius is None:
+        return
+
+    for i, (x, y) in enumerate(body.keypoints):
+        # Skip if this specific keypoint isn't visible/valid in GT
+        if body.keypoints_score[i] == 0:
+            continue
+            
+        radius = int(body.thresh_radius[i])
+        
+        # Draw only if radius is meaningful (visible)
+        if radius > 0:
+            # Draw thin outline
+            cv2.circle(frame, (int(x), int(y)), radius, color, 1, cv2.LINE_AA)
+
+
 # Thinks that already change to if keypoints_score < score thresh => keypoints_score = 0 
 # ==> So body.keypoints_score[line[0]] > 0.0 keeps only above threshold values
-def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_box, show_numbering=False, isGroundTruth = False, color_skeleton = (255, 180, 90)):
+def render(frame, bodies, LINES_BODY, show_scores, show_bounding_box, show_numbering=False, isGroundTruth = False, color_skeleton = (255, 180, 90)):
         thickness = 3 
         color_box = (0,255,255)
 
@@ -63,6 +84,10 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
 
             if not isGroundTruth:   # only for predictions
                 draw_kpi_stats(frame, body, color_skeleton)
+
+            if isGroundTruth:
+                # White circles for GT thresholds
+                draw_threshold_circles(frame, body, color=GT_COLOR)
             
             for i,x_y in enumerate(body.keypoints):
                 c = body.keypoints_score[i]
@@ -71,7 +96,7 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
                     continue
 
                 if isGroundTruth:
-                    color = (225,255,254)
+                    color = GT_COLOR
                     x, y = x_y
                     cv2.circle(frame, (int(x), int(y)), 5, color, -1)
                 else:
@@ -150,7 +175,7 @@ def draw_legend(frame, method_colors, size="normal"):
     swatch_size = int(12 * s)
 
     # Sort legend entries so ground_truth is always first
-    legend_items = [('ground_truth', (225,255,254))] + [
+    legend_items = [('ground_truth', GT_COLOR)] + [
         (name, color) for name, color in method_colors.items()
         if name != 'ground_truth'
     ]

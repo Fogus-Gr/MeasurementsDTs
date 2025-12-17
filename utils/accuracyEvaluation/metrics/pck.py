@@ -31,6 +31,17 @@ class PCKEvaluator:
             return np.linalg.norm(gt_kpts[3] - gt_kpts[4])  # Ear L - Ear R
         else:
             raise ValueError("Invalid threshold_type")
+        
+    def compute_thresholds(self, gt_body):
+        """
+        Computes the pixel radius for the threshold circle for every keypoint.
+        Returns a numpy array of shape (N,).
+        """
+        norm_dist = self._get_norm_dist(gt_body.keypoints)
+        radius_pixels = self.alpha * norm_dist
+        
+        # For PCK, the radius is uniform for all keypoints.
+        return np.full(len(gt_body.keypoints), radius_pixels)
 
     def evaluate(self, gt_body, pred_body):
         gt_kpts = gt_body.keypoints
@@ -43,15 +54,16 @@ class PCKEvaluator:
         is_visible = (gt_v == LABELED_VISIBLE)
         
         # 2. Calculate Thresholds
-        norm_dist = self._get_norm_dist(gt_kpts)
-        threshold = self.alpha * norm_dist
+        gt_body.thresh_radius = self.compute_thresholds(gt_body)
+
+        thresholds = gt_body.thresh_radius
         dists = np.linalg.norm(gt_kpts - pred_kpts, axis=1)
 
         # 3. Calculate Correctness
         correctness = np.zeros_like(dists, dtype=bool)
         
         # Check A: Distance is within threshold
-        spatially_correct = dists <= threshold
+        spatially_correct = dists <= thresholds
         
         # Check B: Prediction actually exists (Score > 0 or Conf Thresh)
         is_predicted = pred_scores > 0 
