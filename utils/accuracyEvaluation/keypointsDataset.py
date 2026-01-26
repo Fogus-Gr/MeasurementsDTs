@@ -9,6 +9,9 @@ class KeypointsDataset:
         self.data = load_json(json_file)
         self.source_name = source_name
         self.gt_fps = None
+
+        if source_name == "ground_truth" and len(self.data) == 0:
+            raise ValueError("Ground truth dataset is empty. Evaluators requires at least one GT annotation.")
         
         # Organize data by frame for faster lookup
         self.by_frame = {}

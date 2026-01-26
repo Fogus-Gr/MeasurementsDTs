@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from base_hpe import Body
+from utils.body import Body
 from utils.visualizer import render, draw_legend
 from abc import ABC, abstractmethod
 from utils.accuracyEvaluation.keypointsDataset import KeypointsDataset
@@ -94,6 +94,33 @@ class BaseEvaluator(ABC):
 
         return self
         
+
+    def set_threshold(self, start_threshold, stop_threshold, step_threshold):
+        if step_threshold <= 0:
+            raise ValueError("step_threshold must be > 0")
+
+        if start_threshold > 1 or stop_threshold > 1:
+            raise ValueError("thresholds must be <= 1")
+        
+        if start_threshold < 0 or stop_threshold < 0:
+            raise ValueError("thresholds must be >= 0")
+
+        if start_threshold > stop_threshold:
+            raise ValueError("start_threshold must be <= stop_threshold")
+
+        self.start_threshold = start_threshold
+        self.stop_threshold = stop_threshold
+        self.step_threshold = step_threshold
+        
+        if start_threshold == stop_threshold:
+            self.thresholds = np.array([start_threshold])
+        else:
+            self.thresholds = np.arange(self.start_threshold, 
+                                   self.stop_threshold + 1e-10,  # Small epsilon
+                                   self.step_threshold)
+            
+        self.thresholds = np.round(self.thresholds, 6)
+
     
     # Convert COCO17 keypoints into Body objects
     def update_body_format(self, keypoint_list, img_w = 640, img_h = 480):

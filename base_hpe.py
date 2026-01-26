@@ -8,21 +8,6 @@ import time
 from utils.visualizer import render
 from utils.export_pose_results import append_COCO_format_json, append_COCO_format_csv, save_COCO_format_json, save_COCO_format_csv, save_Tx_csv_data
 
-class Body:
-    def __init__(self, score, xmin, ymin, xmax, ymax, keypoints_score, keypoints, keypoints_norm):
-        self.score = score # global/mean score 
-        self.xmin = xmin
-        self.ymin = ymin
-        self.xmax = xmax
-        self.ymax = ymax
-        self.keypoints_score = keypoints_score # individual scores of the keypoints
-        self.keypoints_norm = keypoints_norm # keypoints normalized ([0,1]) coordinates (x,y) in the input image
-        self.keypoints = keypoints # keypoints coordinates (x,y) in pixels in the input image
-
-        self.correctness = None
-        self.included_in_denominator = None
-        self.thresh_radius = None
-
 # Padding (all values are in pixel) :
 # w (resp. h): horizontal (resp. vertical) padding on the source image to make its ratio same as Movenet model input. 
 #               The padding is done on one side (bottom or right) of the image.

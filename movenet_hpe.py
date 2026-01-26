@@ -4,7 +4,8 @@ from openvino.runtime import Core
 import numpy as np
 import cv2
 from pathlib import Path
-from base_hpe import BaseHPE, Body
+from base_hpe import BaseHPE
+from utils.body import Body
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_MODEL = SCRIPT_DIR / "models/MoveNet/movenet_multipose_lightning_256x256_FP32.xml"

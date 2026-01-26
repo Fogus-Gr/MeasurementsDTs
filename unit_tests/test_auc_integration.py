@@ -584,3 +584,7 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
         # 3. Check AUC
         print(auc_scores_predicted)
         np.testing.assert_allclose(auc_scores_predicted, expected_auc, atol=1e-4, err_msg="Final AUC scores mismatch")
+
+
+if __name__ == '__main__':
+    unittest.main()

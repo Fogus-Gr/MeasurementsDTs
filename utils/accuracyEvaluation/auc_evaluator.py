@@ -11,32 +11,6 @@ class AUCEvaluator(BaseEvaluator):
 
         self.set_threshold(start_threshold, stop_threshold, step_threshold)
 
-    def set_threshold(self, start_threshold, stop_threshold, step_threshold):
-        if step_threshold <= 0:
-            raise ValueError("step_threshold must be > 0")
-
-        if start_threshold > 1 or stop_threshold > 1:
-            raise ValueError("thresholds must be <= 1")
-        
-        if start_threshold < 0 or stop_threshold < 0:
-            raise ValueError("thresholds must be >= 0")
-
-        if start_threshold > stop_threshold:
-            raise ValueError("start_threshold must be <= stop_threshold")
-
-        self.start_threshold = start_threshold
-        self.stop_threshold = stop_threshold
-        self.step_threshold = step_threshold
-        
-        if start_threshold == stop_threshold:
-            self.thresholds = np.array([start_threshold])
-        else:
-            self.thresholds = np.arange(self.start_threshold, 
-                                   self.stop_threshold + 1e-10,  # Small epsilon
-                                   self.step_threshold)
-            
-        self.thresholds = np.round(self.thresholds, 6)
-
     def initialize(self):
         super().initialize()
 
@@ -74,13 +48,13 @@ class AUCEvaluator(BaseEvaluator):
                 TP_count += np.sum(correctness[included_in_denominator])
                 GT_visible_count += np.sum(included_in_denominator)
 
-            # --- PART 2: Process Missed GT ---
+            # --- PART 2: Process Missed GT (FN) ---
             for body in gt:
                 if body not in matched_gt_bodies:                   
                     visible_kpts = np.sum(body.keypoints_score == LABELED_VISIBLE)
                     GT_visible_count += visible_kpts
                 
-            pck_results[method_name] = pck_results[method_name] = TP_count / GT_visible_count if GT_visible_count > 0 else 0.0
+            pck_results[method_name] = TP_count / GT_visible_count if GT_visible_count > 0 else 0.0
 
         return pck_results
     

@@ -1,7 +1,7 @@
 from pathlib import Path
 from base_hpe import BaseHPE
 import numpy as np
-from base_hpe import Body
+from utils.body import Body
 
 from models.OpenVINO.model_api.models import ImageModel
 from models.OpenVINO.model_api.adapters import create_core, OpenvinoAdapter

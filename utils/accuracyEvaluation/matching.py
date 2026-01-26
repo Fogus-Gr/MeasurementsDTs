@@ -1,9 +1,11 @@
 """
+At most 1 prediction per gt.
 Confidence threshold should be already be applied => conf == 0 -> not counted as valid
 
 Note:
-for method == "keypoint", gt.keypoints_norm is used which are keypoints / np.array([img_w, img_h])
+1. for method == "keypoint", gt.keypoints_norm is used which are keypoints / np.array([img_w, img_h])
 => dist_thresh represents a Normalized Euclidean Distance (=> 5% of the image dimensions)
+2. COCO sorts predictions by confidence before matching. We don't do that here
 """
 
 import numpy as np

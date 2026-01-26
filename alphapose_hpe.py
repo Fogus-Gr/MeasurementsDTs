@@ -1,7 +1,8 @@
 import os
 import numpy as np
 import torch
-from base_hpe import BaseHPE, Body, Padding
+from base_hpe import BaseHPE, Padding
+from utils.body import Body
 from types import SimpleNamespace
 
 try:
