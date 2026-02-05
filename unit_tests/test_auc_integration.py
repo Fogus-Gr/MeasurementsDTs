@@ -533,8 +533,8 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
         confidences = [0, 0.2, 0.71]
         expected_thresholds = np.array([0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30])
         expected_pck = np.array([
-            [0.0, 16/34, 29/34, 31/34, 32/34, 32/34, 32/34],    # confidence = 0.0
-            [0.0, 16/32, 29/32, 31/32, 32/32, 32/32, 32/32],    # confidence = 0.2
+            [0.0, 16/31, 28/31, 30/31, 31/31, 31/31, 31/31],    # confidence = 0.0
+            [0.0, 16/31, 28/31, 30/31, 31/31, 31/31, 31/31],    # confidence = 0.2
             [0.0,  7/31, 10/31, 10/31, 10/31, 10/31, 10/31]     # confidence = 0.71 => In the second person we find max 2 points so there is no match (needed >= 4)
         ])
         
@@ -545,8 +545,8 @@ class TestAUCEvaluatorIntegration(unittest.TestCase):
         # Step = 0.05
         # Factor = 0.05 / 0.3 = 1/6
         expected_auc = [
-            0.7647,    # confidence = 0.0 => 0.2294118 / 0.3 = 0.76
-            0.8125,    # confidence = 0.2
+            0.8145,    # confidence = 0.0 => 0.2444 / 0.3 = 0.8145
+            0.8145,    # confidence = 0.2
             0.2796     # confidence = 0.71
         ]
 

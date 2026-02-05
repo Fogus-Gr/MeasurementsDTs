@@ -62,6 +62,10 @@ class APAREvaluator(BaseEvaluator):
                 # oks is per-instance not per-keypoint metric
                 oks_score, _, _ = self.oks_eval.evaluate(gt_body, pred_body)
 
+                # Before adding to all_detections update pred_body.score, to be the mean for only visible(gt_truth) keypoints
+                # pred_body.score = np.mean(pred_body.keypoints_score[gt_body.keypoints_score == 2])
+                # The above can be considered cheating, so we can simple take into account of the mean only keypoints_score > 0.1 for example
+
                 self.all_detections[method_name].append({
                     'score': pred_body.score,   # Model confidence
                     'oks': oks_score,           # Geometric accuracy

@@ -1,14 +1,13 @@
 '''
 PCK = (Number of keypoints in the threshold) / (Number of total keypoints)
 
-For LABELED_NOT_VISIBLE (out_of_border):
-If model predicts something => treat like a normal keypoint => compare distance to threshold
-If model does NOT predict (score = 0) => ignore it => remove from denominator
+For NOT_LABELED (out_of_border):
+ignore it => remove from denominator
 '''
 
 import numpy as np
 import matplotlib.pyplot as plt
-from utils.constants import LABELED_VISIBLE, LABELED_NOT_VISIBLE
+from utils.constants import NOT_LABELED
 
 class PCKEvaluator:
     def __init__(self, threshold_type="torso", alpha=0.2):
@@ -25,12 +24,16 @@ class PCKEvaluator:
         self.alpha = alpha
 
     def _get_norm_dist(self, gt_kpts):
+        dist = 0.0 
+
         if self.threshold_type == "torso":
-            return np.linalg.norm(gt_kpts[5] - gt_kpts[12]) # Shoulder L - Hips R
+            dist = np.linalg.norm(gt_kpts[5] - gt_kpts[12]) # Shoulder L - Hips R
         elif self.threshold_type == "head":
-            return np.linalg.norm(gt_kpts[3] - gt_kpts[4])  # Ear L - Ear R
+            dist = np.linalg.norm(gt_kpts[3] - gt_kpts[4])  # Ear L - Ear R
         else:
             raise ValueError("Invalid threshold_type")
+        
+        return max(dist, 1.0) # Ensure we never return 0
         
     def compute_thresholds(self, gt_body):
         """
@@ -50,8 +53,8 @@ class PCKEvaluator:
         pred_scores = pred_body.keypoints_score
 
         # 1. Standardize Visibility
-        # GT Visible (v=2) are the ones we MUST recall.
-        is_visible = (gt_v == LABELED_VISIBLE)
+        # GT Visible (v>0) are the ones we MUST recall.
+        is_visible = (gt_v != NOT_LABELED)
         
         # 2. Calculate Thresholds
         gt_body.thresh_radius = self.compute_thresholds(gt_body)
@@ -70,17 +73,10 @@ class PCKEvaluator:
         
         # Combine: Must be Visible + Spatially Close + Predicted
         correctness[is_visible] = spatially_correct[is_visible] & is_predicted[is_visible]
-
-        # --- Handling "Out of Border" / Occluded (Optional based on your logic) ---
-        out_of_border = (gt_v == LABELED_NOT_VISIBLE)
-        out_of_border_predicted = out_of_border & is_predicted
-        
-        if np.any(out_of_border_predicted):
-             correctness[out_of_border_predicted] = spatially_correct[out_of_border_predicted]
         
         # --- Denominator ---
-        # Denominator = All Visible GT + Any Invisible GT that we attempted to predict
-        included_in_denominator = is_visible | out_of_border_predicted
+        # Denominator = All Visible GT
+        included_in_denominator = is_visible
         
         if np.sum(included_in_denominator) > 0:
             pck = np.mean(correctness[included_in_denominator])

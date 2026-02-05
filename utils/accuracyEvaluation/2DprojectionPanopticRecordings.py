@@ -3,7 +3,7 @@ import json
 import numpy as np
 from glob import glob
 import argparse
-from utils.constants import LABELED_VISIBLE, LABELED_NOT_VISIBLE
+from utils.constants import LABELED_VISIBLE, NOT_LABELED
 
 selected_cam = (0, 0)  # example: camera panel=0, node=5
 
@@ -57,7 +57,7 @@ def panoptic_to_coco17(joints19, img_w, img_h):
         if 0 <= x < img_w and 0 <= y < img_h:
             v = LABELED_VISIBLE
         else:
-            v = LABELED_NOT_VISIBLE
+            v = NOT_LABELED
 
         coco17[coco_idx*3:coco_idx*3+3] = [x, y, v]
     return coco17

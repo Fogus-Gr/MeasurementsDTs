@@ -1,5 +1,5 @@
 import numpy as np
-from utils.constants import LABELED_VISIBLE, LABELED_NOT_VISIBLE
+from utils.constants import LABELED_VISIBLE
 
 class OKSEvaluator:
     def __init__(self):
@@ -9,17 +9,21 @@ class OKSEvaluator:
 
     # Segmentation Mask approximation => s = bounding_box^(1/2)
     # returns s^2
-    def _get_scale_squared(self, gt_kpts, gt_vis):
-        # Filter only visible points to calculate BBox area
-        valid = gt_vis > 0
-        if not np.any(valid):
-            return 1.0 # Fallback for empty/all-hidden GT
+    def _get_scale_squared(self, gt_kpts):
+        # Check for points that are NOT (0,0)
+        # Even if visibility is 0, if the coord is real, we want to use it.
+        # But if the coord is (0,0), it ruins the min/max calculation.
+        has_coords = np.any(gt_kpts > 0, axis=1) 
         
-        valid_kpts = gt_kpts[valid]
+        # Fallback if NO points have coordinates (empty GT)
+        if not np.any(has_coords):
+             return 1.0
+
+        valid_kpts = gt_kpts[has_coords]
+
         x_coords = valid_kpts[:, 0]
         y_coords = valid_kpts[:, 1]
 
-        # TODO - maybe using invalid points? - check
         width  = x_coords.max() - x_coords.min()
         height = y_coords.max() - y_coords.min()
 
@@ -45,7 +49,7 @@ class OKSEvaluator:
         not_predicted   = (pred_scores == 0)
 
         # Handle visible points
-        s_squared = self._get_scale_squared(gt_kpts, gt_v)
+        s_squared = self._get_scale_squared(gt_kpts)
         ks_per_keypoint = self._get_IoU(gt_kpts, pred_kpts, s_squared)
 
         # Handle out-of-border points: exclude from calculation

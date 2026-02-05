@@ -3,7 +3,7 @@ OKS doesn't apply threshold, is purely geometrical.
 """
 
 import numpy as np
-from utils.constants import LABELED_VISIBLE, LABELED_NOT_VISIBLE
+from utils.constants import LABELED_VISIBLE, NOT_LABELED
 from utils.accuracyEvaluation.metrics.oks import OKSEvaluator
 
 
@@ -29,7 +29,7 @@ def test_oks_no_valid_keypoints():
     gt_kpts = np.random.rand(17, 2) * 100
     scores = np.zeros(17) # suppressed
 
-    gt   = DummyBody(gt_kpts, np.full(17, LABELED_NOT_VISIBLE))
+    gt   = DummyBody(gt_kpts, np.full(17, NOT_LABELED))
     pred = DummyBody(gt_kpts, scores)
 
     evaluator = OKSEvaluator()
@@ -62,12 +62,11 @@ def test_oks_segmentation_mask_approximation():
     ])
 
     scaled_kpts = gt_kpts * scale
-    gt_vis = np.full(17, LABELED_VISIBLE)
 
     evaluator = OKSEvaluator()
 
-    s_squared        = evaluator._get_scale_squared(gt_kpts, gt_vis)
-    s_squared_scaled = evaluator._get_scale_squared(scaled_kpts, gt_vis)
+    s_squared        = evaluator._get_scale_squared(gt_kpts)
+    s_squared_scaled = evaluator._get_scale_squared(scaled_kpts)
 
     assert s_squared == 8400
     assert s_squared_scaled == s_squared * (scale**2)
@@ -139,7 +138,7 @@ def test_oks_distance_effect():
 def test_visibility_logic():
     """
     Visible keypoints are always included.
-    Not-visible are only included if predicted.
+    Not-visible are not included.
     """
     np.random.seed(42)  # For reproducible tests
     
@@ -147,9 +146,9 @@ def test_visibility_logic():
     gt_kpts = np.random.rand(17, 2) * 100
     gt_v = np.array([
         LABELED_VISIBLE,
-        LABELED_NOT_VISIBLE,
+        NOT_LABELED,
         LABELED_VISIBLE,
-        LABELED_NOT_VISIBLE,
+        NOT_LABELED,
         LABELED_VISIBLE
     ] + [LABELED_VISIBLE]*12)
 
@@ -211,8 +210,8 @@ def test_oks_mixed_scenario():
         LABELED_VISIBLE,      # 0
         LABELED_VISIBLE,      # 1  
         LABELED_VISIBLE,      # 2
-        LABELED_NOT_VISIBLE,  # 3
-        LABELED_NOT_VISIBLE,  # 4
+        NOT_LABELED,          # 3
+        NOT_LABELED,          # 4
     ] + [LABELED_VISIBLE]*12)
     
     pred_scores = np.array([1.0, 1.0, 0.0, 1.0, 0.0]  + [1.0]*12)
@@ -238,7 +237,7 @@ def test_oks_golden_1():
     """
     gt_0_kpts = np.array([[1629.56, 367.38], [1612.36, 337.09], [1650.83, 344.0], [1560.72, 310.15], [1655.3, 324.27], [1480.17, 435.91], [1658.41, 428.14], [1463.49, 599.63], [1725.03, 638.45], [1636.73, 616.44], [1748.03, 626.4], [1546.02, 818.51], [1654.32, 855.73], [1561.75, 1054.97], [1688.38, 1087.12], [1563.59, 1294.85], [1515.26, 1321.52]])
     pd_1_kpts = np.array([[1633.44, 333.24], [1613.1, 303.15], [1650.16, 313.03], [1574.19, 301.05], [1656.52, 323.51], [1462.59, 419.2], [1671.74, 434.84], [1489.96, 600.19], [1729.05, 651.04], [1714.74, 578.62], [1766.95, 611.91], [1499.47, 802.03], [1625.89, 810.15], [1555.16, 1050.95], [1705.14, 1049.46], [1550.16, 1054.34], [1642.63, 1061.36]])
-    gt_vis      = np.array([   2.,   2.,    2.,    2.,    2.,    2.,   2.,    2.,    2.,    2.,    2.,    2.,    2.,    2.,    1.,  1., 1.])
+    gt_vis      = np.array([   2.,   2.,    2.,    2.,    2.,    2.,   2.,    2.,    2.,    2.,    2.,    2.,    2.,    2.,    0.,  0., 0.])
     pd_1_scores = np.array([0.471, 0.39, 0.542, 0.507, 0.655, 0.703, 0.61, 0.373, 0.692, 0.275, 0.483, 0.728, 0.715, 0.646, 0.707, 0.133, 0.103])
     
     total_gt_visible = np.sum(gt_vis == LABELED_VISIBLE)
@@ -249,7 +248,7 @@ def test_oks_golden_1():
     pred = DummyBody(pd_1_kpts, pd_1_scores)
 
     evaluator = OKSEvaluator()
-    s_squared = evaluator._get_scale_squared(gt_0_kpts, gt_vis)
+    s_squared = evaluator._get_scale_squared(gt_0_kpts)
     calculated_OKS, ks_per_keypoint, _ = evaluator.evaluate(gt, pred)
     
     # 1. Expected Constants
@@ -304,7 +303,7 @@ def test_pck_golden_2():
     pred = DummyBody(pd_0_kpts, pd_0_scores)
 
     evaluator = OKSEvaluator()
-    s_squared = evaluator._get_scale_squared(gt_1_kpts, gt_vis)
+    s_squared = evaluator._get_scale_squared(gt_1_kpts)
     calculated_OKS, ks_per_keypoint, _ = evaluator.evaluate(gt, pred)
     
     # Assertions

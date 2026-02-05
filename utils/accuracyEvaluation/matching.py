@@ -1,5 +1,6 @@
 """
 At most 1 prediction per gt.
+For the case of 2 predictions on one gt, it will count one as matched and the other as FP based on geometry and not higher confidence
 Confidence threshold should be already be applied => conf == 0 -> not counted as valid
 
 Note:

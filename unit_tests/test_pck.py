@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from utils.accuracyEvaluation.metrics.pck import PCKEvaluator
-from utils.constants import LABELED_VISIBLE, LABELED_NOT_VISIBLE
+from utils.constants import LABELED_VISIBLE, NOT_LABELED
 
 
 # ----------------------------------------------------
@@ -75,7 +75,7 @@ def test_pck_no_valid_keypoints():
     gt_kpts = np.random.rand(17, 2) * 100
 
     # All keypoints are not visible and not predicted
-    gt_v = np.full(17, LABELED_NOT_VISIBLE)
+    gt_v = np.full(17, NOT_LABELED)
     pred_scores = np.zeros(17)  # No predictions
     
     gt = DummyBody(gt_kpts, gt_v)
@@ -212,8 +212,8 @@ def test_pck_head_threshold():
 
 def test_pck_visibility_logic():
     """
-    Visible keypoints are always included.
-    Not-visible are only included if predicted.
+    Visible keypoints are included.
+    Not-visible are not included.
     """
     np.random.seed(42)  # For reproducible tests
     
@@ -221,9 +221,9 @@ def test_pck_visibility_logic():
     gt_kpts = np.random.rand(17, 2) * 100
     gt_v = np.array([
         LABELED_VISIBLE,
-        LABELED_NOT_VISIBLE,
+        NOT_LABELED,
         LABELED_VISIBLE,
-        LABELED_NOT_VISIBLE
+        NOT_LABELED
     ] + [LABELED_VISIBLE]*13)
 
     pred_scores = np.array([1.0, 0.0, 1.0, 0.9] + [1.0]*13)
@@ -239,7 +239,7 @@ def test_pck_visibility_logic():
         True,   # visible
         False,  # not-visible + not predicted
         True,   # visible
-        True    # not-visible + predicted
+        False    # not-visible + predicted
     ]
     + [True] * 13 # visible
     )
@@ -274,9 +274,9 @@ def test_pck_mixed_scenario():
     gt_v = np.array([
         LABELED_VISIBLE,      # 0
         LABELED_VISIBLE,      # 1  
-        LABELED_NOT_VISIBLE,  # 2
-        LABELED_NOT_VISIBLE,  # 3
-        LABELED_NOT_VISIBLE,  # 4
+        NOT_LABELED,  # 2
+        NOT_LABELED,  # 3
+        NOT_LABELED,  # 4
     ] + [LABELED_VISIBLE]*12)
     
     pred_scores = np.array([1.0, 1.0, 1.0, 1.0, 0.0]  + [1.0]*12)
@@ -287,11 +287,11 @@ def test_pck_mixed_scenario():
     evaluator = PCKEvaluator(threshold_type="torso", alpha=0.2)
     pck, correctness, included = evaluator.evaluate(gt, pred)
     
-    # Expected: points 0,1,2,3 included; 4 excluded
-    # Correctness: 0✓, 1✗, 2✓, 3✗ → (17-2)/(17-1) = 15/16 = 0.875
-    assert np.array_equal(included, [True, True, True, True, False] + [True] * 12)
-    assert np.array_equal(correctness, [True, False, True, False, False] + [True] * 12)
-    assert np.isclose(pck, 0.875)  
+    # Expected: points 0,1 included; 2,3,4 excluded
+    # Correctness: 0✓, 1✗, 2✓, 3✗ → (17-1-3)/(17-3) = 13/14 = 0.928571429
+    assert np.array_equal(included, [True, True, False, False, False] + [True] * 12)
+    assert np.array_equal(correctness, [True, False, False, False, False] + [True] * 12)
+    assert np.isclose(pck, 0.92857, atol=1e-04) 
 
 
 def test_pck_golden_1():
@@ -300,7 +300,7 @@ def test_pck_golden_1():
         """
         gt_0_kpts = np.array([[1629.56, 367.38], [1612.36, 337.09], [1650.83, 344.0], [1560.72, 310.15], [1655.3, 324.27], [1480.17, 435.91], [1658.41, 428.14], [1463.49, 599.63], [1725.03, 638.45], [1636.73, 616.44], [1748.03, 626.4], [1546.02, 818.51], [1654.32, 855.73], [1561.75, 1054.97], [1688.38, 1087.12], [1563.59, 1294.85], [1515.26, 1321.52]])
         pd_1_kpts = np.array([[1633.44, 333.24], [1613.1, 303.15], [1650.16, 313.03], [1574.19, 301.05], [1656.52, 323.51], [1462.59, 419.2], [1671.74, 434.84], [1489.96, 600.19], [1729.05, 651.04], [1714.74, 578.62], [1766.95, 611.91], [1499.47, 802.03], [1625.89, 810.15], [1555.16, 1050.95], [1705.14, 1049.46], [1550.16, 1054.34], [1642.63, 1061.36]])
-        gt_vis      = np.array([   2.,   2.,    2.,    2.,    2.,    2.,   2.,    2.,    2.,    2.,    2.,    2.,    2.,    2.,    1.,  1., 1.])
+        gt_vis      = np.array([   2.,   2.,    2.,    2.,    2.,    2.,   2.,    2.,    2.,    2.,    2.,    2.,    2.,    2.,    0.,  0., 0.])
         pd_1_scores = np.array([0.471, 0.39, 0.542, 0.507, 0.655, 0.703, 0.61, 0.373, 0.692, 0.275, 0.483, 0.728, 0.715, 0.646, 0.707, 0.0, 0.0])
 
         # Evaluation parameters
