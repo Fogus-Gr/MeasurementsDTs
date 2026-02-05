@@ -1,125 +1,115 @@
-# 2D Human Pose Estimation
+# 2D Human Pose Estimation Evaluation Framework
 
-This project provides baseline implementations for a few 2D Human Pose Estimation methods: **AlphaPose**, **OpenPose**, **HigherHRNet**, **EfficientHRNet** and **MoveNet**.
+This project branch provides a comprehensive evaluation framework for 2D Human Pose Estimation (HPE) methods.
 
-## Dependencies
+The framework evaluates model accuracy using two primary methods:
+* **AUC:** Area Under the Curve (PCK - Probability of Correct Keypoints).
+* **APAR:** Average Precision and Recall (Standard COCO metrics).
 
-- Ubuntu 20.04
-- Python 3.8.10
-- OpenVINO 2024.2.0
+## 🚀 Workflow
 
-### GPU & Drivers
-- GPU: NVIDIA
-- CUDA Toolkit: 12.6 (release 12.6, V12.6.77)
-- PyTorch CUDA: 12.1 (torch.version.cuda)
-- PyTorch version: 2.4.1+cu121
+To benchmark a model, follow this pipeline:
+1.  **Prepare Ground Truth:** Convert CMU Panoptic 3D data to 2D COCO-format JSONs.
+2.  **Get Predictions:** Run your HPE model (e.g., MoveNet) on the video to generate prediction JSONs.
+3.  **Evaluate:** Compare the Predictions against the Ground Truth using this tool.
 
-##  Getting Started
+---
 
-Clone the repository and make sure to download the required pre-trained models below.
+## 1. Preparing Ground Truth (3D to 2D Projection)
 
-### Required Pretrained Models
+Since datasets like CMU Panoptic provide **3D** annotations, they must be projected into **2D** image coordinates to serve as ground truth for 2D HPE methods.
 
-Download these required model files and place them in the specified locations:
+We provide a panoptic_to_coco utility script (`utils/accuracyEvaluation/2DprojectionPanopticRecordings.py`) that:
+1.  Reads the 3D Skeleton data and Camera Calibration files.
+2.  Projects points using camera intrinsics/distortion parameters.
+3.  Converts the skeleton format to **COCO 17-Keypoint format**.
 
-1. **AlphaPose Models**:
-   - fast_res50_256x192.pth (ResNet50 weights):
-     ```bash
-     wget "https://drive.google.com/uc?export=download&id=1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI" -O models/AlphaPose/pretrained_models/fast_res50_256x192.pth
-     ```
-   - yolov3-spp.weights (YOLOv3 detector):
-     ```bash
-     wget "https://drive.google.com/uc?export=download&id=1k-9cUGcdH5ZFN1NcMvZrO0ApW241tboD" -O models/AlphaPose/detector/yolo/data/yolov3-spp.weights
-     ```
-
-2. **MoveNet Model**:
-   - movenet_multipose_lightning_256x256_FP32.bin (OpenVINO binaries):
-     ```bash
-     wget "https://drive.google.com/uc?export=download&id=15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr" -O models/MoveNet/movenet_multipose_lightning_256x256_FP32.bin
-     ```
-
-3. **OpenPose Model**:
-   - human-pose-estimation-0001.bin (OpenVINO binaries):
-     ```bash
-     wget "https://drive.google.com/uc?export=download&id=1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm" -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.bin
-     ```
-
-4. **Higher HRNet Model**:
-   - higher-hrnet-w32-human-pose-estimation.bin (OpenVINO binaries):
-     ```bash
-     wget "https://drive.google.com/uc?export=download&id=1fko47eVczJZQb9wWA2X7eQ0TuF4PDXzs" -O models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.bin
-     ```
-
-5. **Efficient HRNet1**:
-   - human-pose-estimation-0005.bin.bin (OpenVINO binaries):
-     ```bash
-     wget "https://drive.google.com/uc?export=download&id=1lEUFqQnWHVymQoZvaXuDFcnOyEEKsexP" -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
-     ```
-
-6. **Efficient HRNet2**:
-   - human-pose-estimation-0006.bin.bin (OpenVINO binaries):
-     ```bash
-     wget "https://drive.google.com/uc?export=download&id=1d8pGQrM9vEfz_oAIey0qRr7Gxp6dS2UE" -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0006/FP32/human-pose-estimation-0006.bin
-     ```
-
-7. **Efficient HRNet3**:
-   - human-pose-estimation-0007.bin.bin (OpenVINO binaries):
-     ```bash
-     wget "https://drive.google.com/uc?export=download&id=1ZSdsqgD4zUO4gyHMYBfxq3m4UMyQ187j" -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
-     ```
-
-## Installation
-
-1. Clone the repository
-
-2. Add the downloaded pretrained models in the correct locations
-
-3. Uninstall previous AlphaPose installations (if any)
-```bash
-pip uninstall alphapose
-```
-
-4. Install
-```bash
-conda create -n hpe python=3.8.10 -y
-conda activate hpe
-conda install pytorch==2.4.1 torchvision==0.19.1 -c pytorch
-conda install --file requirements.txt
-```
-
-5. Install AlphaPose
-```bash
-bash models/AlphaPose/build_extensions.sh
-```
-
+### Usage
+**Note:** Before running, open the script and update the `CONFIG` section with your local paths:
+```python
+# === CONFIG ===
+data_path = "/mnt/data/panoptic-toolbox/scripts/171204_pose1"
+calib_file = os.path.join(data_path, "calibration_171204_pose1.json")
+input_3d_path = os.path.join(data_path, "hdPose3d_stage1_coco19")
 ### Executing program
-
-Example usage
-```
-# For MoveNet single image
-python3 main.py --method movenet --input unit_tests/images/testImage.jpg --save_image
-
-# For AlphaPose whole directory
-python3 main.py --method alphapose --input unit_tests/images/ --json
-
-# For EfficientHRNet1 video
-python3 main.py --method ae1 --input unit_tests/video/giphy.gif --save_video
-
-# For detailed options
-python3 main.py --help
 ```
 
-### Developer Utilities
-
-For development or testing purposes, you can use helper tools found in the `dev_tools/` directory.
-
-Example usage
+**Run the conversion:**
 ```bash
-# Replace <your-ip> with the output of hostname -I:
-python3 main.py --method movenet --input http://<your-ip>:8080/video_feed --save_video
- 
-# In another terminal window, start the video stream server:
-python3 dev_tools/stream_video_server.py
+# Generates a single JSON file containing all frames (recommended for evaluation)
+python3 utils/panoptic_to_coco.py
+
+# Generates one JSON file per frame
+python3 utils/panoptic_to_coco.py --mode multiple
+```
+*Output will be saved in `projected_2d/`.*
+
+---
+
+## 2. Running Evaluation
+
+Once you have your Ground Truth JSON (from step 1) and your Prediction JSONs (from your model), you can run the evaluation.
+
+### Basic Command Structure
+```bash
+python3 evaluate.py --method [auc|apar] --gt_file [PATH] --pd_files [PATH] --input_video [PATH]
 ```
 
-This will start a local Flask server streaming video from `unit_tests/video/giphy.gif` at `http://<your-ip>:8080/video_feed`
+### Examples
+
+#### 1. APAR Evaluation (mAP / mAR)
+Calculates Average Precision and Recall, similar to standard COCO evaluation.
+```bash
+python3 evaluate.py \
+  --method apar \
+  --gt_file unit_tests/video2sec/all_body2DScenes_499_540.json \
+  --pd_files unit_tests/video2sec/pd_movenet.json \
+  --input_video unit_tests/video2sec/160422_ultimatum_hd_00_00_2s.mp4 \
+  --frame_offset 499
+```
+
+#### 2. AUC Evaluation (PCK) with Rendering
+Calculates Probability of Correct Keypoints and renders the result images to an output folder.
+```bash
+python3 evaluate.py \
+  --method auc \
+  --gt_file unit_tests/video2sec/all_body2DScenes_499_540.json \
+  --pd_files unit_tests/video2sec/pd_movenet.json \
+  --input_video unit_tests/video2sec/160422_ultimatum_hd_00_00_2s.mp4 \
+  --frame_offset 499 \
+  --render
+```
+
+#### 3. Comparing Multiple Models
+You can pass multiple prediction files to compare them in one run.
+```bash
+python3 evaluate.py --method apar \
+  --gt_file data/ground_truth.json \
+  --pd_files results/movenet.json results/alphapose.json results/openpose.json \
+  --input_video data/video.mp4
+```
+
+---
+
+## ⚙️ Configuration Options
+
+| Argument | Required | Description |
+| :--- | :---: | :--- |
+| `--method` | ✅ | Evaluation metric: `auc` or `apar`. |
+| `--gt_file` | ✅ | Path to the Ground Truth JSON (from Step 1). |
+| `--pd_files` | ✅ | List of prediction JSON files to evaluate. |
+| `--input_video` | ✅ | Path to the original video file. |
+| `--frame_offset` | | Frame synchronization offset (if GT starts at frame 0 but video starts later). |
+| `--render` | | If set, renders output images with overlaid keypoints. |
+| `--matching` | | Matching strategy: `iou` (default) or `keypoint`. |
+| `--confidence_threshold`| | Filter predictions below this confidence (AUC only). |
+| `--frame` | | Evaluate a specific single frame index. |
+| `--verbose`, `-v` | | Print detailed logs. |
+
+---
+
+### Development
+To run the internal debug test case (no arguments):
+```bash
+python3 evaluate.py
+```
