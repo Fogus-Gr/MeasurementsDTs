@@ -24,7 +24,7 @@ def create_COCO_format(bodies, score_thresh, frame_number):
             keypoints.extend([float(x), float(y), v])
 
         results.append({
-            "image_id": frame_number,
+            "frame_number": frame_number,
             "category_id": CATEGORY_PERSON,
             "keypoints": keypoints,
             "score": float(body.score)

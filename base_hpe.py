@@ -6,6 +6,12 @@ import glob
 import time
 import torch
 import numpy as np
+import logging
+import requests
+import re
+import json
+import socket
+import select
 
 try:
     import PyNvCodec as nvc
@@ -15,6 +21,36 @@ except ImportError:
 
 from utils.visualizer import render
 from utils.evaluator import append_COCO_format_json, append_COCO_format_csv, save_COCO_format_json, save_COCO_format_csv, save_Tx_csv_data
+import json
+from datetime import datetime
+
+def get_available_data(r, max_read=10*1024*1024):  # 10MB max
+    """Read all available data from the socket without blocking"""
+    data = b""
+    try:
+        # Get the underlying socket
+        sock = r.raw._fp.fp.raw._sock if hasattr(r.raw._fp.fp, 'raw') else r.raw._fp.fp._sock
+        
+        # Set non-blocking
+        sock.setblocking(False)
+        
+        while len(data) < max_read:
+            # Check if data is ready
+            ready = select.select([sock], [], [], 0.01)  # 10ms timeout
+            if ready[0]:
+                chunk = sock.recv(65536)  # Read up to 64KB
+                if not chunk:
+                    break
+                data += chunk
+            else:
+                break
+    except (BlockingIOError, socket.timeout):
+        # No more data available
+        pass
+    except Exception as e:
+        print(f"Error reading from socket: {e}")
+    
+    return data
 
 class Body:
     def __init__(self, score, xmin, ymin, xmax, ymax, keypoints_score, keypoints, keypoints_norm):
@@ -32,6 +68,22 @@ class Body:
 #               The padding is done on one side (bottom or right) of the image.
 # padded_w (resp. padded_h): width (resp. height) of the image after padding
 Padding = namedtuple('Padding', ['w', 'h', 'padded_w',  'padded_h'])
+
+def extract_x_metadata(header_region):
+    match = re.search(b'X-Metadata: (.+?)\r\n', header_region)
+
+    if match:
+        metadata_json = match.group(1)
+        metadata = json.loads(metadata_json.decode())
+        frame_number = metadata.get('frame_number')
+        server_timestamp = metadata.get("server_timestamp")
+        elapsed_time = metadata.get("elapsed_time")
+    else:
+        frame_number = None
+        server_timestamp = None
+        elapsed_time = None
+
+    return frame_number
 
 class BaseHPE(ABC):
     input_type = None
@@ -99,22 +151,12 @@ class BaseHPE(ABC):
                     if hasattr(self, '_init_opencv_video_capture'):
                         self._init_opencv_video_capture(input_src)
                     else:
-                        print(f"[WARNING] Video input ({input_src}) is not supported by this HPE implementation.")
-                        # Set default dimensions for video inputs that don't initialize capture
-                        if self.img_w == 0:
-                            self.img_w = 640
-                        if self.img_h == 0:
-                            self.img_h = 480
+                        raise NotImplementedError(f"Video input ({input_src}) is not supported by this HPE implementation.")
                 else:
                     if hasattr(self, '_init_pynvcodec_video_capture'):
                         self._init_pynvcodec_video_capture(input_src)
                     else:
-                        print(f"[WARNING] Video input ({input_src}) is not supported by this HPE implementation.")
-                        # Set default dimensions for video inputs that don't initialize capture
-                        if self.img_w == 0:
-                            self.img_w = 640
-                        if self.img_h == 0:
-                            self.img_h = 480
+                        raise NotImplementedError(f"Video input ({input_src}) is not supported by this HPE implementation.")
             elif input_src.endswith('.mp4') or input_src.endswith('.avi') or input_src.endswith('.mov'): # Check for video files
                 self.input_type = "video"
                 if nvc is None:
@@ -122,22 +164,12 @@ class BaseHPE(ABC):
                     if hasattr(self, '_init_opencv_video_capture'):
                         self._init_opencv_video_capture(input_src)
                     else:
-                        print(f"[WARNING] Video input ({input_src}) is not supported by this HPE implementation.")
-                        # Set default dimensions for video inputs that don't initialize capture
-                        if self.img_w == 0:
-                            self.img_w = 640
-                        if self.img_h == 0:
-                            self.img_h = 480
+                        raise NotImplementedError(f"Video input ({input_src}) is not supported by this HPE implementation.")
                 else:
                     if hasattr(self, '_init_pynvcodec_video_capture'):
                         self._init_pynvcodec_video_capture(input_src)
                     else:
-                        print(f"[WARNING] Video input ({input_src}) is not supported by this HPE implementation.")
-                        # Set default dimensions for video inputs that don't initialize capture
-                        if self.img_w == 0:
-                            self.img_w = 640
-                        if self.img_h == 0:
-                            self.img_h = 480
+                        raise NotImplementedError(f"Video input ({input_src}) is not supported by this HPE implementation.")
             elif input_src.endswith('.jpg') or input_src.endswith('.png'):
                 self.input_type = "image"
                 self.img = cv2.imread(input_src)
@@ -173,6 +205,7 @@ class BaseHPE(ABC):
             fourcc = cv2.VideoWriter_fourcc(*"MJPG")
             filename = os.path.join(self.output_dir, "video.avi")
             self.output = cv2.VideoWriter(filename, fourcc, self.video_fps, (self.img_w, self.img_h))
+
 
     @abstractmethod
     def load_model(self):
@@ -274,13 +307,14 @@ class BaseHPE(ABC):
 
                 frame_number += 1
 
+
         if self.json:
             save_COCO_format_json(os.path.join(self.output_dir, "COCOformat.json"))
         if self.csv:
             save_COCO_format_csv(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_JSON.csv"))
             save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
 
-    def main_loop_with_timeout(self, timeout_seconds=300, max_frames=0):
+    def main_loop_with_timeout(self, timeout_seconds=0, max_frames=0):
         """Enhanced main loop with timeout and frame count detection for HTTP streams"""
         # Load model if not already loaded
         if not hasattr(self, 'model') or self.model is None:
@@ -288,119 +322,162 @@ class BaseHPE(ABC):
             self.load_model()
             print("Model loaded successfully!")
 
-        frame_number = 0
-        start_time = time.time()
-        
-        print(f"Starting processing with timeout: {timeout_seconds}s, max_frames: {max_frames if max_frames > 0 else 'unlimited'}")
-
-        if self.input_type == "image":
-            self.process_frame(self.img, frame_number)
-
-        elif self.input_type == "directory":
-            # Get all image files from the directory
-            image_files = glob.glob(os.path.join(self.img_dir, '*.[pjg][np][ge]*'))
-            print(f"Found {len(image_files)} images in {self.img_dir}")
-
-            # Sort files to ensure they are in alphanumeric order
-            image_files = sorted(image_files)
-
-            for image_file in image_files:
-                self.img = cv2.imread(image_file)
-                if self.img is None:
-                    print(f"Could not load image: {image_file}")
-                    continue
-
-                self.process_frame(self.img, frame_number)
-                frame_number += 1
-
-        elif self.is_pynvcodec_enabled: # PyNvCodec path
-            print(f"Starting processing video/stream data with PyNvCodec on GPU {self.gpu_id}. Press CTR+C to exit")
-            while True:
-                try:
-                    # Check timeout
-                    if time.time() - start_time > timeout_seconds:
-                        print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
-                        break
-                    
-                    # Check max frames
-                    if max_frames > 0 and frame_number >= max_frames:
-                        print(f"Max frames reached ({max_frames}) - stopping processing")
-                        break
-                    
-                    # Decode a frame
-                    surface = self.decoder.DecodeSingleFrame(self.demuxer)
-                    if not surface:
-                        print("End of video stream")
-                        break # End of video
-
-                    # Convert NV12 surface to RGB surface
-                    rgb_surface = self.to_rgb_converter.Execute(surface)
-                    
-                    # Convert RGB surface to PyTorch tensor on GPU
-                    frame_tensor = self.to_tensor_converter.Execute(rgb_surface)
-                    
-                    self.process_frame(frame_tensor, frame_number)
-                    frame_number += 1
-                    
-                    # Progress update every 100 frames
-                    if frame_number % 100 == 0:
-                        elapsed = time.time() - start_time
-                        print(f"Processed {frame_number} frames in {elapsed:.1f}s")
-                        
-                except Exception as e:
-                    print(f"[ERROR] PyNvCodec decoding error: {e}")
-                    break # Exit loop on error
-
-        else:   # OpenCV video/webcam/stream fallback
-            if self.cap is None:
-                print(f"[ERROR] Video capture not initialized for {self.__class__.__name__}. This HPE implementation may not support video inputs.")
-                return
-            print("Starting processing video/webcam data with OpenCV. Press CTR+C to exit")
+        try: 
+            frame_idx = 0
+            start_time = time.time()
             
-            consecutive_failures = 0
-            max_consecutive_failures = 10
-            
-            while True:
-                # Check timeout
-                if time.time() - start_time > timeout_seconds:
-                    print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
-                    break
-                
-                # Check max frames
-                if max_frames > 0 and frame_number >= max_frames:
-                    print(f"Max frames reached ({max_frames}) - stopping processing")
-                    break
-                
-                ok, frame = self.cap.read()
-                if not ok:
-                    consecutive_failures += 1
-                    if consecutive_failures >= max_consecutive_failures:
-                        print(f"Stream ended after {consecutive_failures} consecutive read failures")
-                        break
-                    else:
-                        print(f"Frame read failed ({consecutive_failures}/{max_consecutive_failures}), retrying...")
-                        time.sleep(0.1)
+            print(f"Starting processing with timeout: {timeout_seconds}s, max_frames: {max_frames if max_frames > 0 else 'unlimited'}")
+
+            if self.input_type == "image":
+                self.process_frame(self.img, frame_idx)
+
+            elif self.input_type == "directory":
+                # Get all image files from the directory
+                image_files = glob.glob(os.path.join(self.img_dir, '*.[pjg][np][ge]*'))
+                print(f"Found {len(image_files)} images in {self.img_dir}")
+
+                # Sort files to ensure they are in alphanumeric order
+                image_files = sorted(image_files)
+
+                for image_file in image_files:
+                    self.img = cv2.imread(image_file)
+                    if self.img is None:
+                        print(f"Could not load image: {image_file}")
                         continue
-                else:
-                    consecutive_failures = 0  # Reset on successful read
 
-                self.process_frame(frame, frame_number)
-                frame_number += 1
-                
-                # Progress update every 100 frames
-                if frame_number % 100 == 0:
-                    elapsed = time.time() - start_time
-                    fps = frame_number / elapsed if elapsed > 0 else 0
-                    print(f"Processed {frame_number} frames in {elapsed:.1f}s (avg {fps:.1f} FPS)")
+                    self.process_frame(self.img, frame_idx)
+                    frame_idx += 1
 
-        print(f"Processing completed. Total frames processed: {frame_number}")
-        print(f"Total time: {time.time() - start_time:.1f}s")
+            elif self.is_pynvcodec_enabled: # PyNvCodec path
+                print(f"Starting processing video/stream data with PyNvCodec on GPU {self.gpu_id}. Press CTR+C to exit")
+                while True:
+                    try:
+                        # Check timeout
+                        if time.time() - start_time > timeout_seconds:
+                            print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
+                            break
+                        
+                        # Check max frames
+                        if max_frames > 0 and frame_idx >= max_frames:
+                            print(f"Max frames reached ({max_frames}) - stopping processing")
+                            break
+                        
+                        # Decode a frame
+                        surface = self.decoder.DecodeSingleFrame(self.demuxer)
+                        if not surface:
+                            print("End of video stream")
+                            break # End of video
 
-        if self.json:
-            save_COCO_format_json(os.path.join(self.output_dir, "COCOformat.json"))
-        if self.csv:
-            save_COCO_format_csv(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_JSON.csv"))
-            save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
+                        # Convert NV12 surface to RGB surface
+                        rgb_surface = self.to_rgb_converter.Execute(surface)
+                        
+                        # Convert RGB surface to PyTorch tensor on GPU
+                        frame_tensor = self.to_tensor_converter.Execute(rgb_surface)
+                        
+                        self.process_frame(frame_tensor, frame_idx)
+                        frame_idx += 1
+                        
+                        # Progress update every 100 frames
+                        if frame_idx % 100 == 0:
+                            elapsed = time.time() - start_time
+                            print(f"Processed {frame_idx} frames in {elapsed:.1f}s")
+                            
+                    except Exception as e:
+                        print(f"[ERROR] PyNvCodec decoding error: {e}")
+                        break # Exit loop on error
+
+            else:   # video/webcam/stream fallback   
+                url = self.input_src
+                r = requests.get(url, stream=True, timeout=30)
+                buffer = b""
+
+                print("Starting processing video/webcam data from HTTP stream. Press CTRL+C to exit")
+
+                try:
+                    consecutive_failures = 0
+                    max_consecutive_failures = 10
+                    
+                    while True:
+                        # Read ALL available data from the socket
+                        new_data = get_available_data(r)
+                        if new_data:
+                            buffer += new_data
+                            #print(f"Read {len(new_data)} bytes, total buffer: {len(buffer)} bytes")
+                        
+                        # Find ALL complete frames in the buffer
+                        frames = []
+                        search_pos = 0
+                        while True:
+                            soi = buffer.find(b'\xFF\xD8', search_pos)
+                            if soi == -1:
+                                break
+                            eoi = buffer.find(b'\xFF\xD9', soi + 2)
+                            if eoi != -1:
+                                frames.append((soi, eoi))
+                                search_pos = eoi + 2
+                            else:
+                                break
+                        
+                        # If we have frames, process ONLY THE LAST ONE
+                        if frames:
+                            last_soi, last_eoi = frames[-1]
+                            
+                            # Report skipping
+                            if len(frames) > 1:
+                                print(f"SKIPPING {len(frames)-1}")
+                            
+                            # Extract frame data
+                            header_region = buffer[max(0, last_soi-200):last_soi]
+                            frame_number = extract_x_metadata(header_region)
+                            
+                            frame_data = buffer[last_soi:last_eoi+2]
+                            
+                            # Remove ALL data up to and including the processed frame
+                            buffer = buffer[last_eoi+2:]
+                                                        
+                            # Decode and process frame
+                            frame = cv2.imdecode(np.frombuffer(frame_data, np.uint8), cv2.IMREAD_COLOR)
+                            if frame is not None:
+                                self.process_frame(frame, frame_number)
+                                frame_idx += 1
+                                consecutive_failures = 0
+                                
+                                if frame_idx % 10 == 0:  # More frequent updates
+                                    elapsed = time.time() - start_time
+                                    fps = frame_idx / elapsed if elapsed > 0 else 0
+                                    #print(f"Processed {frame_idx} frames in {elapsed:.1f}s (avg {fps:.1f} FPS)")
+                            else:
+                                consecutive_failures += 1
+                                print(f"Frame decode failed ({consecutive_failures}/{max_consecutive_failures})")
+                                if consecutive_failures >= max_consecutive_failures:
+                                    print("Too many decode failures, stopping.")
+                                    break
+                        
+                        # Small sleep to prevent CPU spinning
+                        time.sleep(0.001)
+                        
+                        # Check termination conditions
+                        if time.time() - start_time > timeout_seconds:
+                            print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
+                            break
+                        if max_frames > 0 and frame_idx >= max_frames:
+                            print(f"Max frames reached ({max_frames}) - stopping processing")
+                            break
+
+                except Exception as e:
+                    print(f"Error in processing loop: {e}")
+
+                print(f"Processing completed. Total frames processed: {frame_idx}")
+                print(f"Total time: {time.time() - start_time:.1f}s")
+
+        except Exception as e:
+            print(f"[ERROR] Processing failed: {e}")
+        finally:    # always save results
+            if self.json:
+                save_COCO_format_json(os.path.join(self.output_dir, "COCOformat.json"))
+            if self.csv:
+                save_COCO_format_csv(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_JSON.csv"))
+                save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
 
     def process_frame(self, frame, frame_number):
         # Start timing
@@ -417,11 +494,14 @@ class BaseHPE(ABC):
         padded = self.pad_and_resize(frame_np) # pad_and_resize expects numpy array
         
         # --- Inference and Timing ---
+        inference_start = time.time()
         predictions = self.run_model(padded)
+        inference_stop = time.time()
         stop_time = time.time()
 
         # Handle different model output formats
         poses, scores = None, None
+        
         if hasattr(self, 'process_results') and hasattr(self, 'draw_poses'):
             # For models that return pafs/heatmaps (like some OpenVINO models)
             if isinstance(predictions, dict):
@@ -498,6 +578,7 @@ class BaseHPE(ABC):
             # Now, we have start_time and stop_time. Let's use the end of inference for timestamp.
             append_COCO_format_csv(bodies, self.score_thresh, frame_number, stop_time, self.measurement_interval_ms)
 
+
         if self.save_image or self.save_video:
             # Ensure that LINES_BODY is defined in the child class
             if not hasattr(self, 'LINES_BODY'):
@@ -516,6 +597,9 @@ class BaseHPE(ABC):
             elif self.save_image:
                 filename = os.path.join(self.output_dir, f"frame_{frame_number:04d}.jpg")
                 cv2.imwrite(filename, frame_np)
+    
+    
+    
     
     @abstractmethod
     def run_model(self, padded):
