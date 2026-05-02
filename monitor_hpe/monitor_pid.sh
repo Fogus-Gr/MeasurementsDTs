@@ -165,36 +165,50 @@ while read -r line; do
 done < "$FIFO_PATH" &
 fifo_reader_pid=$!
 
+# Get number of cores and clock ticks per second
+NUM_CORES=$(nproc)
+CLK_TCK=$(getconf CLK_TCK)
+
+# Read CPU ticks from /proc/$PID/stat (fields 14+15 = utime+stime)
+read_cpu_ticks() {
+    awk '{print $14+$15}' /proc/$1/stat 2>/dev/null || echo 0
+}
+
+prev_ticks=$(read_cpu_ticks "$PID")
+prev_wall=$(date +%s%N)
+
 # Main monitoring loop
 while true; do
-    # Get current timestamp (in seconds since epoch with nanosecond precision)
+    sleep 0.5
+
     timestamp=$(date +%s.%N)
-    
+
     # Check if PID is still running
     if ! ps -p "$PID" > /dev/null 2>&1; then
         echo "Process $PID is no longer running. Exiting..."
         break
     fi
-    
-    # pidstat samples over a 1-second interval — reports actual per-interval CPU%
-    # rather than the lifetime average that ps -o %cpu gives
-    cpu_percent=$(pidstat -p "$PID" 1 1 2>/dev/null | awk '/^[0-9]/ && $2+0=='"$PID"' {print $8; exit}')
-    cpu_percent=${cpu_percent:-0}
-    
+
+    # Compute per-interval CPU% from /proc/$PID/stat delta — instant, no blocking
+    curr_ticks=$(read_cpu_ticks "$PID")
+    curr_wall=$(date +%s%N)
+    delta_ticks=$(( curr_ticks - prev_ticks ))
+    delta_wall_s=$(echo "scale=6; ($curr_wall - $prev_wall) / 1000000000" | bc)
+    cpu_percent=$(echo "scale=2; $delta_ticks * 100 / ($CLK_TCK * $delta_wall_s)" | bc 2>/dev/null || echo 0)
+    prev_ticks=$curr_ticks
+    prev_wall=$curr_wall
+
     # Get memory usage (RSS in KB)
     mem_rss_kb=$(grep VmRSS /proc/$PID/status 2>/dev/null | awk '{print $2}')
-    
-    # Get network stats from bftrace (dummy values for now, updated via FIFO)
+
+    # Get network stats from bpftrace (updated via FIFO)
     tx_bytes=0
     rx_bytes=0
-    
+
     # Write metrics with error handling
     if ! write_metrics "$timestamp" "$PID" "$cpu_percent" "$mem_rss_kb" "$tx_bytes" "$rx_bytes"; then
         echo "Warning: Failed to write metrics at $(date)" >&2
     fi
-    
-    # Sleep for 500ms
-    sleep 0.5
 done
 
 # Clean up
