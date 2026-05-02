@@ -3,6 +3,7 @@
 <cite>
 **Referenced Files in This Document**
 - [README.md](file://README.md)
+- [ONBOARDING.md](file://ONBOARDING.md)
 - [requirements.txt](file://requirements.txt)
 - [setup.py](file://setup.py)
 - [models/AlphaPose/build_extensions.sh](file://models/AlphaPose/build_extensions.sh)
@@ -18,34 +19,36 @@
 - [ffmpeg_hpe/docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Added comprehensive ONBOARDING.md guidance with step-by-step setup instructions
+- Enhanced environment setup documentation with detailed prerequisites and requirements
+- Expanded model download instructions with specific file paths and verification steps
+- Added Docker-based experiment pipeline documentation with monitoring capabilities
+- Included troubleshooting guides for common setup and runtime issues
+- Updated performance optimization documentation with CPU tuning guidelines
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
 3. [Core Components](#core-components)
 4. [Architecture Overview](#architecture-overview)
-5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Dependency Analysis](#dependency-analysis)
-7. [Performance Considerations](#performance-considerations)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Conclusion](#conclusion)
-10. [Appendices](#appendices)
+5. [Installation and Setup](#installation-and-setup)
+6. [Model Download and Configuration](#model-download-and-configuration)
+7. [Basic Usage Examples](#basic-usage-examples)
+8. [Experiment Pipeline](#experiment-pipeline)
+9. [Performance Optimization](#performance-optimization)
+10. [Verification and Testing](#verification-and-testing)
+11. [Troubleshooting Guide](#troubleshooting-guide)
+12. [Conclusion](#conclusion)
 
 ## Introduction
-This guide helps you install and run the Human Pose Estimation framework on Ubuntu 20.04. It covers:
-- Environment prerequisites (Python 3.8.10, OpenVINO 2024.2.0, NVIDIA CUDA)
-- Conda environment setup and dependency installation
-- AlphaPose extension building
-- Downloading and placing required pre-trained models
-- Verification steps and basic usage examples
+This comprehensive guide provides complete setup instructions for the Human Pose Estimation framework, incorporating the new ONBOARDING.md documentation. The framework supports multiple state-of-the-art methods including AlphaPose, MoveNet, OpenPose, HigherHRNet, and EfficientHRNet variants. It offers both local execution and Docker-based benchmarking capabilities with comprehensive performance monitoring.
 
-The framework supports multiple methods: MoveNet, AlphaPose, OpenPose, HigherHRNet, and EfficientHRNet variants. It integrates OpenCV, PyTorch, OpenVINO, and optional hardware acceleration via FFmpeg with CUDA.
+**Updated** Enhanced with detailed onboarding procedures from the comprehensive ONBOARDING.md guide, providing step-by-step instructions for environment setup, model configuration, and experiment execution.
 
 ## Project Structure
-At a high level, the repository provides:
-- A unified entry point to select a method and input source
-- Method-specific implementations under shared base classes
-- Pre-trained models organized by method
-- Scripts for building extensions and verifying setups
+The repository provides a complete HPE benchmarking system with modular components:
 
 ```mermaid
 graph TB
@@ -55,42 +58,41 @@ B --> D["OpenVINOBaseHPE<br/>openvino_base_hpe.py"]
 B --> E["AlphaPoseHPE<br/>alphapose_hpe.py"]
 D --> F["OpenVINO models<br/>models/OpenVINO/pretrained_models"]
 E --> G["AlphaPose models<br/>models/AlphaPose/pretrained_models"]
-C --> H["MoveNet model<br/>models/MoveNet/*.xml"]
+H["Experiment Pipeline<br/>ffmpeg_hpe/"] --> I["Docker Compose<br/>Multi-service orchestration"]
+J["Monitoring Tools"] --> K["GPU Metrics<br/>nvidia-smi polling"]
+J --> L["CPU Monitoring<br/>bpftrace/perf"]
+J --> M["Network Tracing<br/>BCC/BPF"]
 ```
 
 **Diagram sources**
-- [main.py:22-99](file://main.py#L22-L99)
-- [base_hpe.py:36-546](file://base_hpe.py#L36-L546)
+- [main.py:51-200](file://main.py#L51-L200)
+- [base_hpe.py:88-630](file://base_hpe.py#L88-L630)
 - [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
-- [openvino_base_hpe.py:55-260](file://openvino_base_hpe.py#L55-L260)
-- [alphapose_hpe.py:33-125](file://alphapose_hpe.py#L33-L125)
+- [openvino_base_hpe.py:55-395](file://openvino_base_hpe.py#L55-L395)
+- [alphapose_hpe.py:33-334](file://alphapose_hpe.py#L33-L334)
 
 **Section sources**
-- [README.md:17-125](file://README.md#L17-L125)
-- [main.py:22-99](file://main.py#L22-L99)
+- [README.md:63-231](file://README.md#L63-L231)
+- [ONBOARDING.md:63-142](file://ONBOARDING.md#L63-L142)
 
 ## Core Components
-- CLI entrypoint: parses arguments, selects method, loads model, and runs processing loops
-- BaseHPE: common logic for input detection, padding/resizing, inference timing, saving outputs, and rendering
-- Method-specific classes:
-  - MoveNetHPE: OpenVINO-based multipose model
-  - OpenVINOBaseHPE: OpenVINO pipelines for OpenPose, HigherHRNet, and EfficientHRNet variants
-  - AlphaPoseHPE: PyTorch-based pose estimation with detector integration
+The framework consists of several key components working together:
 
-Key behaviors:
-- Automatic selection of PyNvCodec vs OpenCV for video decoding
-- HTTP stream support with timeouts and frame limits
-- JSON/COCO CSV export and optional image/video saving
+- **CLI Entry Point**: Parses arguments, selects method, loads model, and manages processing loops
+- **BaseHPE**: Common logic for input handling, preprocessing, inference timing, and output generation
+- **Method-Specific Classes**: Specialized implementations for each HPE algorithm
+- **Experiment Pipeline**: Docker-based benchmarking with comprehensive monitoring
+- **Monitoring Stack**: CPU, GPU, and network performance tracking
+
+Key capabilities include automatic video property detection, HTTP stream support, JSON/COCO CSV export, and optional visualization output.
 
 **Section sources**
-- [main.py:47-99](file://main.py#L47-L99)
-- [base_hpe.py:36-546](file://base_hpe.py#L36-L546)
-- [openvino_base_hpe.py:55-260](file://openvino_base_hpe.py#L55-L260)
-- [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
-- [alphapose_hpe.py:33-125](file://alphapose_hpe.py#L33-L125)
+- [main.py:51-200](file://main.py#L51-L200)
+- [base_hpe.py:88-630](file://base_hpe.py#L88-L630)
+- [ONBOARDING.md:285-301](file://ONBOARDING.md#L285-L301)
 
 ## Architecture Overview
-The system routes user commands to a selected method, which loads the appropriate model and processes frames through a standardized pipeline.
+The system provides both local execution and containerized benchmarking:
 
 ```mermaid
 sequenceDiagram
@@ -98,7 +100,7 @@ participant U as "User"
 participant M as "main.py"
 participant B as "BaseHPE"
 participant H as "MethodHPE"
-participant V as "Video/Camera/Stream"
+participant V as "Input Source"
 U->>M : "python3 main.py --method <method> --input <src>"
 M->>M : "parse_arguments()"
 M->>M : "get_hpe_method(args)"
@@ -115,321 +117,372 @@ B-->>U : "render/save outputs"
 ```
 
 **Diagram sources**
-- [main.py:22-99](file://main.py#L22-L99)
+- [main.py:51-200](file://main.py#L51-L200)
 - [base_hpe.py:405-519](file://base_hpe.py#L405-L519)
-- [openvino_base_hpe.py:262-276](file://openvino_base_hpe.py#L262-L276)
-- [movenet_hpe.py:83-111](file://movenet_hpe.py#L83-L111)
-- [alphapose_hpe.py:126-294](file://alphapose_hpe.py#L126-L294)
 
-## Detailed Component Analysis
+## Installation and Setup
 
-### Installation and Setup
+### Prerequisites
+The framework requires specific hardware and software prerequisites:
 
-#### Prerequisites
-- Ubuntu 20.04
-- Python 3.8.10
-- OpenVINO 2024.2.0
-- NVIDIA CUDA Toolkit and PyTorch CUDA matching the environment
+- **Operating System**: Ubuntu 20.04 (tested and recommended)
+- **Python**: 3.8.10 with conda environment support
+- **CUDA**: Toolkit 12.6 for GPU acceleration
+- **Docker**: Docker Engine + Docker Compose v20+ for containerized experiments
+- **Hardware**: NVIDIA GPU with CUDA support (CPU-only mode also supported)
 
-These are documented in the repository’s top-level README.
+### Environment Setup Options
 
-**Section sources**
-- [README.md:7-16](file://README.md#L7-L16)
+#### Option A: Conda Environment (Recommended)
+```bash
+# Create and activate environment
+conda create -n hpe python=3.8.10 -y
+conda activate hpe
 
-#### Conda Environment and Dependencies
-- Create a conda environment with the specified Python version
-- Install PyTorch and related packages
-- Install pinned dependencies from requirements.txt
+# Install PyTorch with CUDA support
+conda install pytorch==2.4.1 torchvision==0.19.1 -c pytorch
 
-Notes:
-- The environment should include PyTorch with CUDA 12.1 and OpenVINO 2024.2.0 as per the README
-- The requirements.txt lists pinned versions for reproducibility
+# Install all remaining dependencies
+conda install --file requirements.txt
+```
 
-**Section sources**
-- [README.md:82-88](file://README.md#L82-L88)
-- [requirements.txt:1-100](file://requirements.txt#L1-L100)
-
-#### AlphaPose Extension Building
-- The AlphaPose detector requires native extensions
-- The build script sets compilers and invokes per-module setup scripts
-- Ensure NumPy headers are available during compilation
+#### Option B: pip + virtualenv
+```bash
+python3 -m venv myenv
+source myenv/bin/activate
+pip install -r requirements.txt
+```
 
 **Section sources**
-- [README.md:90-93](file://README.md#L90-L93)
+- [ONBOARDING.md:148-167](file://ONBOARDING.md#L148-L167)
+- [ONBOARDING.md:170-223](file://ONBOARDING.md#L170-L223)
+- [README.md:7-17](file://README.md#L7-L17)
+
+### AlphaPose Extension Building
+AlphaPose requires compiled Cython and CUDA extensions:
+
+```bash
+# Recommended: use the build script (handles CPU/GPU detection automatically)
+bash models/AlphaPose/build_extensions.sh
+
+# Alternative: build in-place
+python setup.py build_ext --inplace
+```
+
+**Section sources**
+- [ONBOARDING.md:194-207](file://ONBOARDING.md#L194-L207)
 - [models/AlphaPose/build_extensions.sh:1-25](file://models/AlphaPose/build_extensions.sh#L1-L25)
 - [setup.py:1-37](file://setup.py#L1-L37)
 
-#### Pre-trained Models
-Place the following models in their designated locations as instructed in the README:
+## Model Download and Configuration
 
-- AlphaPose
-  - fast_res50_256x192.pth
-  - yolov3-spp.weights
-- MoveNet
-  - movenet_multipose_lightning_256x256_FP32.bin
-- OpenPose
-  - human-pose-estimation-0001.bin
-- HigherHRNet
-  - higher-hrnet-w32-human-pose-estimation.bin
-- EfficientHRNet variants
-  - human-pose-estimation-0005.bin
-  - human-pose-estimation-0006.bin
-  - human-pose-estimation-0007.bin
+### Downloading Pretrained Model Weights
+Model files are not included in the repository and must be downloaded manually:
 
-Verification:
-- The AlphaPose YAML config references detector weights and model image sizes
-- The OpenVINO base class maps model types to XML paths
+#### AlphaPose Models
+```bash
+# ResNet50 pose estimation weights
+wget "https://drive.google.com/uc?export=download&id=1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI" \
+  -O models/AlphaPose/pretrained_models/fast_res50_256x192.pth
+
+# YOLOv3 person detector weights
+wget "https://drive.google.com/uc?export=download&id=1k-9cUGcdH5ZFN1NcMvZrO0ApW241tboD" \
+  -O models/AlphaPose/detector/yolo/data/yolov3-spp.weights
+```
+
+#### MoveNet Model
+```bash
+wget "https://drive.google.com/uc?export=download&id=15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr" \
+  -O models/MoveNet/movenet_multipose_lightning_256x256_FP32.bin
+```
+
+#### OpenPose Model
+```bash
+wget "https://drive.google.com/uc?export=download&id=1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm" \
+  -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.bin
+```
+
+#### HigherHRNet Model
+```bash
+wget "https://drive.google.com/uc?export=download&id=1fko47eVczJZQb9wWA2X7eQ0TuF4PDXzs" \
+  -O models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.bin
+```
+
+#### EfficientHRNet Variants
+```bash
+# ae1
+wget "https://drive.google.com/uc?export=download&id=1lEUFqQnWHVymQoZvaXuDFcnOyEEKsexP" \
+  -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
+
+# ae2
+wget "https://drive.google.com/uc?export=download&id=1d8pGQrM9vEfz_oAIey0qRr7Gxp6dS2UE" \
+  -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0006/FP32/human-pose-estimation-0006.bin
+
+# ae3
+wget "https://drive.google.com/uc?export=download&id=1ZSdsqgD4zUO4gyHMYBfxq3m4UMyQ187j" \
+  -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
+```
 
 **Section sources**
-- [README.md:21-70](file://README.md#L21-L70)
-- [models/AlphaPose/pretrained_models/256x192_res50_lr1e-3_1x.yaml:1-66](file://models/AlphaPose/pretrained_models/256x192_res50_lr1e-3_1x.yaml#L1-L66)
-- [openvino_base_hpe.py:22-53](file://openvino_base_hpe.py#L22-L53)
+- [ONBOARDING.md:225-282](file://ONBOARDING.md#L225-L282)
+- [README.md:22-63](file://README.md#L22-L63)
 
-### Basic Usage Examples
-Run the following examples after installing the environment and placing models:
+## Basic Usage Examples
 
-- MoveNet single image
-  - Command: see [README.md:99-100](file://README.md#L99-L100)
-- AlphaPose directory of images
-  - Command: see [README.md:102-103](file://README.md#L102-L103)
-- EfficientHRNet1 video
-  - Command: see [README.md:105-106](file://README.md#L105-L106)
-- Help
-  - Command: see [README.md:108-109](file://README.md#L108-L109)
+### Local Execution Examples
+Run the following examples after setting up the environment and downloading models:
 
-Developer utilities:
-- Stream a local video via HTTP and process it
-  - Commands: see [README.md:117-123](file://README.md#L117-L123)
+#### MoveNet Single Image
+```bash
+python3 main.py --method movenet --input unit_tests/images/testImage.jpg --save_image
+```
+
+#### AlphaPose Directory Processing
+```bash
+python3 main.py --method alphapose --input unit_tests/images/ --json
+```
+
+#### EfficientHRNet Video Processing
+```bash
+python3 main.py --method ae1 --input unit_tests/video/giphy.gif --save_video
+```
+
+#### HTTP Stream Processing
+```bash
+python3 main.py --method movenet --input http://192.168.1.10:8089/stream.h264 --device CPU
+```
+
+#### AlphaPose with Custom Settings
+```bash
+python3 main.py --method alphapose --input video.mp4 --csv --device GPU --output_dir results/
+```
+
+### All CLI Flags
+| Flag | Default | Description |
+|---|---|---|
+| `--method` | required | HPE method: `openpose`, `alphapose`, `movenet`, `hrnet`, `ae1`, `ae2`, `ae3` |
+| `--input` | `0` (webcam) | Path to image, directory, video/GIF file, or HTTP stream URL |
+| `--output_dir` | None | Directory where output files are saved |
+| `--device` | `GPU` | Inference device: `GPU` or `CPU` |
+| `--json` | False | Export keypoints to a JSON file |
+| `--csv` | False | Export keypoints to a CSV file |
+| `--save_image` | False | Save annotated image(s) |
+| `--save_video` | False | Save annotated video |
+| `--detbatch` | `5` | Detection batch size (AlphaPose only) |
+| `--timeout` | `300` | Timeout in seconds for HTTP streams |
+| `--max_frames` | `0` | Max frames to process (0 = unlimited) |
+| `--measurement_interval_ms` | `100` | Interval for measuring data volume |
 
 **Section sources**
-- [README.md:95-123](file://README.md#L95-L123)
+- [ONBOARDING.md:303-356](file://ONBOARDING.md#L303-L356)
+- [ONBOARDING.md:329-345](file://ONBOARDING.md#L329-L345)
+- [README.md:83-114](file://README.md#L83-L114)
 
-### Verification Steps
-- Use the smoke test script to validate the environment and basic functionality
-  - See [dev_tools/smoke_test.sh:28-41](file://dev_tools/smoke_test.sh#L28-L41)
-- Confirm model paths exist for the chosen method
-  - OpenVINO XML paths are mapped in the base class
-  - AlphaPose YAML and weights are referenced in the implementation
+## Experiment Pipeline
+
+### Docker-Based Benchmarking Architecture
+The framework provides comprehensive containerized benchmarking with multi-service orchestration:
+
+```mermaid
+graph TD
+A["h264-streaming-server<br/>FFmpeg/NGINX, :8089"] --> B["H.264 HTTP Stream"]
+B --> C["hpe Container<br/>Python + OpenCV + Pose Estimation"]
+C --> D["perf_monitor<br/>bpftrace CPU/memory"]
+C --> E["bcc-tracer<br/>BPF network tracing"]
+C --> F["gpu-metrics<br/>nvidia-smi polling"]
+D --> G["aggregated_metrics.csv"]
+E --> H["video_rx.csv"]
+F --> I["gpu_metrics.csv"]
+C --> J["hpe_output/*.csv"]
+```
+
+**Diagram sources**
+- [ONBOARDING.md:361-427](file://ONBOARDING.md#L361-L427)
+
+### Docker Services Configuration
+The experiment pipeline consists of five coordinated services:
+
+#### 1. h264-streaming-server
+- **Purpose**: Serves benchmark video as H.264 HTTP stream on port 8089
+- **Resource Limits**: 2 CPU cores, 1 GB RAM
+- **Configuration**: `VIDEO_FILE` from `.env`, `SERVER_PORT=8089`
+- **Healthcheck**: TCP connection to port 8089
+
+#### 2. hpe Container
+- **Purpose**: Main inference container running pose estimation
+- **Resource Limits**: 4 CPU cores, 16 GB RAM, NVIDIA GPU (via `runtime: nvidia`)
+- **Shared Memory**: 8 GB (`shm_size`) for large batch operations
+- **Command**: `python3 main.py --method <METHOD> --input http://h264-streaming-server:8089/stream.h264`
+
+#### 3. gpu-metrics Sidecar
+- **Purpose**: Polls `nvidia-smi` every 500ms for GPU statistics
+- **Output**: `results/gpu/gpu_metrics.csv`
+- **Requirements**: NVIDIA GPU and `nvidia-container-toolkit`
+
+#### 4. perf_monitor Sidecar
+- **Purpose**: Monitors CPU usage and memory RSS via bpftrace
+- **Output**: `results/perf/aggregated_metrics.csv`
+- **Privileges**: `privileged: true`, `SYS_ADMIN`, `NET_ADMIN`
+
+#### 5. bcc-tracer Sidecar
+- **Purpose**: Kernel-level network RX byte tracing using BCC/BPF
+- **Output**: `tracer_output/hpe_video_rx.csv`
+- **Network Mode**: Shares HPE container's network namespace
+
+### Experiment Execution Flow
+The `run_experiment_bcc.sh` script orchestrates the complete benchmarking process:
+
+1. **Timestamp Generation**: Creates unique results directory name
+2. **Directory Creation**: Sets up `logs/`, `perf/`, `gpu/`, `traces/bcc/`, `hpe_output/` subdirectories
+3. **Container Cleanup**: Removes previous containers and volumes
+4. **Service Startup**: Starts streaming server with health checks
+5. **Monitoring Services**: Launches perf, GPU, and BCC monitoring sidecars
+6. **Inference Execution**: Runs HPE container with configured method and device
+7. **Data Collection**: Copies CSV files from Docker volumes to host
+8. **Timing Capture**: Writes per-container startup times
+9. **Cleanup**: Tears down all containers
+
+**Section sources**
+- [ONBOARDING.md:359-443](file://ONBOARDING.md#L359-L443)
+- [ONBOARDING.md:446-520](file://ONBOARDING.md#L446-L520)
+
+## Performance Optimization
+
+### CPU Performance Tuning
+The framework includes automated CPU optimization for OpenVINO inference:
+
+```bash
+python3 optimizations/optimized_main.py --method openpose --input video.mp4 --device CPU --enable-cpu-opt
+```
+
+Key optimizations include:
+- Automatic CPU topology detection
+- Optimal thread/stream configuration calculation
+- Performance mode selection (latency vs throughput)
+- CPU pinning and hyper-threading control
+
+### GPU Acceleration Setup
+For GPU-enabled environments:
+- Ensure NVIDIA drivers support CUDA 12.8
+- Verify `nvidia-container-toolkit` installation
+- Use `HPE_DEVICE=GPU` environment variable for explicit GPU selection
+- Monitor GPU utilization with `nvidia-smi`
+
+### FFmpeg CUDA Integration
+Optional FFmpeg build with hardware acceleration:
+```bash
+bash build_ffmpeg_cuda.sh
+```
+
+This script builds FFmpeg with CUDA/NPP/NVENC support for improved pipeline throughput.
+
+**Section sources**
+- [ONBOARDING.md:511-520](file://ONBOARDING.md#L511-L520)
+- [ONBOARDING.md:570-598](file://ONBOARDING.md#L570-L598)
+- [build_ffmpeg_cuda.sh:1-200](file://build_ffmpeg_cuda.sh#L1-L200)
+
+## Verification and Testing
+
+### Smoke Test Execution
+Use the smoke test script to verify environment setup:
+
+```bash
+# Basic smoke test (CPU)
+bash dev_tools/smoke_test.sh CPU hpe
+
+# GPU smoke test (if available)
+bash dev_tools/smoke_test.sh GPU hpe
+```
+
+The smoke test validates:
+- MoveNet single image processing
+- AlphaPose directory processing (if models present)
+- EfficientHRNet video processing
+
+### Local Development Server
+For HTTP stream testing, use the included Flask server:
+
+```bash
+# Terminal 1: Start local stream server
+python3 dev_tools/stream_video_server.py
+
+# Terminal 2: Process stream with HPE
+python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'):8080/video_feed --save_video
+```
+
+### Docker Experiment Validation
+Run a simple experiment to validate the containerized setup:
+
+```bash
+cd ffmpeg_hpe/
+./run_experiment_bcc.sh movenet
+```
 
 **Section sources**
 - [dev_tools/smoke_test.sh:1-42](file://dev_tools/smoke_test.sh#L1-L42)
-- [openvino_base_hpe.py:22-53](file://openvino_base_hpe.py#L22-L53)
-- [alphapose_hpe.py:24-25](file://alphapose_hpe.py#L24-L25)
-
-## Architecture Overview
-
-```mermaid
-classDiagram
-class BaseHPE {
-+input_type
-+img_w
-+img_h
-+pd_w
-+pd_h
-+process_frame(frame, n)
-+main_loop()
-+main_loop_with_timeout(timeout, max_frames)
-+pad_and_resize(frame)
-+set_padding()
-}
-class MoveNetHPE {
-+load_model()
-+run_model(padded)
-+postprocess(predictions)
-}
-class OpenVINOBaseHPE {
-+load_model()
-+run_model(padded)
-+postprocess(predictions)
-}
-class AlphaPoseHPE {
-+load_model()
-+run_model(frame_input)
-+postprocess(predictions)
-}
-BaseHPE <|-- MoveNetHPE
-BaseHPE <|-- OpenVINOBaseHPE
-BaseHPE <|-- AlphaPoseHPE
-```
-
-**Diagram sources**
-- [base_hpe.py:36-546](file://base_hpe.py#L36-L546)
-- [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
-- [openvino_base_hpe.py:55-314](file://openvino_base_hpe.py#L55-L314)
-- [alphapose_hpe.py:33-334](file://alphapose_hpe.py#L33-L334)
-
-## Detailed Component Analysis
-
-### OpenVINO Base Pipeline
-- Model selection by type maps to XML paths and input sizes
-- CPU performance tuning via OpenVINO properties
-- Supports PyNvCodec for GPU-accelerated decoding when available
-- Handles HTTP streams with FFmpeg backend and fallbacks
-
-```mermaid
-flowchart TD
-Start(["load_model"]) --> ReadXML["Resolve XML path by model_type"]
-ReadXML --> InitCore["create_core() and configure properties"]
-InitCore --> ReadNet["read_model(xml_path)"]
-ReadNet --> PreCfg["Build pre/post-processing config"]
-PreCfg --> CreateModel["ImageModel.create_model(...)"]
-CreateModel --> Load["model.load()"]
-Load --> End(["Ready"])
-```
-
-**Diagram sources**
-- [openvino_base_hpe.py:183-260](file://openvino_base_hpe.py#L183-L260)
-
-**Section sources**
-- [openvino_base_hpe.py:22-53](file://openvino_base_hpe.py#L22-L53)
-- [openvino_base_hpe.py:153-182](file://openvino_base_hpe.py#L153-L182)
-- [openvino_base_hpe.py:183-260](file://openvino_base_hpe.py#L183-L260)
-
-### AlphaPose Pipeline
-- Loads detector and pose model from YAML and checkpoint
-- Uses GPU when available; supports multi-GPU via DataParallel
-- Performs detection and pose estimation with GPU-accelerated preprocessing
-
-```mermaid
-sequenceDiagram
-participant A as "AlphaPoseHPE"
-participant D as "Detector"
-participant P as "Pose Model"
-A->>A : "load_model(cfg, checkpoint)"
-A->>D : "get_detector(opt)"
-A->>P : "builder.build_sppe(cfg.MODEL, preset_cfg)"
-A->>P : "load_state_dict(checkpoint)"
-A->>A : "run_model(frame_input)"
-A->>D : "images_detection(detector_input)"
-A->>P : "pose_model(inps)"
-P-->>A : "heatmaps"
-A-->>A : "postprocess -> bodies"
-```
-
-**Diagram sources**
-- [alphapose_hpe.py:69-125](file://alphapose_hpe.py#L69-L125)
-- [alphapose_hpe.py:126-294](file://alphapose_hpe.py#L126-L294)
-- [models/AlphaPose/pretrained_models/256x192_res50_lr1e-3_1x.yaml:1-66](file://models/AlphaPose/pretrained_models/256x192_res50_lr1e-3_1x.yaml#L1-L66)
-
-**Section sources**
-- [alphapose_hpe.py:24-25](file://alphapose_hpe.py#L24-L25)
-- [alphapose_hpe.py:41-67](file://alphapose_hpe.py#L41-L67)
-- [alphapose_hpe.py:69-125](file://alphapose_hpe.py#L69-L125)
-- [alphapose_hpe.py:126-294](file://alphapose_hpe.py#L126-L294)
-
-### MoveNet Pipeline
-- Loads OpenVINO model for multipose inference
-- Converts frames to expected input layout and runs inference
-- Postprocesses outputs to Body objects
-
-```mermaid
-flowchart TD
-L["load_model"] --> Read["ie.read_model(xml_path)"]
-Read --> Compile["compile_model(device)"]
-Compile --> Ready["Model ready"]
-Ready --> Run["run_model(padded)"]
-Run --> Post["postprocess(results)"]
-Post --> Bodies["List of Body"]
-```
-
-**Diagram sources**
-- [movenet_hpe.py:58-86](file://movenet_hpe.py#L58-L86)
-- [movenet_hpe.py:87-111](file://movenet_hpe.py#L87-L111)
-
-**Section sources**
-- [movenet_hpe.py:20-31](file://movenet_hpe.py#L20-L31)
-- [movenet_hpe.py:58-111](file://movenet_hpe.py#L58-L111)
-
-## Dependency Analysis
-- OpenVINO 2024.2.0 is required and referenced in requirements.txt
-- PyTorch CUDA 12.1 and corresponding torch version are specified in the README
-- AlphaPose extensions require NumPy headers and specific compilers
-
-```mermaid
-graph TB
-R["requirements.txt"] --> OV["openvino==2024.2.0"]
-R --> PT["torch==2.4.1"]
-R --> TV["torchvision==0.19.1"]
-S["setup.py"] --> NP["numpy headers"]
-S --> GCC["gcc-9/g++-9"]
-```
-
-**Diagram sources**
-- [requirements.txt:57-91](file://requirements.txt#L57-L91)
-- [setup.py:4-8](file://setup.py#L4-L8)
-- [setup.py:6-12](file://setup.py#L6-L12)
-
-**Section sources**
-- [requirements.txt:57-91](file://requirements.txt#L57-L91)
-- [setup.py:1-37](file://setup.py#L1-L37)
-- [README.md:7-16](file://README.md#L7-L16)
-
-## Performance Considerations
-- OpenVINO CPU tuning
-  - Performance mode, threads, streams, CPU pinning, and hyper-threading can be configured via environment variables
-  - See [openvino_base_hpe.py:72-86](file://openvino_base_hpe.py#L72-L86) and [openvino_base_hpe.py:153-182](file://openvino_base_hpe.py#L153-L182)
-- FFmpeg with CUDA/NPP/NVENC
-  - A dedicated script builds FFmpeg with hardware acceleration for improved pipeline throughput
-  - See [build_ffmpeg_cuda.sh:157-183](file://build_ffmpeg_cuda.sh#L157-L183)
-- Stream compatibility
-  - Use the compatibility checker to validate codecs, resolution, FPS, and accessibility
-  - See [check_stream_compat.sh:1-90](file://check_stream_compat.sh#L1-L90)
-
-**Section sources**
-- [openvino_base_hpe.py:72-86](file://openvino_base_hpe.py#L72-L86)
-- [openvino_base_hpe.py:153-182](file://openvino_base_hpe.py#L153-L182)
-- [build_ffmpeg_cuda.sh:157-183](file://build_ffmpeg_cuda.sh#L157-L183)
-- [check_stream_compat.sh:1-90](file://check_stream_compat.sh#L1-L90)
+- [ONBOARDING.md:346-356](file://ONBOARDING.md#L346-L356)
 
 ## Troubleshooting Guide
-Common issues and resolutions:
-- Missing AlphaPose models or weights
-  - Ensure the YAML and checkpoint are placed as described in the README
-  - Reference: [README.md:25-33](file://README.md#L25-L33), [alphapose_hpe.py:24-25](file://alphapose_hpe.py#L24-L25)
-- AlphaPose extension build failures
-  - Verify NumPy headers and compilers are set
-  - Reference: [models/AlphaPose/build_extensions.sh:4-8](file://models/AlphaPose/build_extensions.sh#L4-L8), [setup.py:4](file://setup.py#L4)
-- OpenVINO model path errors
-  - Confirm model_type matches available configs and XML paths
-  - Reference: [openvino_base_hpe.py:22-53](file://openvino_base_hpe.py#L22-L53)
-- HTTP stream problems
-  - Use the compatibility checker and adjust OpenCV FFMPEG options if needed
-  - Reference: [check_stream_compat.sh:75-90](file://check_stream_compat.sh#L75-L90)
-- Smoke test failures
-  - Validate environment activation and device selection
-  - Reference: [dev_tools/smoke_test.sh:10-19](file://dev_tools/smoke_test.sh#L10-L19)
+
+### Common Setup Issues
+
+#### Disk Space Management
+Docker images and results can consume significant disk space:
+```bash
+df -h                              # Check filesystem usage
+docker system df                   # Docker-specific disk usage
+docker system prune                # Remove stopped containers, dangling images
+docker system prune -a --volumes   # Aggressive cleanup (removes ALL unused images)
+```
+
+#### File Permissions
+Container output files may be owned by root:
+```bash
+sudo chown -R $(whoami):$(whoami) ffmpeg_hpe/results*
+sudo chown -R $(whoami):$(whoami) ffmpeg_hpe/tracer_output
+```
+
+#### GPU Availability Issues
+Verify GPU access and container configuration:
+```bash
+# Check nvidia-container-toolkit installation
+which nvidia-container-runtime
+docker info | grep -i runtime
+
+# Test GPU access in container
+docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu20.04 nvidia-smi
+```
+
+### Model Loading Problems
+- Verify model files are downloaded to correct locations
+- Check AlphaPose YAML configuration references correct weights
+- Ensure OpenVINO XML paths match available model files
+
+### Stream Connection Issues
+```bash
+# Get streaming server IP address
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' h264-streaming-server
+
+# Test stream accessibility
+curl -I http://172.18.0.2:8089/stream.h264
+ffprobe http://172.18.0.2:8089/stream.h264
+```
+
+### Container Lifecycle Issues
+```bash
+# Clean shutdown
+cd ffmpeg_hpe/
+docker compose down -v --remove-orphans
+
+# Force cleanup if needed
+docker kill hpe bcc-tracer gpu-metrics perf_monitor 2>/dev/null || true
+docker rm -f hpe bcc-tracer gpu-metrics perf_monitor 2>/dev/null || true
+```
 
 **Section sources**
-- [README.md:25-33](file://README.md#L25-L33)
-- [models/AlphaPose/build_extensions.sh:4-8](file://models/AlphaPose/build_extensions.sh#L4-L8)
-- [setup.py:4](file://setup.py#L4)
-- [openvino_base_hpe.py:22-53](file://openvino_base_hpe.py#L22-L53)
-- [check_stream_compat.sh:75-90](file://check_stream_compat.sh#L75-L90)
-- [dev_tools/smoke_test.sh:10-19](file://dev_tools/smoke_test.sh#L10-L19)
+- [ONBOARDING.md:627-740](file://ONBOARDING.md#L627-L740)
 
 ## Conclusion
-You now have a complete path to install the Human Pose Estimation framework, build required extensions, place pre-trained models, and run your first pose estimation examples. Use the provided scripts and environment settings to validate your setup and optimize performance with OpenVINO and FFmpeg CUDA.
+You now have comprehensive guidance for setting up and using the Human Pose Estimation framework. The ONBOARDING.md documentation provides detailed step-by-step instructions for environment setup, model configuration, and experiment execution. Whether running locally or using the Docker-based benchmarking pipeline, the framework offers extensive monitoring capabilities and performance optimization features. Use the provided verification steps and troubleshooting guidance to ensure a smooth setup experience.
 
-## Appendices
-
-### Appendix A: Command-Line Arguments
-- Method selection: --method
-- Input source: --input
-- Output controls: --output_dir, --json, --csv, --save_video, --save_image
-- Device: --device (CPU/GPU)
-- Detection batch size: --detbatch
-- Timeout and frame limits for streams: --timeout, --max_frames
-
-Reference: [main.py:47-62](file://main.py#L47-L62)
-
-**Section sources**
-- [main.py:47-62](file://main.py#L47-L62)
-
-### Appendix B: Docker-Based Streaming Pipeline
-- A docker-compose stack demonstrates end-to-end streaming with FFmpeg and metrics containers
-- Useful for validating HTTP stream ingestion and GPU utilization
-
-Reference: [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
-
-**Section sources**
-- [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
+The framework supports multiple HPE methods with flexible deployment options, making it suitable for both development and production benchmarking scenarios. The comprehensive monitoring stack enables detailed performance analysis across CPU, GPU, and network domains.

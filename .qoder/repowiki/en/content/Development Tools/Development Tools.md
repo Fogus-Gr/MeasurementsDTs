@@ -17,7 +17,20 @@
 - [run_nvidia_dcgm.sh](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh)
 - [run_perf_plot.sh](file://Measure_plot_cpu_perf/run_perf_plot.sh)
 - [measure_flops.sh](file://Measure_Flops/measure_flops.sh)
+- [base_hpe.py](file://base_hpe.py)
+- [alphapose_hpe.py](file://alphapose_hpe.py)
+- [direct_stream_server.py](file://rtsp-ipcam/direct_stream_server.py)
+- [nginx-entrypoint.sh](file://rtsp-ipcam/nginx-entrypoint.sh)
+- [changes_improvemnts.txt](file://rtsp-ipcam/changes_improvemnts.txt)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Enhanced HTTP streaming infrastructure with optimized queue management and metadata extraction system
+- Improved PyNvCodec integration for hardware-accelerated video decoding
+- Added frame number and timestamp metadata extraction for HTTP MJPEG streams
+- Updated development servers with enhanced buffering and frame skipping capabilities
+- Integrated optimized queue management for HTTP stream processing
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -39,12 +52,15 @@ This document describes the development and testing utilities for the Human Pose
 - Testing methodologies, validation scripts, and debugging tools
 - Guidance on extending the framework, adding new HPE methods, and maintaining code quality
 
+**Updated** Enhanced HTTP streaming infrastructure now includes optimized queue management, metadata extraction system for frame numbers and timestamps, and improved PyNvCodec integration for hardware-accelerated video processing.
+
 ## Project Structure
 The development tools are organized under the dev_tools directory and integrate with the main HPE pipeline and optimization modules. Key areas:
 - Development servers for MJPEG and adaptive streaming
 - Validation and smoke testing scripts
 - Performance profiling and monitoring utilities
 - Optimized OpenVINO HPE integration
+- HTTP streaming infrastructure with enhanced metadata extraction
 
 ```mermaid
 graph TB
@@ -59,16 +75,23 @@ G["install_from_readme.sh"]
 end
 subgraph "Core Pipeline"
 H["main.py"]
+I["base_hpe.py"]
+J["alphapose_hpe.py"]
 end
 subgraph "Optimizations"
-I["cpu_performance_optimizer.py"]
-J["enhanced_openvino_hpe.py"]
-K["optimized_main.py"]
+K["cpu_performance_optimizer.py"]
+L["enhanced_openvino_hpe.py"]
+M["optimized_main.py"]
 end
 subgraph "Profiling"
-L["run_nvidia_dcgm.sh"]
-M["run_perf_plot.sh"]
-N["measure_flops.sh"]
+N["run_nvidia_dcgm.sh"]
+O["run_perf_plot.sh"]
+P["measure_flops.sh"]
+end
+subgraph "HTTP Streaming Infrastructure"
+Q["direct_stream_server.py"]
+R["nginx-entrypoint.sh"]
+S["changes_improvemnts.txt"]
 end
 A --> H
 B --> H
@@ -79,41 +102,54 @@ F --> H
 G --> H
 H --> I
 H --> J
-H --> K
-I --> J
+I --> K
 J --> K
-L --> H
-M --> H
+L --> K
+M --> K
 N --> H
+O --> H
+P --> H
+Q --> H
+R --> Q
+S --> Q
 ```
 
 **Diagram sources**
 - [app.py:1-140](file://dev_tools/app.py#L1-L140)
-- [app_ffmpeg.py:1-204](file://dev_tools/app_ffmpeg.py#L1-L204)
+- [app_ffmpeg.py:1-268](file://dev_tools/app_ffmpeg.py#L1-L268)
 - [app_optimized.py:1-97](file://dev_tools/app_optimized.py#L1-L97)
 - [stream_video_server.py:1-228](file://dev_tools/stream_video_server.py#L1-L228)
 - [stream_video_server_adaptive.py:1-195](file://dev_tools/stream_video_server_adaptive.py#L1-L195)
 - [smoke_test.sh:1-42](file://dev_tools/smoke_test.sh#L1-L42)
 - [install_from_readme.sh:1-39](file://dev_tools/install_from_readme.sh#L1-L39)
-- [main.py:1-99](file://main.py#L1-L99)
+- [main.py:1-242](file://main.py#L1-L242)
+- [base_hpe.py:1-630](file://base_hpe.py#L1-L630)
+- [alphapose_hpe.py:1-334](file://alphapose_hpe.py#L1-L334)
 - [cpu_performance_optimizer.py:1-539](file://optimizations/cpu_performance_optimizer.py#L1-L539)
 - [enhanced_openvino_hpe.py:1-333](file://optimizations/enhanced_openvino_hpe.py#L1-L333)
 - [optimized_main.py:1-257](file://optimizations/optimized_main.py#L1-L257)
 - [run_nvidia_dcgm.sh:1-29](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh#L1-L29)
 - [run_perf_plot.sh:1-25](file://Measure_plot_cpu_perf/run_perf_plot.sh#L1-L25)
 - [measure_flops.sh](file://Measure_Flops/measure_flops.sh)
+- [direct_stream_server.py:1-304](file://rtsp-ipcam/direct_stream_server.py#L1-L304)
+- [nginx-entrypoint.sh:1-11](file://rtsp-ipcam/nginx-entrypoint.sh#L1-L11)
+- [changes_improvemnts.txt](file://rtsp-ipcam/changes_improvemnts.txt)
 
 **Section sources**
 - [README.md:1-102](file://dev_tools/README.md#L1-L102)
-- [main.py:1-99](file://main.py#L1-L99)
+- [main.py:1-242](file://main.py#L1-L242)
 
 ## Core Components
 - Development servers for MJPEG streaming:
   - app.py: Basic MJPEG server with OpenCV and Flask
-  - app_ffmpeg.py: MJPEG server using ffmpeg for frame extraction
+  - app_ffmpeg.py: MJPEG server using ffmpeg for frame extraction with metadata injection
   - app_optimized.py: Optimized streaming with precise frame timing
   - stream_video_server.py: Development-only server with test patterns and debug info
   - stream_video_server_adaptive.py: Adaptive server with JPEG quality and optional downscaling
+- HTTP streaming infrastructure:
+  - direct_stream_server.py: Direct H.264 streaming server with FFmpeg integration
+  - nginx-entrypoint.sh: Nginx configuration template processing
+  - changes_improvemnts.txt: HTTP streaming optimizations and client commands
 - Validation and smoke testing:
   - smoke_test.sh: Automated smoke tests across multiple HPE methods
   - install_from_readme.sh: Environment setup aligned with README
@@ -125,13 +161,19 @@ N --> H
   - cpu_performance_optimizer.py: EPIC CPU optimizer with NUMA-aware tuning
   - enhanced_openvino_hpe.py: Enhanced OpenVINO HPE with CPU optimization
   - optimized_main.py: CLI wrapper enabling CPU optimization and benchmarking
+- Enhanced HPE processing:
+  - base_hpe.py: Base HPE class with PyNvCodec integration and metadata extraction
+  - alphapose_hpe.py: AlphaPose implementation with GPU acceleration and queue management
 
 **Section sources**
 - [app.py:1-140](file://dev_tools/app.py#L1-L140)
-- [app_ffmpeg.py:1-204](file://dev_tools/app_ffmpeg.py#L1-L204)
+- [app_ffmpeg.py:1-268](file://dev_tools/app_ffmpeg.py#L1-L268)
 - [app_optimized.py:1-97](file://dev_tools/app_optimized.py#L1-L97)
 - [stream_video_server.py:1-228](file://dev_tools/stream_video_server.py#L1-L228)
 - [stream_video_server_adaptive.py:1-195](file://dev_tools/stream_video_server_adaptive.py#L1-L195)
+- [direct_stream_server.py:1-304](file://rtsp-ipcam/direct_stream_server.py#L1-L304)
+- [nginx-entrypoint.sh:1-11](file://rtsp-ipcam/nginx-entrypoint.sh#L1-L11)
+- [changes_improvemnts.txt](file://rtsp-ipcam/changes_improvemnts.txt)
 - [smoke_test.sh:1-42](file://dev_tools/smoke_test.sh#L1-L42)
 - [install_from_readme.sh:1-39](file://dev_tools/install_from_readme.sh#L1-L39)
 - [run_nvidia_dcgm.sh:1-29](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh#L1-L29)
@@ -140,6 +182,8 @@ N --> H
 - [cpu_performance_optimizer.py:1-539](file://optimizations/cpu_performance_optimizer.py#L1-L539)
 - [enhanced_openvino_hpe.py:1-333](file://optimizations/enhanced_openvino_hpe.py#L1-L333)
 - [optimized_main.py:1-257](file://optimizations/optimized_main.py#L1-L257)
+- [base_hpe.py:1-630](file://base_hpe.py#L1-L630)
+- [alphapose_hpe.py:1-334](file://alphapose_hpe.py#L1-L334)
 
 ## Architecture Overview
 The development tools integrate with the main HPE pipeline and provide:
@@ -147,29 +191,75 @@ The development tools integrate with the main HPE pipeline and provide:
 - CLI-driven smoke tests to validate model loading and inference
 - CPU/GPU optimization modules for OpenVINO-based HPE
 - Profiling utilities for GPU and CPU performance
+- Enhanced HTTP streaming infrastructure with metadata extraction and queue management
 
 ```mermaid
 graph TB
 Client["Client Browser/App"]
+HTTPStream["HTTP Streaming Infrastructure"]
 DevServers["Flask Streaming Servers"]
 Main["main.py"]
-Methods["HPE Methods (MoveNet, AlphaPose, OpenVINO)"]
+HPE["HPE Pipeline"]
+PyNvCodec["PyNvCodec Integration"]
+Metadata["Metadata Extraction"]
 Optimizer["CPU Optimizer (EPICCPUOptimizer)"]
 Profilers["Profiling Scripts"]
-Client --> DevServers
+Client --> HTTPStream
+HTTPStream --> DevServers
 DevServers --> Main
-Main --> Methods
-Methods --> Optimizer
+Main --> HPE
+HPE --> PyNvCodec
+HPE --> Metadata
+HPE --> Optimizer
 Profilers --> Main
 ```
 
 **Diagram sources**
-- [main.py:1-99](file://main.py#L1-L99)
+- [main.py:1-242](file://main.py#L1-L242)
+- [base_hpe.py:1-630](file://base_hpe.py#L1-L630)
 - [cpu_performance_optimizer.py:1-539](file://optimizations/cpu_performance_optimizer.py#L1-L539)
 - [run_nvidia_dcgm.sh:1-29](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh#L1-L29)
 - [run_perf_plot.sh:1-25](file://Measure_plot_cpu_perf/run_perf_plot.sh#L1-L25)
+- [direct_stream_server.py:1-304](file://rtsp-ipcam/direct_stream_server.py#L1-L304)
 
 ## Detailed Component Analysis
+
+### Enhanced HTTP Streaming Infrastructure
+The HTTP streaming infrastructure has been significantly enhanced with optimized queue management, metadata extraction system, and improved PyNvCodec integration.
+
+```mermaid
+sequenceDiagram
+participant Client as "Client"
+participant HTTPServer as "HTTP Server"
+participant FFmpeg as "FFmpeg Process"
+participant Buffer as "Frame Buffer"
+participant Metadata as "Metadata Extractor"
+participant HPE as "HPE Pipeline"
+Client->>HTTPServer : "GET /video_feed"
+HTTPServer->>FFmpeg : "Start streaming process"
+FFmpeg->>Buffer : "Store complete JPEG frames"
+Buffer->>Metadata : "Extract frame metadata"
+Metadata-->>HTTPServer : "Frame number, timestamp"
+HTTPServer-->>Client : "Multipart frame with X-Metadata"
+Client->>HPE : "Send frames for inference"
+HPE-->>Client : "Keypoints/results"
+```
+
+**Diagram sources**
+- [app_ffmpeg.py:87-187](file://dev_tools/app_ffmpeg.py#L87-L187)
+- [base_hpe.py:72-86](file://base_hpe.py#L72-L86)
+- [base_hpe.py:400-470](file://base_hpe.py#L400-L470)
+
+Key enhancements:
+- **Metadata Injection**: app_ffmpeg.py now injects frame numbers, server timestamps, and elapsed time into HTTP headers using X-Metadata
+- **Queue Management**: Enhanced buffering system with proper frame boundary detection and incomplete frame handling
+- **PyNvCodec Integration**: Improved hardware-accelerated video decoding with proper error handling and frame processing
+- **HTTP Stream Processing**: Advanced HTTP MJPEG stream processing with frame skipping and timeout detection
+
+**Section sources**
+- [app_ffmpeg.py:145-177](file://dev_tools/app_ffmpeg.py#L145-L177)
+- [base_hpe.py:72-86](file://base_hpe.py#L72-L86)
+- [base_hpe.py:317-471](file://base_hpe.py#L317-L471)
 
 ### Development Servers for Video Streaming
 These servers simulate IP camera feeds and validate HPE inference on MJPEG streams.
@@ -195,7 +285,7 @@ HPE-->>Client : "Keypoints/results"
 
 Key behaviors:
 - app.py: Reads frames, encodes JPEG, yields multipart frames, logs initialization and errors
-- app_ffmpeg.py: Uses ffmpeg to extract MJPEG frames, scales resolution, logs video details via ffprobe
+- app_ffmpeg.py: Uses ffmpeg to extract MJPEG frames, scales resolution, logs video details via ffprobe, injects metadata
 - app_optimized.py: Precise frame timing using time.perf_counter and sleep to match FPS
 - stream_video_server.py: Development-only server with test pattern fallback and debug info
 - stream_video_server_adaptive.py: Adaptive JPEG quality and optional downscaling for HD
@@ -208,7 +298,7 @@ Validation steps:
 
 **Section sources**
 - [app.py:1-140](file://dev_tools/app.py#L1-L140)
-- [app_ffmpeg.py:1-204](file://dev_tools/app_ffmpeg.py#L1-L204)
+- [app_ffmpeg.py:1-268](file://dev_tools/app_ffmpeg.py#L1-L268)
 - [app_optimized.py:1-97](file://dev_tools/app_optimized.py#L1-L97)
 - [stream_video_server.py:1-228](file://dev_tools/stream_video_server.py#L1-L228)
 - [stream_video_server_adaptive.py:1-195](file://dev_tools/stream_video_server_adaptive.py#L1-L195)
@@ -308,11 +398,58 @@ Key features:
 - [enhanced_openvino_hpe.py:1-333](file://optimizations/enhanced_openvino_hpe.py#L1-L333)
 - [optimized_main.py:1-257](file://optimizations/optimized_main.py#L1-L257)
 
+### Enhanced HPE Processing with PyNvCodec
+The base HPE class now includes comprehensive PyNvCodec integration for hardware-accelerated video processing.
+
+```mermaid
+classDiagram
+class BaseHPE {
++input_type : str
++gpu_id : int
++is_pynvcodec_enabled : bool
++demuxer : object
++decoder : object
++to_rgb_converter : object
++to_tensor_converter : object
++_init_pynvcodec_video_capture()
++_init_opencv_video_capture()
++main_loop_with_timeout()
++process_frame()
+}
+class PyNvCodecIntegration {
++DecodeSingleFrame()
++Execute(surface)
++Execute(rgb_surface)
++frame_number : int
++server_timestamp : float
++elapsed_time : float
+}
+BaseHPE --> PyNvCodecIntegration : "uses"
+```
+
+**Diagram sources**
+- [base_hpe.py:16-21](file://base_hpe.py#L16-L21)
+- [base_hpe.py:274-294](file://base_hpe.py#L274-L294)
+- [base_hpe.py:351-387](file://base_hpe.py#L351-L387)
+
+Key enhancements:
+- **Hardware Acceleration**: PyNvCodec integration for NV12 surface to RGB conversion and tensor processing
+- **Metadata Extraction**: Frame number and timestamp extraction from HTTP headers using regex patterns
+- **Queue Management**: Enhanced frame processing with proper buffer management and frame skipping
+- **Error Handling**: Robust error handling for PyNvCodec decoding failures and HTTP stream interruptions
+
+**Section sources**
+- [base_hpe.py:16-21](file://base_hpe.py#L16-L21)
+- [base_hpe.py:274-294](file://base_hpe.py#L274-L294)
+- [base_hpe.py:351-387](file://base_hpe.py#L351-L387)
+- [base_hpe.py:72-86](file://base_hpe.py#L72-L86)
+
 ## Dependency Analysis
 The development tools depend on:
 - Flask and OpenCV for MJPEG streaming
 - ffmpeg/ffprobe for frame extraction and metadata logging
 - OpenVINO for optimized HPE inference
+- PyNvCodec for hardware-accelerated video decoding
 - psutil and platform for CPU capability detection
 - NVIDIA DCGM and perf for profiling
 
@@ -322,6 +459,7 @@ Flask["Flask"]
 OpenCV["OpenCV"]
 FFmpeg["ffmpeg/ffprobe"]
 OpenVINO["OpenVINO"]
+PyNvCodec["PyNvCodec"]
 PSUtil["psutil/platform"]
 DCGM["nvidia-smi"]
 Perf["perf"]
@@ -336,6 +474,8 @@ stream_dev --> OpenCV
 stream_adapt["stream_video_server_adaptive.py"] --> Flask
 stream_adapt --> OpenCV
 main_mod["main.py"] --> OpenVINO
+base_hpe["base_hpe.py"] --> PyNvCodec
+alphapose_hpe["alphapose_hpe.py"] --> PyNvCodec
 cpu_opt["cpu_performance_optimizer.py"] --> PSUtil
 prof_gpu["run_nvidia_dcgm.sh"] --> DCGM
 prof_cpu["run_perf_plot.sh"] --> Perf
@@ -343,32 +483,42 @@ prof_cpu["run_perf_plot.sh"] --> Perf
 
 **Diagram sources**
 - [app.py:1-140](file://dev_tools/app.py#L1-L140)
-- [app_ffmpeg.py:1-204](file://dev_tools/app_ffmpeg.py#L1-L204)
+- [app_ffmpeg.py:1-268](file://dev_tools/app_ffmpeg.py#L1-L268)
 - [app_optimized.py:1-97](file://dev_tools/app_optimized.py#L1-L97)
 - [stream_video_server.py:1-228](file://dev_tools/stream_video_server.py#L1-L228)
 - [stream_video_server_adaptive.py:1-195](file://dev_tools/stream_video_server_adaptive.py#L1-L195)
-- [main.py:1-99](file://main.py#L1-L99)
+- [main.py:1-242](file://main.py#L1-L242)
+- [base_hpe.py:1-630](file://base_hpe.py#L1-L630)
+- [alphapose_hpe.py:1-334](file://alphapose_hpe.py#L1-L334)
 - [cpu_performance_optimizer.py:1-539](file://optimizations/cpu_performance_optimizer.py#L1-L539)
 - [run_nvidia_dcgm.sh:1-29](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh#L1-L29)
 - [run_perf_plot.sh:1-25](file://Measure_plot_cpu_perf/run_perf_plot.sh#L1-L25)
 
 **Section sources**
-- [main.py:1-99](file://main.py#L1-L99)
+- [main.py:1-242](file://main.py#L1-L242)
+- [base_hpe.py:1-630](file://base_hpe.py#L1-L630)
+- [alphapose_hpe.py:1-334](file://alphapose_hpe.py#L1-L334)
 - [cpu_performance_optimizer.py:1-539](file://optimizations/cpu_performance_optimizer.py#L1-L539)
 
 ## Performance Considerations
 - Streaming servers:
-  - app_ffmpeg.py leverages ffmpeg for robust MJPEG extraction and scaling
+  - app_ffmpeg.py leverages ffmpeg for robust MJPEG extraction and scaling with metadata injection
   - app_optimized.py ensures frame timing matches video FPS precisely
   - stream_video_server_adaptive.py balances quality and performance with JPEG quality and optional downscaling
+  - Enhanced HTTP streaming infrastructure provides optimized queue management and metadata extraction
 - CPU optimization:
   - EPICCPUOptimizer applies NUMA-aware thread allocation, memory bandwidth optimization, and workload-specific tuning
   - OptimizedOpenVINOHPE integrates optimized configuration into OpenVINO model loading
+  - PyNvCodec integration provides hardware-accelerated video decoding for improved performance
 - Profiling:
   - Use run_nvidia_dcgm.sh for GPU utilization and temperature metrics
   - Use run_perf_plot.sh for CPU perf metrics collection and visualization
 
-[No sources needed since this section provides general guidance]
+**Updated** The enhanced HTTP streaming infrastructure now provides:
+- Optimized queue management with proper frame boundary detection
+- Metadata extraction system for frame numbers and timestamps
+- Improved PyNvCodec integration for hardware-accelerated video processing
+- Enhanced buffering and frame skipping capabilities for HTTP MJPEG streams
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -380,10 +530,15 @@ Common issues and resolutions:
 - Inference performance:
   - Use optimized_main.py with --enable-cpu-opt to apply EPIC CPU optimizations
   - Run benchmarks with --benchmark to compare standard vs optimized FPS
+  - Enable PyNvCodec for hardware-accelerated video decoding when available
 - GPU metrics:
   - run_nvidia_dcgm.sh writes CSV; verify permissions and output directory
 - CPU metrics:
   - run_perf_plot.sh reads PIDs from file; ensure PID file exists and processes are running
+- HTTP streaming issues:
+  - Check metadata extraction with X-Metadata headers in HTTP responses
+  - Verify frame boundary detection and buffer management in HTTP MJPEG streams
+  - Ensure proper frame skipping and timeout handling for interrupted streams
 
 **Section sources**
 - [stream_video_server.py:108-132](file://dev_tools/stream_video_server.py#L108-L132)
@@ -393,6 +548,7 @@ Common issues and resolutions:
 - [optimized_main.py:201-246](file://optimizations/optimized_main.py#L201-L246)
 - [run_nvidia_dcgm.sh:1-29](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh#L1-L29)
 - [run_perf_plot.sh:1-25](file://Measure_plot_cpu_perf/run_perf_plot.sh#L1-L25)
+- [base_hpe.py:72-86](file://base_hpe.py#L72-L86)
 
 ## Conclusion
 The development tools provide a comprehensive toolkit for validating and optimizing HPE inference:
@@ -400,8 +556,9 @@ The development tools provide a comprehensive toolkit for validating and optimiz
 - Smoke tests automate validation across multiple HPE methods
 - CPU/GPU profiling utilities support performance analysis
 - Optimized OpenVINO HPE delivers significant performance gains on EPIC processors
+- Enhanced HTTP streaming infrastructure provides optimized queue management, metadata extraction, and PyNvCodec integration
 
-[No sources needed since this section summarizes without analyzing specific files]
+**Updated** The enhanced HTTP streaming infrastructure significantly improves the reliability and performance of HTTP-based video streaming for HPE applications, with proper metadata handling and hardware acceleration support.
 
 ## Appendices
 
@@ -412,8 +569,10 @@ The development tools provide a comprehensive toolkit for validating and optimiz
   - Run smoke_test.sh to validate MoveNet, AlphaPose, and EfficientHRNet1
 - Streaming validation:
   - Start any development server and verify MJPEG output in browser/VLC
+  - Test HTTP streaming with metadata extraction and PyNvCodec integration
 - Optimization validation:
   - Use optimized_main.py with --enable-cpu-opt and --benchmark to assess improvements
+  - Enable hardware acceleration with PyNvCodec when available
 - Profiling:
   - Collect GPU metrics with run_nvidia_dcgm.sh and CPU metrics with run_perf_plot.sh
 
@@ -428,13 +587,32 @@ The development tools provide a comprehensive toolkit for validating and optimiz
 - Add new HPE method:
   - Implement a new HPE class similar to existing ones and register it in main.py
   - Ensure CLI argument parsing supports the new method
+  - Integrate PyNvCodec support for hardware acceleration when applicable
 - Streaming validation:
   - Use development servers to validate MJPEG input for the new method
+  - Test HTTP streaming with metadata extraction capabilities
 - Optimization:
   - Integrate CPU optimization via OptimizedOpenVINOHPE if applicable
+  - Leverage hardware acceleration with PyNvCodec when available
 - Testing:
   - Extend smoke_test.sh to include the new method in automated validation
+  - Test enhanced HTTP streaming infrastructure with the new HPE method
 
 **Section sources**
-- [main.py:64-94](file://main.py#L64-L94)
+- [main.py:207-227](file://main.py#L207-L227)
 - [enhanced_openvino_hpe.py:25-66](file://optimizations/enhanced_openvino_hpe.py#L25-L66)
+- [base_hpe.py:147-185](file://base_hpe.py#L147-L185)
+- [alphapose_hpe.py:33-66](file://alphapose_hpe.py#L33-L66)
+
+### HTTP Streaming Infrastructure Configuration
+The HTTP streaming infrastructure provides flexible configuration options for different deployment scenarios:
+
+- **Direct H.264 Streaming**: Uses FFmpeg to convert video files to H.264 streams with configurable bitrate and resolution
+- **MJPEG Streaming**: Provides HTTP MJPEG streams with metadata injection for frame tracking
+- **Adaptive Quality**: Automatically adjusts JPEG quality based on video resolution for optimal performance
+- **Nginx Integration**: Template-based Nginx configuration for production deployments
+
+**Section sources**
+- [direct_stream_server.py:74-133](file://rtsp-ipcam/direct_stream_server.py#L74-L133)
+- [nginx-entrypoint.sh:4-11](file://rtsp-ipcam/nginx-entrypoint.sh#L4-L11)
+- [changes_improvemnts.txt](file://rtsp-ipcam/changes_improvemnts.txt)

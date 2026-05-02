@@ -11,7 +11,20 @@
 - [utils/visualizer.py](file://utils/visualizer.py)
 - [utils/evaluator.py](file://utils/evaluator.py)
 - [optimizations/cpu_performance_optimizer.py](file://optimizations/cpu_performance_optimizer.py)
+- [optimizations/README.md](file://optimizations/README.md)
+- [docs/hpe-methods.md](file://docs/hpe-methods.md)
+- [docs/experiment-scripts.md](file://docs/experiment-scripts.md)
+- [Dockerfile_base](file://Dockerfile_base)
+- [dev_tools/README.md](file://dev_tools/README.md)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Enhanced README.md with cleaner table-based dependency listing
+- Improved project overview with expanded performance benchmarking section
+- Added comprehensive Mermaid diagrams for architecture visualization
+- Expanded performance monitoring and CPU optimization documentation
+- Updated Docker containerization and experiment orchestration details
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -21,8 +34,10 @@
 5. [Detailed Component Analysis](#detailed-component-analysis)
 6. [Dependency Analysis](#dependency-analysis)
 7. [Performance Considerations](#performance-considerations)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Conclusion](#conclusion)
+8. [Performance Benchmarking Framework](#performance-benchmarking-framework)
+9. [Containerization and Experimentation](#containerization-and-experimentation)
+10. [Troubleshooting Guide](#troubleshooting-guide)
+11. [Conclusion](#conclusion)
 
 ## Introduction
 
@@ -30,15 +45,18 @@ This project provides a comprehensive multi-method 2D Human Pose Estimation fram
 
 The framework is designed to handle diverse input sources including images, videos, webcam feeds, and HTTP streams, with specialized optimizations for both CPU and GPU acceleration. It provides standardized output formats, visualization capabilities, and performance monitoring tools essential for production deployment and research applications.
 
+**Updated** Enhanced with cleaner dependency tables, improved project overview, and expanded performance benchmarking section with comprehensive Mermaid diagrams for better visualization of the framework's architecture and experimental capabilities.
+
 ## Project Structure
 
-The framework follows a modular architecture with clear separation of concerns:
+The framework follows a modular architecture with clear separation of concerns, now featuring enhanced containerization and performance monitoring capabilities:
 
 ```mermaid
 graph TB
-subgraph "Framework Core"
+subgraph "Core Framework"
 BaseHPE[BaseHPE Abstract Class]
 Main[main.py Entry Point]
+CPUOptimizer[CPU Performance Optimizer]
 end
 subgraph "Method Implementations"
 AlphaPose[AlphaPoseHPE]
@@ -48,33 +66,39 @@ end
 subgraph "Shared Utilities"
 Visualizer[utils/visualizer.py]
 Evaluator[utils/evaluator.py]
-Optimizer[optimizations/cpu_performance_optimizer.py]
 end
-subgraph "Model Support"
-AlphaModels[AlphaPose Models]
-OpenVINOModels[OpenVINO Models]
-MoveNetModels[MoveNet Models]
+subgraph "Performance Monitoring"
+PerfMonitor[Performance Monitor]
+GPUMetrics[GPU Metrics Collector]
+BPFTracer[eBPF Network Tracer]
+end
+subgraph "Experiment Orchestration"
+DockerCompose[docker-compose.yaml]
+RunScripts[run_experiment.sh]
+ContainerImages[Docker Images]
 end
 Main --> BaseHPE
 BaseHPE --> AlphaPose
 BaseHPE --> OpenVINO
 BaseHPE --> MoveNet
-AlphaPose --> AlphaModels
-OpenVINO --> OpenVINOModels
-MoveNet --> MoveNetModels
 AlphaPose --> Visualizer
 OpenVINO --> Visualizer
 MoveNet --> Visualizer
 AlphaPose --> Evaluator
 OpenVINO --> Evaluator
 MoveNet --> Evaluator
-OpenVINO --> Optimizer
+OpenVINO --> CPUOptimizer
+PerfMonitor --> ContainerImages
+GPUMetrics --> ContainerImages
+BPFTracer --> ContainerImages
+RunScripts --> DockerCompose
 ```
 
 **Diagram sources**
 - [main.py:22-99](file://main.py#L22-L99)
 - [base_hpe.py:36-546](file://base_hpe.py#L36-L546)
 - [openvino_base_hpe.py:55-653](file://openvino_base_hpe.py#L55-L653)
+- [optimizations/cpu_performance_optimizer.py:336-403](file://optimizations/cpu_performance_optimizer.py#L336-L403)
 
 **Section sources**
 - [README.md:1-125](file://README.md#L1-L125)
@@ -108,17 +132,19 @@ Each pose estimation method extends the BaseHPE class with method-specific optim
 
 ## Architecture Overview
 
-The framework implements a layered architecture with clear separation between hardware abstraction, model implementations, and utility functions:
+The framework implements a layered architecture with clear separation between hardware abstraction, model implementations, and utility functions, now enhanced with comprehensive performance monitoring:
 
 ```mermaid
 graph TB
 subgraph "Application Layer"
 CLI[Command Line Interface]
 StreamServer[Video Stream Server]
+IPCamSim[Flask IP Camera Simulator]
 end
 subgraph "Framework Layer"
 BaseHPE[BaseHPE Abstract]
 MethodFactory[Method Factory]
+CPUOptimizer[CPU Performance Optimizer]
 end
 subgraph "Hardware Abstraction"
 PyNvCodec[NVIDIA PyNvCodec]
@@ -130,10 +156,16 @@ AlphaPose[AlphaPose Implementation]
 OpenVINO[OpenVINO Models]
 MoveNet[MoveNet Implementation]
 end
-subgraph "Utility Layer"
-Visualizer[Visualization Engine]
-Evaluator[Evaluation & Export]
-Optimizer[Performance Optimizer]
+subgraph "Performance Monitoring Layer"
+PerfMonitor[Performance Monitor]
+GPUMetrics[GPU Metrics]
+BPFTracer[eBPF Tracer]
+DCGM[DCGM Metrics]
+end
+subgraph "Experiment Orchestration"
+DockerCompose[docker-compose.yaml]
+RunScripts[Experiment Scripts]
+ContainerImages[HPE Containers]
 end
 CLI --> MethodFactory
 MethodFactory --> BaseHPE
@@ -143,19 +175,21 @@ BaseHPE --> CPU
 BaseHPE --> AlphaPose
 BaseHPE --> OpenVINO
 BaseHPE --> MoveNet
-AlphaPose --> Visualizer
-OpenVINO --> Visualizer
-MoveNet --> Visualizer
-AlphaPose --> Evaluator
-OpenVINO --> Evaluator
-MoveNet --> Evaluator
-OpenVINO --> Optimizer
+AlphaPose --> PerfMonitor
+OpenVINO --> PerfMonitor
+MoveNet --> PerfMonitor
+PerfMonitor --> GPUMetrics
+PerfMonitor --> BPFTracer
+GPUMetrics --> DCGM
+DockerCompose --> ContainerImages
+RunScripts --> ContainerImages
 ```
 
 **Diagram sources**
 - [main.py:64-84](file://main.py#L64-L84)
 - [base_hpe.py:94-157](file://base_hpe.py#L94-L157)
 - [openvino_base_hpe.py:183-260](file://openvino_base_hpe.py#L183-L260)
+- [dev_tools/README.md:1-102](file://dev_tools/README.md#L1-L102)
 
 The architecture ensures that:
 
@@ -163,6 +197,7 @@ The architecture ensures that:
 2. **Flexibility**: Easy addition of new pose estimation methods
 3. **Performance**: Hardware-specific optimizations without changing the interface
 4. **Maintainability**: Clear separation of concerns across different functional areas
+5. **Observability**: Comprehensive monitoring and performance tracking capabilities
 
 ## Detailed Component Analysis
 
@@ -342,17 +377,20 @@ The framework maintains loose coupling between components through well-defined i
 ```mermaid
 graph TB
 subgraph "External Dependencies"
-OpenVINO[OpenVINO Runtime]
-PyTorch[Torch & TorchVision]
+OpenVINO[OpenVINO Runtime 2024.2.0]
+PyTorch[Torch & TorchVision 2.4.1]
 OpenCV[OpenCV]
 NumPy[NumPy]
 CV2[OpenCV Python]
+CUDA[CUDA Toolkit 12.6]
+NVIDIADriver[NVIDIA Driver]
 end
 subgraph "Internal Dependencies"
 BaseHPE[BaseHPE]
 Visualizer[utils/visualizer]
 Evaluator[utils/evaluator]
 Optimizer[optimizations/cpu_performance]
+CPUOptimizer[EPIC CPU Optimizer]
 end
 subgraph "Model Dependencies"
 AlphaPose[AlphaPose Models]
@@ -378,12 +416,14 @@ Evaluator --> JSON
 Evaluator --> CSV
 Optimizer --> OpenVINO
 Optimizer --> PSUtil
+CPUOptimizer --> EPICCPUOptimizer
 ```
 
 **Diagram sources**
 - [main.py:10-12](file://main.py#L10-L12)
 - [base_hpe.py:1-17](file://base_hpe.py#L1-L17)
 - [openvino_base_hpe.py:15-20](file://openvino_base_hpe.py#L15-L20)
+- [Dockerfile_base:1-84](file://Dockerfile_base#L1-L84)
 
 The dependency structure ensures:
 
@@ -440,6 +480,127 @@ style ExportMetrics fill:#e1f5fe
 - [optimizations/cpu_performance_optimizer.py:336-403](file://optimizations/cpu_performance_optimizer.py#L336-L403)
 - [base_hpe.py:451-519](file://base_hpe.py#L451-L519)
 
+## Performance Benchmarking Framework
+
+The framework now includes a comprehensive performance benchmarking system with containerized experimentation:
+
+### Architecture
+
+Each experiment rig operates independently with its own orchestration and monitoring:
+
+```mermaid
+graph TD
+A[run_experiment.sh] --> B[docker-compose.yaml]
+B --> C[hpe\nruns main.py against a live stream]
+B --> D[h264-streaming-server\nserves video over HTTP/H.264]
+B --> E[perf_monitor\nsamples CPU/memory/network]
+B --> F[gpu-metrics\npolls nvidia-smi]
+B --> G[bcc-tracer / bpftrace\neBPF network tracing - optional]
+D --> C
+```
+
+**Diagram sources**
+- [README.md:133-142](file://README.md#L133-L142)
+
+### Experiment Rigs
+
+#### Monitor HPE Baseline
+The simplest rig with two containers for local process monitoring without streaming.
+
+#### FFmpeg HPE Main Rig
+The primary experiment rig with five containers for comprehensive monitoring:
+- H.264 streaming server
+- HPE container with selected method
+- Performance monitor
+- GPU metrics collector
+- Optional eBPF tracer
+
+#### Recent Dash DASH Experiment
+Separate experiment measuring DASH video streaming proxy with shared monitoring infrastructure.
+
+#### RTSP IPCam Streaming Server
+Reusable streaming server component used by other experiment rigs.
+
+### Standalone Measurement Tools
+
+| Script | What it measures | Method |
+|--------|------------------|--------|
+| `Measure_Flops/measure_flops.sh` | GPU FLOPS, TOPS, memory bandwidth, warp latency | NVIDIA Nsight Compute (`ncu`) + `nvidia-smi` + `ps` |
+| `Measure_gpu_dcgm/run_nvidia_dcgm.sh` | GPU power, temperature, utilisation, memory | `nvidia-smi` polling loop → CSV; `plot_smi_output.py` generates PNG charts |
+| `Measure_plot_cpu_perf/run_perf_plot.sh` | CPU cycles and clock | Reads PID from `/pids/dash.pid`, runs `perf stat -p`, plots with `plot_perf_metrics.py` |
+
+### CPU Optimizations
+
+The framework includes sophisticated CPU optimization for EPIC processors:
+
+```mermaid
+classDiagram
+class EPICCPUOptimizer {
++capabilities : CPUCapabilities
++target_model : str
++optimal_config : Dict
++_detect_cpu_capabilities()
++_calculate_optimal_config()
+}
+class CPUCapabilities {
++physical_cores : int
++logical_cores : int
++base_frequency : float
++max_frequency : float
++cache_l3_mb : int
++numa_nodes : int
++architecture : str
++supports_avx2 : bool
++supports_avx512 : bool
+}
+EPICCPUOptimizer --> CPUCapabilities
+```
+
+**Diagram sources**
+- [optimizations/cpu_performance_optimizer.py:20-98](file://optimizations/cpu_performance_optimizer.py#L20-L98)
+
+**Section sources**
+- [README.md:117-231](file://README.md#L117-L231)
+- [docs/experiment-scripts.md:1-355](file://docs/experiment-scripts.md#L1-L355)
+- [optimizations/README.md:1-220](file://optimizations/README.md#L1-L220)
+
+## Containerization and Experimentation
+
+The framework utilizes Docker for consistent environment setup and experiment reproducibility:
+
+### Dockerfile Structure
+
+The base Dockerfile provides a comprehensive environment with all dependencies pre-installed:
+
+```mermaid
+flowchart LR
+A[PyTorch 2.4.1 CUDA 12.1 Base] --> B[Install System Dependencies]
+B --> C[Install Python Packages]
+C --> D[Build PyNvCodec]
+D --> E[Install OpenVINO 2024.2.0]
+E --> F[Download Pre-trained Models]
+F --> G[Build AlphaPose Extensions]
+G --> H[Set Entrypoint]
+```
+
+**Diagram sources**
+- [Dockerfile_base:1-84](file://Dockerfile_base#L1-L84)
+
+### Experiment Orchestration
+
+Each experiment rig follows a standardized workflow:
+
+1. **Environment Setup**: Clean up previous containers and CSV files
+2. **Service Startup**: Start streaming server with health checks
+3. **HPE Execution**: Launch HPE container with method and device parameters
+4. **Monitoring**: Start performance sidecars (CPU, GPU, network)
+5. **Data Collection**: Poll until completion and collect results
+6. **Cleanup**: Teardown containers and organize output
+
+**Section sources**
+- [Dockerfile_base:1-84](file://Dockerfile_base#L1-L84)
+- [docs/experiment-scripts.md:1-355](file://docs/experiment-scripts.md#L1-L355)
+
 ## Troubleshooting Guide
 
 ### Common Issues and Solutions
@@ -464,6 +625,11 @@ style ExportMetrics fill:#e1f5fe
 **Issue**: Out of memory errors during processing
 **Solution**: Reduce batch sizes and enable frame buffering
 
+#### Containerization Issues
+
+**Issue**: Docker containers fail to start or crash
+**Solution**: Check Docker permissions, GPU drivers, and resource allocation
+
 **Section sources**
 - [README.md:71-94](file://README.md#L71-L94)
 - [openvino_base_hpe.py:153-182](file://openvino_base_hpe.py#L153-L182)
@@ -474,4 +640,6 @@ This Human Pose Estimation framework provides a robust, extensible solution for 
 
 The framework's modular architecture, comprehensive performance monitoring, and hardware acceleration support make it suitable for both research and production deployment scenarios. The standardized output formats and visualization capabilities facilitate easy integration with downstream applications and analysis tools.
 
-Future enhancements could include additional pose estimation methods, improved multi-GPU support, and enhanced real-time streaming capabilities for edge computing deployments.
+**Updated** The enhanced README.md now features cleaner dependency listings, improved project overview, and expanded performance benchmarking section with comprehensive Mermaid diagrams. The framework's containerization and experiment orchestration capabilities provide researchers and developers with powerful tools for performance analysis and optimization across different hardware configurations and use cases.
+
+Future enhancements could include additional pose estimation methods, improved multi-GPU support, enhanced real-time streaming capabilities for edge computing deployments, and expanded performance monitoring with additional metrics and visualization options.
