@@ -17,6 +17,98 @@ Baseline implementations of five 2D Human Pose Estimation methods — **AlphaPos
 
 ---
 
+## Codebase Orientation
+
+If you are new to this repository, read this section before diving into the code.
+
+### What this repo is
+
+Two things in one:
+
+1. **An HPE inference library** — a unified Python interface for running five pose estimation backends (AlphaPose, MoveNet, OpenPose, HigherHRNet, EfficientHRNet) against images, videos, webcam, or HTTP streams.
+2. **A performance benchmarking platform** (`perf-tuning-base` branch) — a set of Docker-based experiment rigs for measuring inference throughput, CPU/GPU utilisation, memory, and network bandwidth under realistic streaming conditions.
+
+### Key files to read first
+
+| File | What it is |
+|---|---|
+| `main.py` | CLI entry point — start here to understand how a run is configured |
+| `base_hpe.py` | Abstract base class — defines the input routing, main loop, padding, and output saving that all backends share |
+| `openvino_base_hpe.py` | OpenVINO backend covering OpenPose, HigherHRNet, and EfficientHRNet |
+| `movenet_hpe.py` | MoveNet backend (OpenVINO runtime, CPU only) |
+| `alphapose_hpe.py` | AlphaPose backend (PyTorch + YOLO detector) |
+| `utils/evaluator.py` | COCO-format JSON/CSV serialisation and Tx bandwidth measurement |
+| `utils/visualizer.py` | OpenCV skeleton and keypoint rendering |
+| `ffmpeg_hpe/run_experiment.sh` | Main benchmarking entry point — orchestrates the full experiment lifecycle |
+| `ffmpeg_hpe/docker-compose.yaml` | Defines all services for the streaming benchmark rig |
+
+### How the HPE pipeline works
+
+```
+main.py
+  └── get_hpe_method()        # selects backend from --method arg
+        └── BaseHPE.__init__  # detects input type (image/video/stream/webcam)
+              └── load_model()          # backend-specific model loading
+              └── main_loop()           # reads frames, calls process_frame()
+                    └── process_frame()
+                          ├── pad_and_resize()   # normalise frame to model input size
+                          ├── run_model()        # backend inference → raw predictions
+                          ├── postprocess()      # raw predictions → List[Body]
+                          ├── render()           # draw skeleton on frame
+                          └── append_COCO_format_json/csv()  # accumulate results
+```
+
+`BaseHPE` handles everything except `load_model()`, `run_model()`, and `postprocess()` — those three methods are the only ones each backend must implement.
+
+### How the benchmarking platform works
+
+```
+run_experiment.sh
+  ├── docker compose up h264-streaming-server   # serves video as H.264 HTTP stream
+  ├── docker compose up hpe                     # runs main.py against the stream
+  ├── docker compose up perf_monitor            # samples CPU/memory every 500ms
+  ├── docker compose up gpu-metrics             # polls nvidia-smi every 500ms
+  ├── docker compose up bcc-tracer              # eBPF RX byte counter (optional)
+  ├── [wait for hpe container to exit]
+  ├── docker cp → results_<method>_<cpu>_<timestamp>/
+  │     ├── hpe_output/     ← keypoint CSVs and JSON from main.py
+  │     ├── perf/           ← CPU/memory metrics
+  │     ├── gpu/            ← GPU metrics
+  │     ├── traces/bcc/     ← per-10ms RX byte trace
+  │     └── logs/           ← per-container logs
+  └── docker compose down
+```
+
+### Branch structure
+
+| Branch | Purpose |
+|---|---|
+| `main` | Stable HPE inference code only |
+| `perf-tuning-base` | Active development — adds benchmarking platform, Docker rigs, fixes |
+| `cuda-dev` | Previous active branch — CUDA/PyNvCodec experiments, HTTP stream handling |
+| `evaluation` | Evaluation framework work |
+| `feat/openvino-opti-cpu` | OpenVINO CPU tuning experiments for 4-vCPU VPS |
+| `recent-dash`, `hpe-benchmark`, others | Feature branches, mostly stale since Sept 2025 |
+
+`perf-tuning-base` is the branch to use for new work.
+
+### Output format
+
+All HPE output follows COCO keypoint format. Each detected person produces:
+
+```json
+{
+  "image_id": 42,
+  "category_id": 1,
+  "keypoints": [x0, y0, v0, x1, y1, v1, ...],
+  "score": 0.87
+}
+```
+
+17 keypoints per person (COCO layout): nose, eyes, ears, shoulders, elbows, wrists, hips, knees, ankles. Visibility flag `v`: `0` = not detected, `1` = detected.
+
+---
+
 ## Getting Started
 
 ### 1. Download pretrained models
@@ -141,6 +233,18 @@ graph TD
     D --> C
 ```
 
+### Experiment Rigs at a Glance
+
+| Folder | Entry point | Input source | HPE runs? | Monitors | Purpose |
+|---|---|---|---|---|---|
+| `monitor_hpe/` | `run_experiment.sh` | Local video file (volume mount) | ✅ | CPU%, RSS memory | Baseline inference cost — no network |
+| `ffmpeg_hpe/` | `run_experiment.sh` `run_experiment_bcc.sh` | Live H.264 HTTP stream (port 8089) | ✅ | CPU%, RSS, GPU, BCC RX bytes | Full streaming benchmark — main rig |
+| `recent-dash/` | `run_experiment.sh` | DASH segments via HTTP proxy | ❌ | CPU%, RSS, bpftrace RX/TX | HTTP caching proxy research — not HPE |
+| `rtsp-ipcam/` | `start_server.sh` | — (is the server) | ❌ | — | Shared H.264 streaming server used by `ffmpeg_hpe/` |
+| `Measure_Flops/` | `measure_flops.sh` | Any HPE command | ✅ | GPU FLOPS, TOPS, memory BW | One-shot Nsight Compute profiling |
+| `Measure_gpu_dcgm/` | `run_nvidia_dcgm.sh` | — (sidecar) | ❌ | GPU util, temp, power | Standalone GPU telemetry collector |
+| `Measure_plot_cpu_perf/` | `run_perf_plot.sh` | PID file | ❌ | CPU cycles via `perf stat` | Standalone CPU cycle counter |
+
 ### Experiment Rigs
 
 #### `monitor_hpe/` — baseline CPU monitoring
@@ -221,10 +325,44 @@ Six Dockerfiles at the repo root represent iteration history on the HPE containe
 | `Dockerfile_combined_multistage_app` | Multi-stage build attempt |
 | `Dockerfile_optimized_multistage_v4` | Latest multi-stage optimised build |
 
+### Known Issues and Gotchas
+
+These are confirmed issues in the codebase. Fixes marked ✅ are already applied on `perf-tuning-base`.
+
+#### Benchmarking platform
+
+| # | File | Issue | Status |
+|---|---|---|---|
+| 1 | `ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py` | IP/port BPF filter was disabled for debugging — counted all TCP traffic instead of video stream only | ✅ Fixed |
+| 2 | `ffmpeg_hpe/plot_rx_bytes*.py` | Hardcoded absolute path to old VM — unusable on any other machine | ✅ Fixed — now accepts CSV path as CLI arg |
+| 3 | `ffmpeg_hpe/plot_smi_output.py` | Column names `utilization.gpu` / `temperature.gpu` didn't match `run_nvidia_dcgm.sh` output (`gpu_utilization` / `temperature`) — crashed on every run | ✅ Fixed |
+| 4 | `ffmpeg_hpe/docker-compose.yaml` | Build context hardcoded to `/home/user/MeasurementsDTs` — broken on any other machine | ✅ Fixed — changed to `..` |
+| 5 | `ffmpeg_hpe/run_experiment.sh` | Referenced `trace_container` service which is commented out in docker-compose — should be `bcc-tracer` | ✅ Fixed |
+| 6 | `monitor_hpe/monitor_pid.sh` | `write_net_stats()` wrote each entry twice — once directly and once via flock/cat | ✅ Fixed |
+| 7 | `ffmpeg_hpe/entrypoint.sh` | GPU metrics cleanup code after `exec` was unreachable — metrics process never stopped cleanly | ✅ Fixed — moved to EXIT trap |
+| 8 | Both `monitor_pid.sh` files | `ps -o %cpu` reports lifetime average CPU%, not per-interval | ✅ Fixed — replaced with `/proc/$PID/stat` delta at 500ms cadence |
+| 9 | `ffmpeg_hpe/run_experiment.sh` | `perf_monitor` output filename was `aggregated_metrics.csv` — actual file is `perf_metrics.csv` / `pid_metrics.csv` | ✅ Fixed |
+| 10 | `ffmpeg_hpe/run_experiment.sh` | BCC tracer output was `trace.csv` — actual file is `hpe_video_rx.csv` | ✅ Fixed |
+| 11 | `ffmpeg_hpe/run_experiment.sh` | HPE container output (keypoint CSVs/JSON) was listed but never copied to results directory | ✅ Fixed |
+| 12 | `ffmpeg_hpe/monitor_pid.sh` | `netif_receive_skb` bpftrace PID filter fires in softirq context — PID never matches HPE process, RX bytes always ~0 | ⚠️ Known — use `bcc-tracer` for accurate RX measurement |
+| 13 | `monitor_hpe/plot_graph.py` | Calls `plt.show()` — blocks indefinitely in headless containers | ⚠️ Open |
+| 14 | `ffmpeg_hpe/plot_graph.py` | Empty file (0 bytes) | ⚠️ Open |
+| 15 | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | ⚠️ Open |
+
+#### HPE inference code
+
+| File | Issue |
+|---|---|
+| `movenet_hpe.py` | Keypoint-level score filtering not applied to body score (marked `# TODO`) |
+| `alphapose_hpe.py` | Bounding box derived from keypoints, not from the YOLO detector output |
+| `openvino_base_hpe.py` → `run_model()` | `results` variable may be unbound if `raw_result` is falsy — guard exists but worth verifying |
+| `export_pose_results.py` | Global accumulator never reset between runs — `reset_results()` exists but is never called |
+| `visualizer.py` | Keypoint colouring logic only verified correct for MoveNet (marked `# TODO`) |
+
 ### Notes
 
-- `run_experiment.sh` scripts are the single source of truth for how an experiment runs — they handle timing, healthchecks, log collection, and cleanup (100–200 lines each).
+- `run_experiment.sh` scripts are the single source of truth for how an experiment runs — they handle timing, healthchecks, log collection, and cleanup.
 - Results are written to a timestamped directory (`results_<container_type>_<cpu_model>_<timestamp>/`) so runs never overwrite each other.
-- The eBPF/bpftrace tracer (`bcc-tracer`) is present in both `ffmpeg_hpe/` and `recent-dash/` but is commented out — it requires a kernel with debug symbols and is fragile in practice.
+- The eBPF/bpftrace tracer (`bcc-tracer`) requires a kernel with BPF support (`CONFIG_BPF=y`, kernel ≥ 4.4) and debug symbols. It is present in `ffmpeg_hpe/` but commented out in docker-compose by default.
 - `recent-dash/` is a separate research thread (DASH caching) that shares the monitoring infrastructure but is unrelated to HPE inference.
 - Several files at the root (`full_shell_history.txt`, `hist.txt`, `bug.md`, `*.bak`, `original.py`) are development artefacts that have not been cleaned up.
