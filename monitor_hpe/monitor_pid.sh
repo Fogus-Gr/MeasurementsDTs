@@ -64,20 +64,16 @@ write_net_stats() {
     local bytes=$4
     local sent=$5
     
-    # Create a temporary file
+    # Write to temp file first, then append atomically via flock
     local temp_line=$(mktemp)
-    echo "$timestamp,$pid,$interface,$bytes,$sent" >> "$NETSTATS_FILE"
-    
-    # Use flock to prevent concurrent writes
+    echo "$timestamp,$pid,$interface,$bytes,$sent" > "$temp_line"
+
     (
         flock -x 201
-        # Append the line to the network stats file
         cat "$temp_line" >> "$NETSTATS_FILE"
-        # Force sync to disk
         sync "$NETSTATS_FILE"
     ) 201>"$NETSTATS_FILE.lock"
-    
-    # Clean up
+
     rm -f "$temp_line"
 }
 
@@ -180,8 +176,10 @@ while true; do
         break
     fi
     
-    # Get CPU usage for the process
-    cpu_percent=$(ps -p "$PID" -o %cpu --no-headers | awk '{print $1}')
+    # pidstat samples over a 1-second interval — reports actual per-interval CPU%
+    # rather than the lifetime average that ps -o %cpu gives
+    cpu_percent=$(pidstat -p "$PID" 1 1 2>/dev/null | awk '/^[0-9]/ && $2+0=='"$PID"' {print $8; exit}')
+    cpu_percent=${cpu_percent:-0}
     
     # Get memory usage (RSS in KB)
     mem_rss_kb=$(grep VmRSS /proc/$PID/status 2>/dev/null | awk '{print $2}')

@@ -120,17 +120,17 @@ docker logs $(docker ps -qf "name=^/hpe$") > "$results_dir/logs/hpe_startup.log"
 tail -n 20 "$results_dir/logs/hpe_startup.log"
 docker logs $(docker ps -qf "name=^/hpe$") | tee "$results_dir/logs/hpe_startup_full.log"
 
-# Step 14: Start and measure monitoring containers (perf_monitor, trace_container, gpu-metrics)
+# Step 14: Start and measure monitoring containers (perf_monitor, bcc-tracer, gpu-metrics)
 perf_monitor_start=$(date +%s.%N)
 echo "[DEBUG] Starting performance monitoring..."
 docker compose -f $docker_compose_file up -d perf_monitor
-docker compose -f $docker_compose_file up -d trace_container
+docker compose -f $docker_compose_file up -d bcc-tracer
 docker compose -f $docker_compose_file up -d gpu-metrics
 PERF_MONITOR_CONTAINER=$(docker ps -qf "name=perf_monitor")
-TRACE_CONTAINER=$(docker ps -qf "name=.*trace_container.*")
+TRACE_CONTAINER=$(docker ps -qf "name=bcc-tracer")
 GPU_METRICS_CONTAINER=$(docker ps -qf "name=gpu-metrics")
 measure_container_startup "perf_monitor" "$perf_monitor_start"
-measure_container_startup "trace_container" "$perf_monitor_start"
+measure_container_startup "bcc-tracer" "$perf_monitor_start"
 measure_container_startup "gpu-metrics" "$perf_monitor_start"
 
 # Step 15: Get all PIDs inside the hpe container (for monitoring)
@@ -199,12 +199,12 @@ if [ -n "$TRACE_CONTAINER" ]; then
     echo "Copied trace file to $results_dir/traces/trace.csv" || \
     echo "[ERROR] Failed to copy trace file"
   else
-    echo "[WARNING] Could not find trace.csv in trace_container."
+    echo "[WARNING] Could not find trace.csv in bcc-tracer."
   fi
 fi
 
 # Step 20: Collect container logs before stopping
-container_list=("hpe" "perf_monitor" "trace_container" "gpu-metrics")
+container_list=("hpe" "perf_monitor" "bcc-tracer" "gpu-metrics")
 for container in "${container_list[@]}"
 do
   container_id=$(docker ps -aqf "name=^/${container}$")
@@ -242,7 +242,7 @@ fi
 # Now stop and clean up containers and resources
 echo "[DEBUG] Stopping and cleaning up containers..."
 docker compose -f $docker_compose_file down --remove-orphans --volumes
-docker rm -f hpe h264-streaming-server gpu-metrics perf_monitor trace_container 2>/dev/null || true
+docker rm -f hpe h264-streaming-server gpu-metrics perf_monitor bcc-tracer 2>/dev/null || true
 
 end_time=$(date +%s)
 duration=$((end_time - start_time))

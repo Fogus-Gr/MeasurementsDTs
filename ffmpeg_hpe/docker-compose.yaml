@@ -38,7 +38,7 @@ services:
 
   hpe:
     build:
-      context: /home/user/MeasurementsDTs
+      context: ..
       dockerfile: Dockerfile_base
     # Add these lines for GPU support
     runtime: nvidia

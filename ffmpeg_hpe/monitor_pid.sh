@@ -135,8 +135,10 @@ while true; do
         echo "Process $PID is no longer running. Exiting..."
         break
     fi
-    cpu_percent=$(ps -p "$PID" -o %cpu --no-headers | awk '{print $1}')
-    # If you want percentage of total capacity (like Docker stats)
+    # pidstat samples over a 1-second interval — reports actual per-interval CPU%
+    # rather than the lifetime average that ps -o %cpu gives
+    cpu_percent=$(pidstat -p "$PID" 1 1 2>/dev/null | awk '/^[0-9]/ && $2+0=='"$PID"' {print $8; exit}')
+    cpu_percent=${cpu_percent:-0}
     normalized_cpu=$(echo "scale=2; $cpu_percent * 100 / $NUM_CORES" | bc)
     mem_rss_kb=$(grep VmRSS /proc/$PID/status 2>/dev/null | awk '{print $2}')
     tx_bytes=0

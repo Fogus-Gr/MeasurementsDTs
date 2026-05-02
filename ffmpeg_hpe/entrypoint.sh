@@ -6,20 +6,15 @@ if [ "${ENABLE_GPU_METRICS:-0}" = "1" ]; then
     echo "Starting GPU metrics collection..."
     ./run_nvidia_dcgm.sh &
     METRICS_PID=$!
-    # Give it a moment to start
     sleep 2
+
+    # Stop GPU metrics on exit — trap must be registered before exec replaces this shell
+    trap 'kill -TERM "$METRICS_PID" 2>/dev/null; wait "$METRICS_PID" 2>/dev/null' EXIT
 fi
 
-# Execute the main command
+# exec replaces this shell process; the EXIT trap above fires when the child exits
 if [ "$#" -gt 0 ]; then
-    # If arguments are passed, use them as the command
     exec "$@"
 else
-    # Otherwise, use the default command from Dockerfile
     exec python3 main.py
-fi
-
-# Cleanup
-if [ -n "${METRICS_PID}" ]; then
-    kill -TERM "$METRICS_PID" 2>/dev/null
 fi
