@@ -182,25 +182,31 @@ for i in {1..10}; do
 done
 
 # Step 18: Collect performance data after experiment completion
+mkdir -p "$results_dir/perf"
 if [ -n "$PERF_MONITOR_CONTAINER" ]; then
-  if docker exec $PERF_MONITOR_CONTAINER ls -la /output/aggregated_metrics.csv 2>/dev/null; then
-    docker cp "$PERF_MONITOR_CONTAINER:/output/aggregated_metrics.csv" "$results_dir/perf/performance_data.csv"
-    chmod -R u+rw "$results_dir"
-    echo "Copied perf_monitor output to $results_dir/perf/performance_data.csv"
-  else
-    echo "[WARNING] Could not find aggregated_metrics.csv in perf_monitor container."
-  fi
+  # recent-dash/perf_monitor writes perf_metrics.csv; ffmpeg_hpe/monitor_pid.sh writes pid_metrics.csv
+  for perf_file in perf_metrics.csv pid_metrics.csv network_stats.csv; do
+    if docker exec $PERF_MONITOR_CONTAINER ls -la /output/$perf_file 2>/dev/null || false; then
+      docker cp "$PERF_MONITOR_CONTAINER:/output/$perf_file" "$results_dir/perf/$perf_file" && \
+      echo "Copied $perf_file to $results_dir/perf/$perf_file" || \
+      echo "[WARNING] Failed to copy $perf_file"
+    fi
+  done
+  chmod -R u+rw "$results_dir"
 fi
 
 # Step 19: Copy trace files after experiment
+mkdir -p "$results_dir/traces/bcc"
 if [ -n "$TRACE_CONTAINER" ]; then
-  if docker exec $TRACE_CONTAINER ls -la /opt/tracer/output/trace.csv 2>/dev/null; then
-    docker cp "$TRACE_CONTAINER:/opt/tracer/output/trace.csv" "$results_dir/traces/trace.csv" && \
-    echo "Copied trace file to $results_dir/traces/trace.csv" || \
-    echo "[ERROR] Failed to copy trace file"
+  if docker exec $TRACE_CONTAINER ls -la /opt/tracer/output/hpe_video_rx.csv 2>/dev/null || false; then
+    docker cp "$TRACE_CONTAINER:/opt/tracer/output/hpe_video_rx.csv" "$results_dir/traces/bcc/hpe_video_rx.csv" && \
+    echo "Copied BCC trace to $results_dir/traces/bcc/hpe_video_rx.csv" || \
+    echo "[ERROR] Failed to copy BCC trace file"
   else
-    echo "[WARNING] Could not find trace.csv in bcc-tracer."
+    echo "[WARNING] Could not find hpe_video_rx.csv in bcc-tracer."
   fi
+  # Also copy tracer log if present
+  docker cp "$TRACE_CONTAINER:/opt/tracer/output/logs/bcc-tracer.log" "$results_dir/logs/bcc-tracer-internal.log" 2>/dev/null || true
 fi
 
 # Step 20: Collect container logs before stopping
@@ -216,11 +222,20 @@ do
   fi
 done
 
-# Step 21: List files inside HPE container before cleanup (if it exists)
+# Step 21: Copy HPE output (CSVs, JSON) and list remaining files
 HPE_CONTAINER_ID=$(docker ps -aqf "name=^/hpe$")
+mkdir -p "$results_dir/hpe_output"
 if [ -n "$HPE_CONTAINER_ID" ]; then
-  echo "[DEBUG] Listing files inside HPE container before cleanup:"
-  docker exec $HPE_CONTAINER_ID ls -lh /output || echo "Could not list /output in HPE container"
+  echo "[DEBUG] Listing files inside HPE container /output:"
+  docker exec $HPE_CONTAINER_ID ls -lh /output 2>/dev/null || true
+  # Copy all CSVs and JSON produced by main.py
+  for ext in csv json; do
+    files=$(docker exec $HPE_CONTAINER_ID find /output -maxdepth 2 -name "*.${ext}" 2>/dev/null || true)
+    for f in $files; do
+      docker cp "$HPE_CONTAINER_ID:$f" "$results_dir/hpe_output/" && \
+      echo "Copied HPE output: $f" || echo "[WARNING] Failed to copy $f"
+    done
+  done
 fi
 
 # Step 22: Copy GPU metrics to results_dir/gpu/gpu_metrics.csv
