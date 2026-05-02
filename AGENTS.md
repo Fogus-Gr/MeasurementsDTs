@@ -131,7 +131,31 @@ output paths.
 the repo root are iteration history — do not use them for new work without
 checking whether `Dockerfile_base` already covers the need.
 
-### Known TODOs in Code
+### Known Issues — Benchmarking Platform
+
+The table below is the authoritative status of all confirmed bugs found during
+a full audit of the benchmarking platform. Update it when fixing or discovering
+issues.
+
+| # | File | Issue | Status |
+|---|---|---|---|
+| 1 | `ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py` | IP/port BPF filter was disabled — counted all TCP traffic instead of video stream only | ✅ Fixed (`256a21c`) |
+| 2 | `ffmpeg_hpe/plot_rx_bytes*.py` | Hardcoded absolute path to old VM — unusable on any other machine | ✅ Fixed (`3e09d55`) — now accepts CSV path as CLI arg |
+| 3 | `ffmpeg_hpe/plot_smi_output.py` | Column names didn't match `run_nvidia_dcgm.sh` output — crashed on every run | ✅ Fixed (`3e09d55`) |
+| 4 | `ffmpeg_hpe/docker-compose.yaml` | Build context hardcoded to `/home/user/MeasurementsDTs` | ✅ Fixed (`3e09d55`) — changed to `..` |
+| 5 | `ffmpeg_hpe/run_experiment.sh` | Referenced `trace_container` service (commented out) instead of `bcc-tracer` | ✅ Fixed (`3e09d55`) |
+| 6 | `monitor_hpe/monitor_pid.sh` | `write_net_stats()` wrote each entry twice | ✅ Fixed (`3e09d55`) |
+| 7 | `ffmpeg_hpe/entrypoint.sh` | GPU metrics cleanup after `exec` was unreachable | ✅ Fixed (`3e09d55`) — moved to EXIT trap |
+| 8 | Both `monitor_pid.sh` files | `ps -o %cpu` reports lifetime average, not per-interval CPU% | ✅ Fixed (`b6a9fd2`) — replaced with `/proc/$PID/stat` delta at 500ms |
+| 9 | `ffmpeg_hpe/run_experiment.sh` | `perf_monitor` output filename wrong (`aggregated_metrics.csv`) | ✅ Fixed (`3c006cf`) |
+| 10 | `ffmpeg_hpe/run_experiment.sh` | BCC tracer output filename wrong (`trace.csv` → `hpe_video_rx.csv`) | ✅ Fixed (`3c006cf`) |
+| 11 | `ffmpeg_hpe/run_experiment.sh` | HPE container output (keypoint CSVs/JSON) never copied to results dir | ✅ Fixed (`3c006cf`) |
+| 12 | Both `monitor_pid.sh` files | `netif_receive_skb` bpftrace PID filter fires in softirq context — RX bytes always ~0 | ⚠️ Open — use `bcc-tracer` for accurate RX |
+| 13 | `monitor_hpe/plot_graph.py` | Calls `plt.show()` — blocks in headless containers | ⚠️ Open |
+| 14 | `ffmpeg_hpe/plot_graph.py` | Empty file (0 bytes) | ⚠️ Open |
+| 15 | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | ⚠️ Open |
+
+### Known TODOs in HPE Inference Code
 - `movenet_hpe.py`: keypoint-level score filtering not yet applied to body
   score (marked `# TODO`).
 - `alphapose_hpe.py`: batch parallelism for directory input not implemented;
@@ -214,3 +238,38 @@ Resize/Pad input images based on the base model used
 ```
 
 Keep commits focused on one logical change.
+
+---
+
+## Session History
+
+### May 2026 — Full audit and bug-fix pass
+
+**Branch context recovered after VM loss.** Established that active work was
+on `cuda-dev` around July–September 2025, then `perf-tuning-base` from
+September 2025 onward. Commit `7f0a1cc` (Enhance video capture handling and
+OpenVINO configuration, Sep 18 2025) was the last confirmed working point
+before the VM was lost.
+
+**Branch comparison (`cuda-dev` vs `perf-tuning-base`):**
+`perf-tuning-base` is a stripped-down, production-focused rewrite of
+`cuda-dev`. Key differences: removed HTTP stream byte-reader, structured
+logging, timeout/max-frames CLI args, `PoseMonitor`, `video_detection.py`.
+Added two new multi-stage Dockerfiles. Changed COCO output field
+`frame_number` → `image_id`. OpenVINO knobs hardcoded instead of env-var
+driven.
+
+**Wiki added to `perf-tuning-base`** (commits `343a114`, `5cbd7d5`,
+`362127e`): auto-generated Qoder repowiki under `.qoder/repowiki/` covering
+all major subsystems. Note: wiki describes BCC IP/port filter as active — this
+was inaccurate at time of generation (filter was disabled).
+
+**Fixes applied** (all on `perf-tuning-base`, all pushed):
+
+| Commit | What |
+|---|---|
+| `256a21c` | Re-enable IP/port BPF filter in `bcc_rx_bytes.py`; remove per-packet debug `bpf_trace_printk` |
+| `3e09d55` | 7 fixes: plot hardcoded paths, `plot_smi_output.py` columns, docker-compose build context, `run_experiment.sh` service name, `monitor_pid.sh` double-write, `entrypoint.sh` EXIT trap, CPU% method |
+| `b6a9fd2` | Replace `pidstat 1 1` (blocks 1s) with `/proc/$PID/stat` delta — preserves 500ms sampling cadence |
+| `3c006cf` | Fix `run_experiment.sh` result collection: correct filenames for bcc-tracer and perf_monitor output, add HPE output copy step, guard `docker exec` calls against `set -e` |
+| `7493830` | Expand README: newcomer orientation, experiment rigs table, known issues table |
