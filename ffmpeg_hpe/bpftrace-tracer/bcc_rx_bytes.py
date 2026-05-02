@@ -35,7 +35,6 @@ def main():
 BPF_HASH(rx_bytes, u32, u64);
 
 int count_rx(struct __sk_buff *skb) {
-    bpf_trace_printk("BPF called\\n");
     u32 zero = 0;
     u64 len = skb->len;
     int cursor = 0;
@@ -60,12 +59,9 @@ int count_rx(struct __sk_buff *skb) {
     if (bpf_skb_load_bytes(skb, cursor, &tcp, sizeof(tcp)) < 0)
         return 0;
 
-    // Debug: print parsed values to /sys/kernel/debug/tracing/trace_pipe
-    // bpf_trace_printk("saddr: %%x, sport: %%d, dport: %%d\\n", ip.saddr, tcp.source, tcp.dest);
-
-    // Temporarily disable IP/port filter for debugging
-    // if (ip.saddr != htonl(%d) || tcp.source != htons(%d) || tcp.dest != htons(%d))
-    //     return 0;
+    // Filter: only count packets from the streamer IP on the expected ports
+    if (ip.saddr != htonl(%d) || tcp.source != htons(%d) || tcp.dest != htons(%d))
+        return 0;
 
     u64 *val = rx_bytes.lookup_or_init(&zero, &len);
     if (val) (*val) += len;
