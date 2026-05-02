@@ -325,6 +325,36 @@ Six Dockerfiles at the repo root represent iteration history on the HPE containe
 | `Dockerfile_combined_multistage_app` | Multi-stage build attempt |
 | `Dockerfile_optimized_multistage_v4` | Latest multi-stage optimised build |
 
+### Network Monitoring Architecture
+
+The benchmarking platform uses two different tools to measure network traffic,
+each handling one direction. They are complementary, not redundant.
+
+| Tool | Container | Direction | Method | Works? |
+|---|---|---|---|---|
+| `bpftrace` in `monitor_pid.sh` | `perf_monitor` | **TX** (HPE → outside) | `sys_enter_sendto` tracepoint — fires in HPE process context, PID filter valid | ✅ |
+| `bcc_rx_bytes.py` | `bcc-tracer` | **RX** (stream → HPE) | BPF socket filter on `eth0` filtered by streamer IP + port | ✅ |
+| `bpftrace netif_receive_skb` in `monitor_pid.sh` | `perf_monitor` | RX (attempted) | Fires in softirq/kernel context — PID filter never matches HPE process | ❌ always 0 |
+
+**Why the split?**
+
+- TX can be measured by PID because `sendto()` is a syscall made by the HPE
+  process — the kernel knows which process called it.
+- RX cannot be measured by PID because incoming packets are handled by the
+  kernel's network stack in softirq context, before they are associated with
+  any process. The only reliable way to filter is by IP address and port.
+
+`bcc-tracer` solves this by running a BPF socket filter attached directly to
+`eth0`, filtering packets from the streamer's IP and port. It runs in a
+separate container that shares HPE's network namespace
+(`network_mode: service:hpe`) so it sees exactly the same traffic HPE sees.
+
+**For accurate RX measurement always use `bcc-tracer`**, not the bpftrace RX
+column in `network_stats.csv` — that column is always ~0.
+
+The TX measurement from `bpftrace` in `monitor_pid.sh` is valid and can be
+used as-is.
+
 ### Known Issues and Gotchas
 
 These are confirmed issues in the codebase. Fixes marked ✅ are already applied on `perf-tuning-base`.

@@ -131,6 +131,34 @@ output paths.
 the repo root are iteration history — do not use them for new work without
 checking whether `Dockerfile_base` already covers the need.
 
+### Network Monitoring — TX vs RX Tool Split
+
+The platform uses two different tools to measure network traffic. They are
+complementary, not redundant. Understanding this split is essential before
+modifying any monitoring code.
+
+| Tool | Container | Direction | Mechanism | Status |
+|---|---|---|---|---|
+| `bpftrace sys_enter_sendto` in `monitor_pid.sh` | `perf_monitor` | **TX** (HPE → outside) | Syscall tracepoint — fires in HPE process context, PID filter valid | ✅ works |
+| `bcc_rx_bytes.py` | `bcc-tracer` | **RX** (stream → HPE) | BPF socket filter on `eth0`, filtered by streamer IP + port | ✅ works (filter re-enabled `256a21c`) |
+| `bpftrace netif_receive_skb` in `monitor_pid.sh` | `perf_monitor` | RX (attempted) | Network tracepoint fires in softirq context — PID never matches HPE | ❌ always ~0 |
+
+**Why TX and RX need different approaches:**
+- `sendto()` is a syscall made by the HPE process — the kernel knows the PID,
+  so bpftrace PID filtering works.
+- Incoming packets are processed by the kernel network stack in softirq
+  context before being associated with any process — PID filtering is
+  impossible. Must filter by IP/port instead.
+
+`bcc-tracer` runs in a container sharing HPE's network namespace
+(`network_mode: service:hpe`) and attaches a BPF socket filter to `eth0`
+filtering by streamer IP + HPE ephemeral port (auto-detected via `ss -ntp`
+in `entrypoint.sh`).
+
+**Rule:** for RX data use `traces/bcc/hpe_video_rx.csv`. For TX data use
+`network_stats.csv` from `perf_monitor`. Never use the RX column from
+`network_stats.csv` — it is always ~0.
+
 ### Known Issues — Benchmarking Platform
 
 The table below is the authoritative status of all confirmed bugs found during
