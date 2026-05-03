@@ -99,7 +99,7 @@ STREAM_URL="http://${STREAM_SERVER_IP}:8089/stream.h264"
 echo "[DEBUG] Using direct IP for stream: $STREAM_URL"
 
 # Step 10: Set environment variables for hpe service (method, input, device)
-export HPE_METHOD="$1"
+export HPE_METHOD="${1:-movenet}"
 export HPE_INPUT="$STREAM_URL"
 export HPE_DEVICE="CPU"
 if [[ "$1" == "alphapose" || "$arguments" == *"--method alphapose"* || \
@@ -108,10 +108,10 @@ if [[ "$1" == "alphapose" || "$arguments" == *"--method alphapose"* || \
 fi
 
 # Step 11: Start hpe container with Compose
+hpe_start=$(date +%s.%N)
 docker compose -f $docker_compose_file up -d hpe
 
 # Step 12: Measure hpe container startup time
-hpe_start=$(date +%s.%N)
 measure_container_startup "$HPE_SERVICE" "$hpe_start"
 
 # Step 13: Capture initial logs from hpe container
@@ -133,23 +133,30 @@ measure_container_startup "perf_monitor" "$perf_monitor_start"
 measure_container_startup "bcc-tracer" "$perf_monitor_start"
 measure_container_startup "gpu-metrics" "$perf_monitor_start"
 
-# Step 15: Get all PIDs inside the hpe container (for monitoring)
+# Step 15: Get the main.py PID inside the hpe container (for monitoring)
+# pgrep extracts just the PID — ps -ef would write the full process table
+# which monitor_pid.sh cannot parse as a PID
 mkdir -p ./pids
 HPE_CONTAINER=$(docker ps -qf "name=^/hpe$")
 if [ -n "$HPE_CONTAINER" ]; then
-  for attempt in {1..3}; do
-    if docker exec $HPE_CONTAINER ps -ef > ./pids/hpe.pid 2>/dev/null; then
-      cat ./pids/hpe.pid
+  for attempt in {1..5}; do
+    HPE_PID=$(docker exec $HPE_CONTAINER pgrep -f "python.*main.py" 2>/dev/null | head -1)
+    if [ -n "$HPE_PID" ]; then
+      echo "$HPE_PID" > ./pids/hpe.pid
+      echo "[DEBUG] HPE main.py PID: $HPE_PID"
       break
     else
+      echo "[DEBUG] Waiting for main.py to start (attempt $attempt/5)..."
       sleep 2
     fi
   done
+  if [ ! -s ./pids/hpe.pid ]; then
+    echo "[WARNING] Could not find main.py PID in HPE container — monitor_pid.sh will not track the process"
+  fi
 fi
 
 # Step 16: Monitor hpe container until it exits (no timeout)
 # The loop checks every 5s if the hpe container is still running
-HPE_MONITOR_START=$(date +%s)
 while true; do
   HPE_CONTAINER=$(docker ps -q --filter "name=^/hpe$")
   if [ -z "$HPE_CONTAINER" ]; then
@@ -170,6 +177,16 @@ while true; do
 done
 
 echo "[DEBUG] Ending the experiment..."
+
+# Check HPE container exit code — distinguishes clean exit from crash/OOM
+HPE_CONTAINER_FINAL=$(docker ps -aqf "name=^/hpe$")
+if [ -n "$HPE_CONTAINER_FINAL" ]; then
+  hpe_exit_code=$(docker inspect --format='{{.State.ExitCode}}' "$HPE_CONTAINER_FINAL" 2>/dev/null || echo "unknown")
+  echo "[INFO] HPE container exit code: $hpe_exit_code" | tee -a "$results_dir/logs/hpe_exit.log"
+  if [ "$hpe_exit_code" != "0" ] && [ "$hpe_exit_code" != "unknown" ]; then
+    echo "[WARNING] HPE container exited with non-zero code ($hpe_exit_code) — results may be incomplete"
+  fi
+fi
 
 # Step 17: Wait for the hpe container name to be fully released (avoid name conflicts)
 for i in {1..10}; do

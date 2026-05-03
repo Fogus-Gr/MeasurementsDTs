@@ -13,7 +13,7 @@ services:
       - ../videos:/app/videos:ro
     environment:
       - SERVER_PORT=8089
-      - VIDEO_FILE=${VIDEO_FILE}
+      - VIDEO_FILE=${VIDEO_FILE:-/app/videos/rangeOfMotion/vga_01_01.mp4}
     networks:
       - streaming-network
     healthcheck:
@@ -117,6 +117,7 @@ services:
       start_period: 10s
 
   perf_monitor:
+    container_name: perf_monitor
     build:
       context: ../recent-dash/perf_monitor
       dockerfile: Dockerfile
