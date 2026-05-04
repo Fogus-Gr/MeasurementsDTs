@@ -49,7 +49,7 @@ capture_diagnostics() {
 timestamp=$(date +%Y%m%d_%H%M%S)
 cpu_model=$(lscpu | grep "Model name" | sed 's/.*: *//g' | tr -s ' ' '_' | tr -d ',()/')
 start_time=$(date +%s)
-container_type=${1:-hpe}
+container_type=${1:-movenet}
 arguments=${2:-""}
 results_dir="results_${container_type}_${cpu_model}_${timestamp}"
 mkdir -p "$results_dir/logs" "$results_dir/traces" "$results_dir/perf"
@@ -239,20 +239,16 @@ do
   fi
 done
 
-# Step 21: Copy HPE output (CSVs, JSON) and list remaining files
-HPE_CONTAINER_ID=$(docker ps -aqf "name=^/hpe$")
+# Step 21: Copy HPE output (CSVs, JSON) from bind-mounted host path
+# The HPE container mounts ./results:/output so files are already on the host.
+# docker exec cannot be used here — the container has already exited by this point.
 mkdir -p "$results_dir/hpe_output"
-if [ -n "$HPE_CONTAINER_ID" ]; then
-  echo "[DEBUG] Listing files inside HPE container /output:"
-  docker exec $HPE_CONTAINER_ID ls -lh /output 2>/dev/null || true
-  # Copy all CSVs and JSON produced by main.py
-  for ext in csv json; do
-    files=$(docker exec $HPE_CONTAINER_ID find /output -maxdepth 2 -name "*.${ext}" 2>/dev/null || true)
-    for f in $files; do
-      docker cp "$HPE_CONTAINER_ID:$f" "$results_dir/hpe_output/" && \
-      echo "Copied HPE output: $f" || echo "[WARNING] Failed to copy $f"
-    done
-  done
+if compgen -G "./results/*.csv" > /dev/null 2>&1 || compgen -G "./results/*.json" > /dev/null 2>&1; then
+  cp ./results/*.csv "$results_dir/hpe_output/" 2>/dev/null || true
+  cp ./results/*.json "$results_dir/hpe_output/" 2>/dev/null || true
+  echo "Copied HPE output files to $results_dir/hpe_output/"
+else
+  echo "[WARNING] No CSV or JSON files found in ./results — HPE may not have produced output"
 fi
 
 # Step 22: Copy GPU metrics to results_dir/gpu/gpu_metrics.csv
