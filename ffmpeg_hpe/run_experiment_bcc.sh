@@ -55,7 +55,7 @@ capture_diagnostics() {
 
 # Step 4: Prepare results directory with BCC subdirectory
 # Use HPE_METHOD as container_type for results dir naming
-container_type="$1"
+container_type="${1:-movenet}"
 
 # Load VIDEO_FILE from .env if not set
 if [[ -z "$VIDEO_FILE" ]]; then
@@ -81,6 +81,7 @@ if [[ -z "$device_type" ]]; then
   device_type="CPU"
 fi
 
+start_time=$(date +%s)
 results_dir="results_${container_type}_${cpu_threads}cores_${device_type}_${VIDEO_FILE_BASENAME}_${timestamp}"
 mkdir -p "$results_dir/logs" "$results_dir/traces/bcc" "$results_dir/perf"
 
@@ -131,7 +132,7 @@ echo "[DEBUG] Using direct IP for stream: $STREAM_URL"
 # Step 10: Configure HPE environment
 arguments="$*"  # Capture all arguments
 
-export HPE_METHOD="$1"
+export HPE_METHOD="${1:-movenet}"
 export HPE_INPUT="http://h264-streaming-server:8089/stream.h264"
 export HPE_DEVICE="${HPE_DEVICE:-CPU}"
 # Method-specific defaults
@@ -155,8 +156,8 @@ echo "Input: $HPE_INPUT"
 
 
 # Step 11: Start HPE container
-docker compose -f $docker_compose_file up -d hpe
 hpe_start=$(date +%s.%N)
+docker compose -f $docker_compose_file up -d hpe
 measure_container_startup "$HPE_SERVICE" "$hpe_start"
 
 # Step 12: Start monitoring containers with BCC support
@@ -193,17 +194,37 @@ done
 
 if [[ -z "$detected_port" ]]; then
   echo "[WARNING] BCC tracer did not detect HPE video port after 20 seconds."
-  # Optionally: exit 1 or continue
 fi
 echo "[DEBUG] waiting for experiment to finish..."
 
-# Step 13: Collect initial logs
+# Step 13: Get the main.py PID inside the hpe container (for monitor_pid.sh)
+# pgrep extracts just the PID — ps -ef writes the full process table which
+# monitor_pid.sh cannot parse as a PID
+mkdir -p ./pids
+HPE_CONTAINER=$(docker ps -qf "name=^/hpe$")
+if [ -n "$HPE_CONTAINER" ]; then
+  for attempt in {1..5}; do
+    HPE_PID=$(docker exec $HPE_CONTAINER pgrep -f "python.*main.py" 2>/dev/null | head -1)
+    if [ -n "$HPE_PID" ]; then
+      echo "$HPE_PID" > ./pids/hpe.pid
+      echo "[DEBUG] HPE main.py PID: $HPE_PID"
+      break
+    else
+      echo "[DEBUG] Waiting for main.py to start (attempt $attempt/5)..."
+      sleep 2
+    fi
+  done
+  if [ ! -s ./pids/hpe.pid ]; then
+    echo "[WARNING] Could not find main.py PID — monitor_pid.sh will not track the process"
+  fi
+fi
+
+# Step 13b: Collect initial logs
 sleep 2  # Allow containers to stabilize
 docker logs $(docker ps -qf "name=^/hpe$") > "$results_dir/logs/hpe_startup.log" 2>&1
 docker logs $TRACE_CONTAINER > "$results_dir/logs/bcc_tracer_startup.log" 2>&1
 
 # Step 14: Monitor experiment progress
-HPE_MONITOR_START=$(date +%s)
 while true; do
   HPE_CONTAINER=$(docker ps -q --filter "name=^/hpe$")
   if [ -z "$HPE_CONTAINER" ]; then
@@ -220,13 +241,30 @@ while true; do
   sleep 5
 done
 
+# Check HPE container exit code — distinguishes clean exit from crash/OOM
+HPE_CONTAINER_FINAL=$(docker ps -aqf "name=^/hpe$")
+if [ -n "$HPE_CONTAINER_FINAL" ]; then
+  hpe_exit_code=$(docker inspect --format='{{.State.ExitCode}}' "$HPE_CONTAINER_FINAL" 2>/dev/null || echo "unknown")
+  echo "[INFO] HPE container exit code: $hpe_exit_code" | tee -a "$results_dir/logs/hpe_exit.log"
+  if [ "$hpe_exit_code" != "0" ] && [ "$hpe_exit_code" != "unknown" ]; then
+    echo "[WARNING] HPE container exited with non-zero code ($hpe_exit_code) — results may be incomplete"
+  fi
+fi
+
 # Step 15: Enhanced data collection
 echo "[DEBUG] Collecting experiment results..."
 
-# Performance data
+# Performance data — loop over all filenames written by perf_monitor variants
+mkdir -p "$results_dir/perf"
 if [ -n "$PERF_MONITOR_CONTAINER" ]; then
-  docker cp "$PERF_MONITOR_CONTAINER:/output/aggregated_metrics.csv" "$results_dir/perf/performance_data.csv" 2>/dev/null || \
-    echo "[WARNING] Failed to copy performance data"
+  for perf_file in perf_metrics.csv pid_metrics.csv network_stats.csv; do
+    if docker exec $PERF_MONITOR_CONTAINER ls -la /output/$perf_file 2>/dev/null || false; then
+      docker cp "$PERF_MONITOR_CONTAINER:/output/$perf_file" "$results_dir/perf/$perf_file" && \
+      echo "Copied $perf_file to $results_dir/perf/$perf_file" || \
+      echo "[WARNING] Failed to copy $perf_file"
+    fi
+  done
+  chmod -R u+rw "$results_dir"
 fi
 
 # GPU metrics
@@ -252,8 +290,15 @@ for container in "${container_list[@]}"; do
   [ -n "$container_id" ] && docker logs $container_id > "$results_dir/logs/$container.log" 2>&1
 done
 
+# HPE output — read from bind-mounted host path (container has already exited)
 mkdir -p "$results_dir/hpe_output"
-cp ./results/*.csv "$results_dir/hpe_output/" 2>/dev/null || echo "[WARNING] No CSVs found in ./results"
+if compgen -G "./results/*.csv" > /dev/null 2>&1 || compgen -G "./results/*.json" > /dev/null 2>&1; then
+  cp ./results/*.csv "$results_dir/hpe_output/" 2>/dev/null || true
+  cp ./results/*.json "$results_dir/hpe_output/" 2>/dev/null || true
+  echo "Copied HPE output files to $results_dir/hpe_output/"
+else
+  echo "[WARNING] No CSV or JSON files found in ./results — HPE may not have produced output"
+fi
 
 # Step 16: Cleanup
 echo "[DEBUG] Stopping and cleaning up containers..."
