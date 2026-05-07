@@ -1,5 +1,7 @@
 #!/bin/bash
-# Containerized GPU metrics logger
+# Containerized GPU metrics logger using nvidia-smi.
+# Note: despite the filename, this script uses nvidia-smi — not DCGM (Data Center GPU Manager).
+# Renaming would break references in Dockerfile.gpu_metrics and run_experiment*.sh — kept as-is.
 
 set -e
 
