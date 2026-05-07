@@ -62,6 +62,38 @@ For detailed technical reference, see these companion documents in the `docs/` f
 
 ## 2. Repository Layout
 
+### Folder Roles at a Glance
+
+The top-level folders fall into three categories:
+
+#### Experiment Rigs — have `run_experiment.sh`, orchestrate the full lifecycle
+
+| Folder | Entry Point | What it measures |
+|---|---|---|
+| `ffmpeg_hpe/` | `run_experiment.sh` / `run_experiment_bcc.sh` | HPE inference on H.264 stream + full monitoring stack |
+| `monitor_hpe/` | `run_experiment.sh` | HPE inference baseline — CPU/memory only, no streaming server |
+| `recent-dash/` | `run_experiment.sh` | DASH/HTTP caching research — separate thread |
+
+#### Service Implementations — provide Docker images consumed by the rigs
+
+| Folder | Used by | Role in `docker-compose.yaml` |
+|---|---|---|
+| `rtsp-ipcam/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `h264-streaming-server` container |
+| `recent-dash/perf_monitor/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `perf_monitor` container |
+| `ffmpeg_hpe/bpftrace-tracer/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `bcc-tracer` container |
+| `ffmpeg_hpe/Dockerfile.gpu_metrics` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `gpu-metrics` container |
+| `Dockerfile_base` (repo root) | `ffmpeg_hpe/` + `monitor_hpe/` | Builds the `hpe` container (the inference engine) |
+
+#### Standalone Tools — run independently, not part of any compose stack
+
+| Folder | What it does |
+|---|---|
+| `Measure_Flops/` | GPU FLOPS measurement via Nsight Compute |
+| `Measure_gpu_dcgm/` | GPU power/temp/util via nvidia-smi (standalone, no compose) |
+| `Measure_plot_cpu_perf/` | CPU cycles via `perf stat` |
+| `optimizations/` | OpenVINO CPU thread/stream tuning scripts |
+| `dev_tools/` | Local MJPEG stream server for manual testing |
+
 ```
 MeasurementsDTs/
 ├── main.py                        # CLI entrypoint — selects HPE method and dispatches
@@ -527,22 +559,42 @@ Results are saved to a timestamped directory inside `ffmpeg_hpe/`:
 
 ```
 results_alphapose_AMD_EPYC_7551P_32-Core_20250428_120000/
-├── container_timing.txt       # Startup time per container (seconds)
+├── container_timing.txt         # Startup time per container (seconds)
 ├── logs/
-│   ├── hpe_startup.log        # HPE container early startup output
-│   ├── hpe_startup_full.log   # Full HPE container log
-│   ├── perf_monitor.log       # bpftrace perf monitor log
-│   ├── bcc-tracer.log         # BCC tracer log (port detection, tracing events)
-│   └── gpu-metrics.log        # GPU metrics collector log
+│   ├── hpe_startup.log          # HPE container early startup output
+│   ├── hpe_startup_full.log     # Full HPE container log
+│   ├── hpe_exit.log             # HPE container exit code (0 = clean, non-zero = crash)
+│   ├── perf_monitor.log         # bpftrace perf monitor log
+│   ├── bcc-tracer.log           # BCC tracer log (port detection, tracing events)
+│   └── gpu-metrics.log          # GPU metrics collector log
 ├── perf/
-│   └── aggregated_metrics.csv # Columns: timestamp, cpu_percent, mem_rss_mb
+│   ├── pid_metrics.csv          # Columns: timestamp, pid, cpu_percent, mem_rss_kb, tx_bytes*, rx_bytes*
+│   ├── network_stats.csv        # Columns: timestamp, pid, interface, bytes, sent  ← TX data lives here
+│   └── perf_metrics.csv         # Additional perf_monitor metrics
 ├── gpu/
-│   └── gpu_metrics.csv        # Columns: timestamp, gpu_util, mem_used, temp, power
+│   └── gpu_metrics.csv          # Columns: timestamp, gpu_id, gpu_utilization, mem_utilization, temperature, power_usage
 ├── traces/bcc/
-│   └── hpe_video_rx.csv       # Columns: timestamp_ms, rx_bytes (per 10ms interval)
+│   └── hpe_video_rx.csv         # Columns: timestamp_ms, rx_bytes (per 10ms interval)  ← RX data lives here
 └── hpe_output/
-    └── *.csv                  # Keypoint data: frame, person_id, joint coords
+    ├── *.csv                    # Keypoint data: frame, person_id, joint coordinates
+    └── *.json                   # COCO-format keypoint export (if --json flag used)
 ```
+
+> `*` The `tx_bytes` and `rx_bytes` columns in `pid_metrics.csv` are always `0` — this is intentional. Network data is collected separately by two different tools (see below).
+
+### TX and RX Network Data — Where to Find It
+
+Network measurement requires two different tools because TX and RX operate in different kernel contexts:
+
+| Direction | Tool | Container | Mechanism | Output file |
+|---|---|---|---|---|
+| **TX** (HPE → outside) | `bpftrace sys_enter_sendto` in `monitor_pid.sh` | `perf_monitor` | Syscall tracepoint — fires in HPE process context, PID filter valid | `perf/network_stats.csv` (rows where `sent=1`) |
+| **RX** (stream → HPE) | `bcc_rx_bytes.py` | `bcc-tracer` | BPF socket filter on `eth0`, filtered by streamer IP + port | `traces/bcc/hpe_video_rx.csv` |
+| ~~RX (attempted)~~ | ~~`bpftrace netif_receive_skb`~~ | ~~`perf_monitor`~~ | ~~Fires in softirq/kernel context — PID never matches HPE~~ | ~~Always ~0, ignore~~ |
+
+**Why the split is necessary:** `sendto()` is a syscall made by the HPE process — the kernel knows the PID. Incoming packets are processed by the kernel network stack in softirq context *before* being associated with any process — PID filtering is impossible at that point. `bcc-tracer` works around this by filtering by IP+port instead, running in a container that shares HPE's network namespace (`network_mode: service:hpe`).
+
+**Rule:** for RX data use `traces/bcc/hpe_video_rx.csv`. For TX data use `perf/network_stats.csv`. Never use the RX column from `pid_metrics.csv` — it is always `0` by design.
 
 ### Quick Data Inspection
 
