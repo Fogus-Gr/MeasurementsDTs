@@ -10,8 +10,6 @@ import logging
 import requests
 import re
 import json
-import socket
-import select
 
 try:
     import PyNvCodec as nvc
@@ -23,34 +21,6 @@ from utils.visualizer import render
 from utils.evaluator import append_COCO_format_json, append_COCO_format_csv, save_COCO_format_json, save_COCO_format_csv, save_Tx_csv_data
 import json
 from datetime import datetime
-
-def get_available_data(r, max_read=10*1024*1024):  # 10MB max
-    """Read all available data from the socket without blocking"""
-    data = b""
-    try:
-        # Get the underlying socket
-        sock = r.raw._fp.fp.raw._sock if hasattr(r.raw._fp.fp, 'raw') else r.raw._fp.fp._sock
-        
-        # Set non-blocking
-        sock.setblocking(False)
-        
-        while len(data) < max_read:
-            # Check if data is ready
-            ready = select.select([sock], [], [], 0.01)  # 10ms timeout
-            if ready[0]:
-                chunk = sock.recv(65536)  # Read up to 64KB
-                if not chunk:
-                    break
-                data += chunk
-            else:
-                break
-    except (BlockingIOError, socket.timeout):
-        # No more data available
-        pass
-    except Exception as e:
-        print(f"Error reading from socket: {e}")
-    
-    return data
 
 class Body:
     def __init__(self, score, xmin, ymin, xmax, ymax, keypoints_score, keypoints, keypoints_norm):
@@ -388,87 +358,64 @@ class BaseHPE(ABC):
 
             else:   # video/webcam/stream fallback   
                 url = self.input_src
-                r = requests.get(url, stream=True, timeout=30)
+                r = requests.get(url, stream=True)
                 buffer = b""
 
                 print("Starting processing video/webcam data from HTTP stream. Press CTRL+C to exit")
 
-                try:
-                    consecutive_failures = 0
-                    max_consecutive_failures = 10
-                    
+                consecutive_failures = 0
+                max_consecutive_failures = 10
+
+                for chunk in r.iter_content(chunk_size=1024):
+                    buffer += chunk
                     while True:
-                        # Read ALL available data from the socket
-                        new_data = get_available_data(r)
-                        if new_data:
-                            buffer += new_data
-                            #print(f"Read {len(new_data)} bytes, total buffer: {len(buffer)} bytes")
-                        
-                        # Find ALL complete frames in the buffer
-                        frames = []
-                        search_pos = 0
-                        while True:
-                            soi = buffer.find(b'\xFF\xD8', search_pos)
-                            if soi == -1:
-                                break
-                            eoi = buffer.find(b'\xFF\xD9', soi + 2)
-                            if eoi != -1:
-                                frames.append((soi, eoi))
-                                search_pos = eoi + 2
-                            else:
-                                break
-                        
-                        # If we have frames, process ONLY THE LAST ONE
-                        if frames:
-                            last_soi, last_eoi = frames[-1]
-                            
-                            # Report skipping
-                            if len(frames) > 1:
-                                print(f"SKIPPING {len(frames)-1}")
-                            
-                            # Extract frame data
-                            header_region = buffer[max(0, last_soi-200):last_soi]
+                        # Check timeout
+                        if time.time() - start_time > timeout_seconds:
+                            print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
+                            break
+
+                        # Check max frames
+                        if max_frames > 0 and frame_idx >= max_frames:
+                            print(f"Max frames reached ({max_frames}) - stopping processing")
+                            break
+
+                        soi = buffer.find(b'\xFF\xD8')
+                        eoi = buffer.find(b'\xFF\xD9', soi + 2)
+
+                        if soi != -1 and eoi != -1:
+                            header_region = buffer[max(0, soi-200):soi]  # look back 200 bytes
                             frame_number = extract_x_metadata(header_region)
                             
-                            frame_data = buffer[last_soi:last_eoi+2]
-                            
-                            # Remove ALL data up to and including the processed frame
-                            buffer = buffer[last_eoi+2:]
-                                                        
-                            # Decode and process frame
+                            frame_data = buffer[soi:eoi+2]
+                            buffer = buffer[eoi+2:]
+
                             frame = cv2.imdecode(np.frombuffer(frame_data, np.uint8), cv2.IMREAD_COLOR)
-                            if frame is not None:
-                                self.process_frame(frame, frame_number)
-                                frame_idx += 1
-                                consecutive_failures = 0
-                                
-                                if frame_idx % 10 == 0:  # More frequent updates
-                                    elapsed = time.time() - start_time
-                                    fps = frame_idx / elapsed if elapsed > 0 else 0
-                                    #print(f"Processed {frame_idx} frames in {elapsed:.1f}s (avg {fps:.1f} FPS)")
-                            else:
+                            if frame is None:
                                 consecutive_failures += 1
                                 print(f"Frame decode failed ({consecutive_failures}/{max_consecutive_failures})")
                                 if consecutive_failures >= max_consecutive_failures:
                                     print("Too many decode failures, stopping.")
                                     break
-                        
-                        # Small sleep to prevent CPU spinning
-                        time.sleep(0.001)
-                        
-                        # Check termination conditions
-                        if time.time() - start_time > timeout_seconds:
-                            print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
-                            break
-                        if max_frames > 0 and frame_idx >= max_frames:
-                            print(f"Max frames reached ({max_frames}) - stopping processing")
+                                else:
+                                    print(f"Frame read failed ({consecutive_failures}/{max_consecutive_failures}), retrying...")
+                                    time.sleep(0.1)
+                                continue
+                            else:
+                                consecutive_failures = 0  # Reset on successful read
+
+                            self.process_frame(frame, frame_number)
+                            frame_idx += 1
+                    
+                            # Progress update every 100 frames
+                            if frame_idx % 100 == 0:
+                                elapsed = time.time() - start_time
+                                fps = frame_idx / elapsed if elapsed > 0 else 0
+                                print(f"Processed {frame_idx} frames in {elapsed:.1f}s (avg {fps:.1f} FPS)")
+                        else:
                             break
 
-                except Exception as e:
-                    print(f"Error in processing loop: {e}")
-
-                print(f"Processing completed. Total frames processed: {frame_idx}")
-                print(f"Total time: {time.time() - start_time:.1f}s")
+            print(f"Processing completed. Total frames processed: {frame_idx}")
+            print(f"Total time: {time.time() - start_time:.1f}s")
 
         except Exception as e:
             print(f"[ERROR] Processing failed: {e}")
