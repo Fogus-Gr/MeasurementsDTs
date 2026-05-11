@@ -38,8 +38,16 @@ capture_diagnostics() {
   else
     echo "No HPE container found"
   fi
-  echo "[DEBUG] RTSP broker availability:"
-  nc -z rtsp-broker 8554 2>&1 && echo "RTSP port 8554 reachable" || echo "RTSP port 8554 not reachable"
+  echo "[DEBUG] RTSP broker availability (host-side, MediaMTX publishes 8554):"
+  # NOTE: probe localhost from the host. `rtsp-broker` is a docker-bridge DNS
+  # name and is only resolvable from inside containers on streaming-network.
+  if command -v nc >/dev/null 2>&1; then
+    nc -z localhost 8554 2>&1 && echo "RTSP port 8554 reachable on localhost" || echo "RTSP port 8554 not reachable on localhost"
+  else
+    (echo > /dev/tcp/127.0.0.1/8554) 2>/dev/null \
+      && echo "RTSP port 8554 reachable on localhost (bash /dev/tcp)" \
+      || echo "RTSP port 8554 not reachable on localhost"
+  fi
   echo "[DEBUG] ===== END DIAGNOSTICS ====="
 }
 
@@ -61,8 +69,8 @@ echo "Preparing results directory: $results_dir"
 # Step 6: Compose file and container names
 docker_compose_file="docker-compose.yaml"
 HPE_SERVICE="hpe"
-RTSP_BROKER_NAME="mediamtx"      # MediaMTX container (was: h264-streaming-server)
-STREAMER_NAME="video-producer"   # FFmpeg NVENC streamer container
+# Container names (mediamtx = RTSP broker; video-producer = FFmpeg NVENC streamer)
+# are set via container_name: in docker-compose.yaml.
 
 # Step 7: Stop and remove any existing containers from previous runs
 echo "Stopping and removing existing containers..."
@@ -72,22 +80,34 @@ docker rm -f hpe 2>/dev/null || true
 touch "$results_dir/container_timing.txt"
 echo "Container Instantiation Timing:" > "$results_dir/container_timing.txt"
 
-# Step 8: Start the RTSP broker and wait for it to become healthy
+# Step 8: Start the RTSP broker and wait for the RTSP port to accept connections.
+# We do NOT use docker healthchecks here — MediaMTX is a distroless image with no
+# shell, so any CMD-SHELL probe fails forever. Instead, probe the published TCP
+# port 8554 from the host. This works because the rtsp-broker service publishes
+# 8554:8554, and Docker only opens the host port once the container is running.
 echo "Starting rtsp-broker (MediaMTX)..."
 docker compose -f $docker_compose_file up -d rtsp-broker
 
-# Wait for healthcheck to pass (max 60s)
+probe_rtsp_port() {
+  if command -v nc >/dev/null 2>&1; then
+    nc -z localhost 8554 >/dev/null 2>&1
+  else
+    (echo > /dev/tcp/127.0.0.1/8554) >/dev/null 2>&1
+  fi
+}
+
 wait_start=$(date +%s)
 wait_timeout=60
-while [[ $(docker inspect --format='{{.State.Health.Status}}' $RTSP_BROKER_NAME 2>/dev/null) != "healthy" ]]; do
-  echo "Waiting for rtsp-broker (MediaMTX) to become healthy..."
+until probe_rtsp_port; do
+  echo "Waiting for rtsp-broker (MediaMTX) RTSP port 8554..."
   current=$(date +%s)
   if [ $((current - wait_start)) -gt $wait_timeout ]; then
-    echo "[WARNING] RTSP broker healthcheck timed out, continuing anyway..."
+    echo "[WARNING] RTSP broker readiness timed out after ${wait_timeout}s, continuing anyway..."
     break
   fi
   sleep 2
 done
+echo "[DEBUG] rtsp-broker accepting connections on localhost:8554"
 
 # Step 8b: Start the NVENC streamer
 echo "Starting video-producer (FFmpeg NVENC streamer)..."

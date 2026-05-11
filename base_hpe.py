@@ -149,32 +149,9 @@ class BaseHPE(ABC):
             self.img_dir = input_src
             self.video_fps = 25
         elif input_src:
-            if _is_stream_url(input_src):  # HTTP or RTSP stream
-                self.input_type = "video"  # treat any URL-based stream as video
-                if nvc is None:
-                    print("[ERROR] PyNvCodec not available. Falling back to OpenCV for video decoding.")
-                    if hasattr(self, '_init_opencv_video_capture'):
-                        self._init_opencv_video_capture(input_src)
-                    else:
-                        raise NotImplementedError(f"Video input ({input_src}) is not supported by this HPE implementation.")
-                else:
-                    if hasattr(self, '_init_pynvcodec_video_capture'):
-                        self._init_pynvcodec_video_capture(input_src)
-                    else:
-                        raise NotImplementedError(f"Video input ({input_src}) is not supported by this HPE implementation.")
-            elif input_src.endswith('.mp4') or input_src.endswith('.avi') or input_src.endswith('.mov'): # Check for video files
-                self.input_type = "video"
-                if nvc is None:
-                    print("[ERROR] PyNvCodec not available. Falling back to OpenCV for video decoding.")
-                    if hasattr(self, '_init_opencv_video_capture'):
-                        self._init_opencv_video_capture(input_src)
-                    else:
-                        raise NotImplementedError(f"Video input ({input_src}) is not supported by this HPE implementation.")
-                else:
-                    if hasattr(self, '_init_pynvcodec_video_capture'):
-                        self._init_pynvcodec_video_capture(input_src)
-                    else:
-                        raise NotImplementedError(f"Video input ({input_src}) is not supported by this HPE implementation.")
+            if _is_stream_url(input_src) or input_src.endswith(('.mp4', '.avi', '.mov')):
+                self.input_type = "video"  # URL-based stream or local video file
+                self._init_video_capture(input_src)
             elif input_src.endswith('.jpg') or input_src.endswith('.png'):
                 self.input_type = "image"
                 self.img = cv2.imread(input_src)
@@ -216,6 +193,28 @@ class BaseHPE(ABC):
     def load_model(self):
         pass
     
+    def _init_video_capture(self, input_src):
+        """Pick the best available video capture path for video files / URL streams.
+
+        PyNvCodec is only used when (a) the module is importable AND (b) the
+        concrete subclass implements `_init_pynvcodec_video_capture`. Otherwise
+        we fall back to OpenCV's FFmpeg backend, which handles both HTTP and
+        RTSP (`OPENCV_FFMPEG_CAPTURE_OPTIONS` is honoured for RTSP transport).
+        """
+        if nvc is not None and hasattr(self, '_init_pynvcodec_video_capture'):
+            self._init_pynvcodec_video_capture(input_src)
+            return
+        if nvc is None:
+            print("[INFO] PyNvCodec not available — using OpenCV/FFmpeg for video decoding.")
+        else:
+            print("[INFO] PyNvCodec available but not implemented by this backend — using OpenCV/FFmpeg.")
+        if hasattr(self, '_init_opencv_video_capture'):
+            self._init_opencv_video_capture(input_src)
+        else:
+            raise NotImplementedError(
+                f"Video input ({input_src}) is not supported by this HPE implementation."
+            )
+
     def _init_opencv_video_capture(self, input_src):
         """Initialize OpenCV video capture for video files and streams"""
         print(f"Initializing OpenCV video capture for: {input_src}")

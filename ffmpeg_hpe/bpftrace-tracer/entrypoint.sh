@@ -35,8 +35,9 @@ for i in $(seq 1 $MAX_ATTEMPTS); do
     sleep $ATTEMPT_WAIT
 done
 
-# Get HPE's ephemeral port from established connections
-# Uses variable so this works for any STREAMER_PORT (8554 for RTSP, or 8089 for legacy HTTP)
+# Get HPE's ephemeral port from established connections.
+# Filter against $STREAMER_PORT (8554 for the current RTSP pipeline) so the
+# match is robust if STREAMER_PORT is overridden at runtime.
 HPE_PORT=$(ss -ntp | awk -v port="$STREAMER_PORT" \
     '$0 ~ ":"port {split($4, a, ":"); print a[length(a)]}' | head -1)
 

@@ -8,12 +8,12 @@ services:
       - "8888:8888"  # HLS (optional, useful for debugging)
     networks:
       - streaming-network
-    healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 8554 || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
+    # NOTE: no healthcheck here. The MediaMTX image is a distroless single binary
+    # with no shell, nc, wget, or curl — any CMD-SHELL probe will fail and leave
+    # the container permanently "unhealthy", which blocks `service_healthy` gating.
+    # Readiness is enforced from outside the container: run_experiment.sh probes
+    # 127.0.0.1:8554 from the host before starting dependents, and the streamer
+    # has `restart: on-failure` which covers the rare case where it loses the race.
     deploy:
       resources:
         limits:
@@ -29,7 +29,7 @@ services:
     restart: on-failure
     depends_on:
       rtsp-broker:
-        condition: service_healthy
+        condition: service_started
     volumes:
       - ../videos:/data:ro
     networks:
@@ -44,11 +44,16 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    # -rtsp_transport tcp: forces RTP over TCP so bcc-tracer (TCP filter) captures all video bytes
+    # -rtsp_transport tcp: forces RTP over TCP on the producer side. The HPE
+    #   consumer is pinned separately via OPENCV_FFMPEG_CAPTURE_OPTIONS below.
+    #   Both ends must use TCP — bcc_rx_bytes.py attaches a TCP socket filter
+    #   on eth0, so any UDP RTP traffic would be invisible to it.
     # -stream_loop -1: loops the video file indefinitely for repeatable experiments
+    # NVENC low-latency: -preset p2 (low-latency-balanced) + -tune ll (low-latency tune).
+    # Do NOT also pass -zerolatency 1 — it duplicates -tune ll and triggers an NVENC warning.
     command: >
       -re -stream_loop -1 -i /data/${VIDEO_FILE_NAME:-vga_01_01.mp4}
-      -c:v h264_nvenc -preset p2 -tune ll -zerolatency 1
+      -c:v h264_nvenc -preset p2 -tune ll
       -rtsp_transport tcp
       -f rtsp rtsp://rtsp-broker:8554/stream
 
@@ -67,6 +72,10 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
       - OPENCV_FFMPEG_OPEN_TIMEOUT=300000
       - OPENCV_FFMPEG_READ_TIMEOUT=300000
+      # Force OpenCV's FFmpeg backend to pull RTP over TCP. Without this the
+      # default is UDP, which (a) bypasses the bcc-tracer TCP socket filter so
+      # RX bytes read as ~0, and (b) silently drops packets under load.
+      - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp
     volumes:
       - ./results:/output:rw
       - ../videos:/videos:ro
@@ -89,7 +98,7 @@ services:
     container_name: hpe
     depends_on:
       rtsp-broker:
-        condition: service_healthy
+        condition: service_started
       streamer:
         condition: service_started
     networks:
