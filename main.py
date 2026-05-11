@@ -64,10 +64,12 @@ def main():
     hpe = get_hpe_method(args)
     
     hpe.load_model()
-    
-    # Add timeout and frame count detection for HTTP streams and video files
-    if args.input.startswith('http'):
-        logging.info(f"HTTP stream detected: {args.input}")
+
+    is_url_stream = args.input.startswith('http') or args.input.startswith('rtsp://')
+
+    # Add timeout and frame count detection for HTTP/RTSP streams and video files
+    if is_url_stream:
+        logging.info(f"URL stream detected: {args.input}")
         logging.info("Auto-detecting video properties...")
         
         # Auto-detect video properties (includes FPS conversion for HTTP streams)
