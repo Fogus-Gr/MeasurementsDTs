@@ -23,8 +23,12 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
             # Draw all valid skeleton lines
             cv2.polylines(frame, lines, False, color_skeleton, 2, cv2.LINE_AA)
             
-            # TODO - I think coloring works correctly only for Movenet
+            # COCO 17-keypoint colour scheme (valid for all backends — MoveNet, AlphaPose,
+            # OpenPose, HigherHRNet, EfficientHRNet all use the same COCO joint ordering):
+            # i==0 (nose) → cyan; odd i (right-side joints) → green; even i>0 (left-side) → red
             for i,x_y in enumerate(body.keypoints):
+                if i >= len(body.keypoints_score):
+                    continue
                 if body.keypoints_score[i] > score_thresh:
                     if i % 2 == 1:
                         color = (0,255,0) 

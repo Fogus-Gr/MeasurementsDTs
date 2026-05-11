@@ -127,9 +127,11 @@ rm -f "$FIFO_PATH"
 mkfifo "$FIFO_PATH"
 
 # Start bftrace in the background with 10ms interval
+# NOTE: TX bytes only. The netif_receive_skb tracepoint fires in softirq context
+# where the kernel PID never matches the HPE process — RX is always 0 here.
+# For accurate RX byte counts use traces/bcc/hpe_video_rx.csv (bcc-tracer container).
 bpftrace -e '
     tracepoint:syscalls:sys_enter_sendto /pid == '$PID'/ { @tx_bytes += args->size; }
-    tracepoint:net:netif_receive_skb /pid == '$PID'/ { @rx_bytes += args->len; }
 
     interval:ms:10
     {
@@ -137,30 +139,27 @@ bpftrace -e '
         if (@count++ > 0) {
             $elapsed = ($now - @start) / 1000000000;  // Convert to seconds
             $tx_rate = @tx_bytes * 8 / $elapsed / 1000000;  // Mbits/s
-            $rx_rate = @rx_bytes * 8 / $elapsed / 1000000;  // Mbits/s
             
-            printf("%d %llu %llu (TX: %.2f Mbit/s, RX: %.2f Mbit/s)\n", 
-                    '$PID', @tx_bytes, @rx_bytes, $tx_rate, $rx_rate) > "'$FIFO_PATH'";
+            printf("%d %llu (TX: %.2f Mbit/s)\n", 
+                    '$PID', @tx_bytes, $tx_rate) > "'$FIFO_PATH'";
         }
         
         @start = $now;
         @tx_bytes = 0;
-        @rx_bytes = 0;
     }
 ' &
 bpftrace_pid=$!
 
 # Read from FIFO in the background
 while read -r line; do
-    if [[ $line =~ ^([0-9]+)[[:space:]]+([0-9]+)[[:space:]]+([0-9]+) ]]; then
+    if [[ $line =~ ^([0-9]+)[[:space:]]+([0-9]+) ]]; then
         pid="${BASH_REMATCH[1]}"
         tx_bytes="${BASH_REMATCH[2]}"
-        rx_bytes="${BASH_REMATCH[3]}"
         timestamp=$(date +%s.%N)
         
-        # Write to network stats CSV
+        # Write to network stats CSV (TX only; RX data comes from traces/bcc/hpe_video_rx.csv)
         write_net_stats "$timestamp" "$pid" "eth0" "$tx_bytes" "1"  # 1 for sent
-        write_net_stats "$timestamp" "$pid" "eth0" "$rx_bytes" "0"  # 0 for received
+        write_net_stats "$timestamp" "$pid" "eth0" "0" "0"          # RX always 0 here
     fi
 done < "$FIFO_PATH" &
 fifo_reader_pid=$!
