@@ -93,7 +93,9 @@ class MoveNetHPE(BaseHPE):
             kps = result[i][:51].reshape(17,-1)
             bbox = result[i][51:55].reshape(2,2)          
             score = result[i][55]
-            if score > self.score_thresh:   # TODO - use seperate keypoint scores
+            kp_scores = kps[:, 2]
+            mean_kp_score = float(np.mean(kp_scores))
+            if mean_kp_score >= self.score_thresh:
                 ymin, xmin, ymax, xmax = (bbox * [self.padding.padded_h, self.padding.padded_w]).flatten().astype(int)
 
                 kp_xy =kps[:,[1,0]]
