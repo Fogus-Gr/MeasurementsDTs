@@ -25,7 +25,7 @@ If you are new to this repository, read this section before diving into the code
 
 Two things in one:
 
-1. **An HPE inference library** — a unified Python interface for running five pose estimation backends (AlphaPose, MoveNet, OpenPose, HigherHRNet, EfficientHRNet) against images, videos, webcam, or HTTP streams.
+1. **An HPE inference library** — a unified Python interface for running five pose estimation backends (AlphaPose, MoveNet, OpenPose, HigherHRNet, EfficientHRNet) against images, videos, webcam, or HTTP/RTSP streams.
 2. **A performance benchmarking platform** (`perf-tuning-base` branch) — a set of Docker-based experiment rigs for measuring inference throughput, CPU/GPU utilisation, memory, and network bandwidth under realistic streaming conditions.
 
 ### Key files to read first
@@ -64,7 +64,8 @@ main.py
 
 ```
 run_experiment.sh
-  ├── docker compose up h264-streaming-server   # serves video as H.264 HTTP stream
+  ├── docker compose up rtsp-broker             # starts MediaMTX as the RTSP broker
+  ├── docker compose up streamer                # serves video as an RTSP stream
   ├── docker compose up hpe                     # runs main.py against the stream
   ├── docker compose up perf_monitor            # samples CPU/memory every 500ms
   ├── docker compose up gpu-metrics             # polls nvidia-smi every 500ms
@@ -238,9 +239,9 @@ graph TD
 | Folder | Entry point | Input source | HPE runs? | Monitors | Purpose |
 |---|---|---|---|---|---|
 | `monitor_hpe/` | `run_experiment.sh` | Local video file (volume mount) | ✅ | CPU%, RSS memory | Baseline inference cost — no network |
-| `ffmpeg_hpe/` | `run_experiment.sh` `run_experiment_bcc.sh` | Live H.264 HTTP stream (port 8089) | ✅ | CPU%, RSS, GPU, BCC RX bytes | Full streaming benchmark — main rig |
+| `ffmpeg_hpe/` | `run_experiment.sh` `run_experiment_bcc.sh` | Live RTSP stream via MediaMTX (port 8554) | ✅ | CPU%, RSS, GPU, BCC RX bytes | Full streaming benchmark — main rig |
 | `recent-dash/` | `run_experiment.sh` | DASH segments via HTTP proxy | ❌ | CPU%, RSS, bpftrace RX/TX | HTTP caching proxy research — not HPE |
-| `rtsp-ipcam/` | `start_server.sh` | — (is the server) | ❌ | — | Shared H.264 streaming server used by `ffmpeg_hpe/` |
+| `rtsp-ipcam/` | `start_server.sh` | — (is the server) | ❌ | — | Shared RTSP / MediaMTX streaming server used by `ffmpeg_hpe/` |
 | `Measure_Flops/` | `measure_flops.sh` | Any HPE command | ✅ | GPU FLOPS, TOPS, memory BW | One-shot Nsight Compute profiling |
 | `Measure_gpu_dcgm/` | `run_nvidia_dcgm.sh` | — (sidecar) | ❌ | GPU util, temp, power | Standalone GPU telemetry collector |
 | `Measure_plot_cpu_perf/` | `run_perf_plot.sh` | PID file | ❌ | CPU cycles via `perf stat` | Standalone CPU cycle counter |
@@ -259,11 +260,12 @@ No streaming server. Video is mounted directly as a volume.
 cd monitor_hpe && ./run_experiment.sh
 ```
 
-#### `ffmpeg_hpe/` — H.264 stream + full monitoring stack
+#### `ffmpeg_hpe/` — RTSP stream + full monitoring stack
 
-The main experiment rig. Five containers:
-- `h264-streaming-server` (from `rtsp-ipcam/`) — Python + FFmpeg HTTP server serving a video file as a raw H.264 stream on port 8089
-- `hpe` — runs `main.py --method <X> --input http://<server-ip>:8089/stream.h264`
+The main experiment rig. Six containers total, with `bcc-tracer` optional:
+- `rtsp-broker` (MediaMTX) — RTSP broker on port 8554
+- `streamer` (from `rtsp-ipcam/`) — FFmpeg/NVENC producer that loops a local video file and publishes it to the broker
+- `hpe` — runs `main.py --method <X> --input rtsp://<server-ip>:8554/stream`
 - `perf_monitor` (from `recent-dash/perf_monitor/`) — samples CPU/memory/network
 - `gpu-metrics` — polls `nvidia-smi` every 500ms
 - `bcc-tracer` (optional, commented out) — eBPF/BCC kernel tracing of network traffic

@@ -179,9 +179,9 @@ issues.
 | 10 | `ffmpeg_hpe/run_experiment.sh` | BCC tracer output filename wrong (`trace.csv` → `hpe_video_rx.csv`) | ✅ Fixed (`3c006cf`) |
 | 11 | `ffmpeg_hpe/run_experiment.sh` | HPE container output (keypoint CSVs/JSON) never copied to results dir | ✅ Fixed (`3c006cf`) |
 | 12 | Both `monitor_pid.sh` files | `netif_receive_skb` bpftrace PID filter fires in softirq context — RX bytes always ~0 | ⚠️ Open — use `bcc-tracer` for accurate RX |
-| 13 | `monitor_hpe/plot_graph.py` | Calls `plt.show()` — blocks in headless containers | ⚠️ Open |
-| 14 | `ffmpeg_hpe/plot_graph.py` | Empty file (0 bytes) | ⚠️ Open |
-| 15 | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | ⚠️ Open |
+| 13 | `monitor_hpe/plot_graph.py` | Calls `plt.show()` — blocks in headless containers | ✅ Fixed (`76b8f30`) — now uses the Agg backend and saves PNGs |
+| 14 | `ffmpeg_hpe/plot_graph.py` | Empty file (0 bytes) | ✅ Fixed (`76b8f30`) — now plots `pid_metrics.csv` + `hpe_video_rx.csv` |
+| 15 | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | ✅ Fixed (`76b8f30`) — default mount now uses `VIDEO_HOST_PATH` with repo-root fallback |
 
 ### Known TODOs in HPE Inference Code
 - `movenet_hpe.py`: keypoint-level score filtering not yet applied to body
