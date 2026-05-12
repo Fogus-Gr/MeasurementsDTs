@@ -38,14 +38,20 @@ capture_diagnostics() {
   else
     echo "No HPE container found"
   fi
-  echo "[DEBUG] Video stream availability:"
-  curl --max-time 3 -I "$STREAM_URL" 2>&1 || echo "Stream not accessible"
+  echo "[DEBUG] RTSP broker availability (host-side, MediaMTX publishes 8554):"
+  # NOTE: probe localhost from the host. `rtsp-broker` is a docker-bridge DNS
+  # name and is only resolvable from inside containers on streaming-network.
+  if command -v nc >/dev/null 2>&1; then
+    nc -z localhost 8554 2>&1 && echo "RTSP port 8554 reachable on localhost" || echo "RTSP port 8554 not reachable on localhost"
+  else
+    (echo > /dev/tcp/127.0.0.1/8554) 2>/dev/null \
+      && echo "RTSP port 8554 reachable on localhost (bash /dev/tcp)" \
+      || echo "RTSP port 8554 not reachable on localhost"
+  fi
   echo "[DEBUG] ===== END DIAGNOSTICS ====="
 }
 
 # Step 4: Prepare results directory and experiment metadata
-# Get current timestamp and CPU info for results directory
-# (This ensures results are organized and not overwritten)
 timestamp=$(date +%Y%m%d_%H%M%S)
 cpu_model=$(lscpu | grep "Model name" | sed 's/.*: *//g' | tr -s ' ' '_' | tr -d ',()/')
 start_time=$(date +%s)
@@ -63,64 +69,76 @@ echo "Preparing results directory: $results_dir"
 # Step 6: Compose file and container names
 docker_compose_file="docker-compose.yaml"
 HPE_SERVICE="hpe"
-H264_CONTAINER_NAME="h264-streaming-server"
+# Container names (mediamtx = RTSP broker; video-producer = FFmpeg NVENC streamer)
+# are set via container_name: in docker-compose.yaml.
 
 # Step 7: Stop and remove any existing containers from previous runs
 echo "Stopping and removing existing containers..."
 docker compose -f $docker_compose_file down -v --remove-orphans
-# Remove hpe container by name in case it lingers
 docker rm -f hpe 2>/dev/null || true
 
 touch "$results_dir/container_timing.txt"
 echo "Container Instantiation Timing:" > "$results_dir/container_timing.txt"
 
-# Step 8: Start the streaming server and wait for it to become healthy
-echo "Starting h264-streaming-server with force-recreate..."
-docker compose -f $docker_compose_file up -d h264-streaming-server
-#docker compose -f $docker_compose_file up -d --force-recreate h264-streaming-server
+# Step 8: Start the RTSP broker and wait for the RTSP port to accept connections.
+# We do NOT use docker healthchecks here — MediaMTX is a distroless image with no
+# shell, so any CMD-SHELL probe fails forever. Instead, probe the published TCP
+# port 8554 from the host. This works because the rtsp-broker service publishes
+# 8554:8554, and Docker only opens the host port once the container is running.
+echo "Starting rtsp-broker (MediaMTX)..."
+docker compose -f $docker_compose_file up -d rtsp-broker
 
+probe_rtsp_port() {
+  if command -v nc >/dev/null 2>&1; then
+    nc -z localhost 8554 >/dev/null 2>&1
+  else
+    (echo > /dev/tcp/127.0.0.1/8554) >/dev/null 2>&1
+  fi
+}
 
-# Wait for healthcheck to pass (max 60s)
 wait_start=$(date +%s)
 wait_timeout=60
-while [[ $(docker inspect --format='{{.State.Health.Status}}' $H264_CONTAINER_NAME 2>/dev/null) != "healthy" ]]; do
-  echo "Waiting for h264-streaming-server to become healthy..."
+until probe_rtsp_port; do
+  echo "Waiting for rtsp-broker (MediaMTX) RTSP port 8554..."
   current=$(date +%s)
   if [ $((current - wait_start)) -gt $wait_timeout ]; then
-    echo "[WARNING] Streaming server healthcheck timed out, continuing anyway..."
+    echo "[WARNING] RTSP broker readiness timed out after ${wait_timeout}s, continuing anyway..."
     break
   fi
   sleep 2
 done
+echo "[DEBUG] rtsp-broker accepting connections on localhost:8554"
 
-# Step 9: Get streaming server IP and construct stream URL
-STREAM_SERVER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $H264_CONTAINER_NAME)
-STREAM_URL="http://${STREAM_SERVER_IP}:8089/stream.h264"
-echo "[DEBUG] Using direct IP for stream: $STREAM_URL"
+# Step 8b: Start the NVENC streamer
+echo "Starting video-producer (FFmpeg NVENC streamer)..."
+docker compose -f $docker_compose_file up -d streamer
 
-# Step 10: Set environment variables for hpe service (method, input, device)
-export HPE_METHOD="${1:-movenet}"
-export HPE_INPUT="$STREAM_URL"
+# Step 9: Set HPE_INPUT directly from RTSP URL (no dynamic IP lookup needed)
+# The rtsp-broker service name resolves via Docker bridge DNS
+export HPE_METHOD="${1:-alphapose}"
+export HPE_INPUT="rtsp://rtsp-broker:8554/stream"
 export HPE_DEVICE="CPU"
 if [[ "$1" == "alphapose" || "$arguments" == *"--method alphapose"* || \
       "$1" == "openpose" || "$arguments" == *"--method openpose"* ]]; then
   export HPE_DEVICE="GPU"
 fi
 
-# Step 11: Start hpe container with Compose
+echo "[DEBUG] HPE_INPUT=$HPE_INPUT  HPE_METHOD=$HPE_METHOD  HPE_DEVICE=$HPE_DEVICE"
+
+# Step 10: Start hpe container
 hpe_start=$(date +%s.%N)
 docker compose -f $docker_compose_file up -d hpe
 
-# Step 12: Measure hpe container startup time
+# Step 11: Measure hpe container startup time
 measure_container_startup "$HPE_SERVICE" "$hpe_start"
 
-# Step 13: Capture initial logs from hpe container
-sleep 2  # Give container a moment to start logging
+# Step 12: Capture initial logs from hpe container
+sleep 2
 docker logs $(docker ps -qf "name=^/hpe$") > "$results_dir/logs/hpe_startup.log" 2>&1
 tail -n 20 "$results_dir/logs/hpe_startup.log"
 docker logs $(docker ps -qf "name=^/hpe$") | tee "$results_dir/logs/hpe_startup_full.log"
 
-# Step 14: Start and measure monitoring containers (perf_monitor, bcc-tracer, gpu-metrics)
+# Step 13: Start and measure monitoring containers
 perf_monitor_start=$(date +%s.%N)
 echo "[DEBUG] Starting performance monitoring..."
 docker compose -f $docker_compose_file up -d perf_monitor
@@ -133,9 +151,7 @@ measure_container_startup "perf_monitor" "$perf_monitor_start"
 measure_container_startup "bcc-tracer" "$perf_monitor_start"
 measure_container_startup "gpu-metrics" "$perf_monitor_start"
 
-# Step 15: Get the main.py PID inside the hpe container (for monitoring)
-# pgrep extracts just the PID — ps -ef would write the full process table
-# which monitor_pid.sh cannot parse as a PID
+# Step 14: Get the main.py PID inside the hpe container (for monitoring)
 mkdir -p ./pids
 HPE_CONTAINER=$(docker ps -qf "name=^/hpe$")
 if [ -n "$HPE_CONTAINER" ]; then
@@ -155,8 +171,7 @@ if [ -n "$HPE_CONTAINER" ]; then
   fi
 fi
 
-# Step 16: Monitor hpe container until it exits (no timeout)
-# The loop checks every 5s if the hpe container is still running
+# Step 15: Monitor hpe container until it exits
 while true; do
   HPE_CONTAINER=$(docker ps -q --filter "name=^/hpe$")
   if [ -z "$HPE_CONTAINER" ]; then
@@ -178,7 +193,7 @@ done
 
 echo "[DEBUG] Ending the experiment..."
 
-# Check HPE container exit code — distinguishes clean exit from crash/OOM
+# Check HPE container exit code
 HPE_CONTAINER_FINAL=$(docker ps -aqf "name=^/hpe$")
 if [ -n "$HPE_CONTAINER_FINAL" ]; then
   hpe_exit_code=$(docker inspect --format='{{.State.ExitCode}}' "$HPE_CONTAINER_FINAL" 2>/dev/null || echo "unknown")
@@ -188,7 +203,7 @@ if [ -n "$HPE_CONTAINER_FINAL" ]; then
   fi
 fi
 
-# Step 17: Wait for the hpe container name to be fully released (avoid name conflicts)
+# Step 16: Wait for the hpe container name to be fully released
 for i in {1..10}; do
   if docker ps -a --format '{{.Names}}' | grep -wq hpe; then
     echo "[DEBUG] Waiting for hpe container name to be released..."
@@ -198,10 +213,9 @@ for i in {1..10}; do
   fi
 done
 
-# Step 18: Collect performance data after experiment completion
+# Step 17: Collect performance data
 mkdir -p "$results_dir/perf"
 if [ -n "$PERF_MONITOR_CONTAINER" ]; then
-  # recent-dash/perf_monitor writes perf_metrics.csv; ffmpeg_hpe/monitor_pid.sh writes pid_metrics.csv
   for perf_file in perf_metrics.csv pid_metrics.csv network_stats.csv; do
     if docker exec $PERF_MONITOR_CONTAINER ls -la /output/$perf_file 2>/dev/null || false; then
       docker cp "$PERF_MONITOR_CONTAINER:/output/$perf_file" "$results_dir/perf/$perf_file" && \
@@ -212,7 +226,7 @@ if [ -n "$PERF_MONITOR_CONTAINER" ]; then
   chmod -R u+rw "$results_dir"
 fi
 
-# Step 19: Copy trace files after experiment
+# Step 18: Copy trace files
 mkdir -p "$results_dir/traces/bcc"
 if [ -n "$TRACE_CONTAINER" ]; then
   if docker exec $TRACE_CONTAINER ls -la /opt/tracer/output/hpe_video_rx.csv 2>/dev/null || false; then
@@ -222,11 +236,10 @@ if [ -n "$TRACE_CONTAINER" ]; then
   else
     echo "[WARNING] Could not find hpe_video_rx.csv in bcc-tracer."
   fi
-  # Also copy tracer log if present
   docker cp "$TRACE_CONTAINER:/opt/tracer/output/logs/bcc-tracer.log" "$results_dir/logs/bcc-tracer-internal.log" 2>/dev/null || true
 fi
 
-# Step 20: Collect container logs before stopping
+# Step 19: Collect container logs before stopping
 container_list=("hpe" "perf_monitor" "bcc-tracer" "gpu-metrics")
 for container in "${container_list[@]}"
 do
@@ -239,9 +252,7 @@ do
   fi
 done
 
-# Step 21: Copy HPE output (CSVs, JSON) from bind-mounted host path
-# The HPE container mounts ./results:/output so files are already on the host.
-# docker exec cannot be used here — the container has already exited by this point.
+# Step 20: Copy HPE output (CSVs, JSON) from bind-mounted host path
 mkdir -p "$results_dir/hpe_output"
 if compgen -G "./results/*.csv" > /dev/null 2>&1 || compgen -G "./results/*.json" > /dev/null 2>&1; then
   cp ./results/*.csv "$results_dir/hpe_output/" 2>/dev/null || true
@@ -251,7 +262,7 @@ else
   echo "[WARNING] No CSV or JSON files found in ./results — HPE may not have produced output"
 fi
 
-# Step 22: Copy GPU metrics to results_dir/gpu/gpu_metrics.csv
+# Step 21: Copy GPU metrics
 mkdir -p "$results_dir/gpu"
 if [ -f ./results/gpu_metrics.csv ]; then
   cp ./results/gpu_metrics.csv "$results_dir/gpu/gpu_metrics.csv"
@@ -260,17 +271,10 @@ else
   echo "[WARNING] gpu_metrics.csv not found in ./results"
 fi
 
-# if compgen -G "./csv/*.csv" > /dev/null; then
-#   cp ./csv/*.csv "$results_dir/"
-#   echo "Copied hpe output CSVs to $results_dir/"
-# else
-#   echo "[DEBUG] No hpe output CSVs found in ./csv."
-# fi
-
-# Now stop and clean up containers and resources
+# Step 22: Stop and clean up all containers
 echo "[DEBUG] Stopping and cleaning up containers..."
 docker compose -f $docker_compose_file down --remove-orphans --volumes
-docker rm -f hpe h264-streaming-server gpu-metrics perf_monitor bcc-tracer 2>/dev/null || true
+docker rm -f hpe mediamtx video-producer gpu-metrics perf_monitor bcc-tracer 2>/dev/null || true
 
 end_time=$(date +%s)
 duration=$((end_time - start_time))
