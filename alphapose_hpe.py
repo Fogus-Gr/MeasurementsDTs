@@ -1,5 +1,4 @@
 import os
-import sys
 import cv2
 import numpy as np
 import torch
@@ -308,24 +307,17 @@ class AlphaPoseHPE(BaseHPE):
                 keypoints = valid_kps * np.array([self.padding.padded_w, self.padding.padded_h])
                 keypoints = np.array(keypoints)
 
-                # Use detector bounding box scaled to padded-frame coordinates
-                if det_box is not None:
-                    scale_x = self.padding.padded_w / self.img_w if self.img_w > 0 else 1.0
-                    scale_y = self.padding.padded_h / self.img_h if self.img_h > 0 else 1.0
-                    x1, y1, x2, y2 = det_box
-                    xmin = int(x1 * scale_x)
-                    ymin = int(y1 * scale_y)
-                    xmax = int(x2 * scale_x)
-                    ymax = int(y2 * scale_y)
-                else:
-                    # Fallback: derive from visible keypoints
-                    print("[WARNING] AlphaPose: no detector box, falling back to keypoint bbox", file=sys.stderr)
-                    kp_min = valid_kps.min(axis=0)
-                    kp_max = valid_kps.max(axis=0)
-                    xmin = int(kp_min[0] * self.padding.padded_w)
-                    ymin = int(kp_min[1] * self.padding.padded_h)
-                    xmax = int(kp_max[0] * self.padding.padded_w)
-                    ymax = int(kp_max[1] * self.padding.padded_h)
+                if det_box is None:
+                    raise ValueError("AlphaPose postprocess expected detector bbox for each pose")
+
+                # Use detector bounding box scaled to padded-frame coordinates.
+                scale_x = self.padding.padded_w / self.img_w if self.img_w > 0 else 1.0
+                scale_y = self.padding.padded_h / self.img_h if self.img_h > 0 else 1.0
+                x1, y1, x2, y2 = det_box
+                xmin = int(x1 * scale_x)
+                ymin = int(y1 * scale_y)
+                xmax = int(x2 * scale_x)
+                ymax = int(y2 * scale_y)
 
                 body = Body(
                     score=np.mean(scores[valid_scores]),  # Average score of valid keypoints

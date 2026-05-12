@@ -23,9 +23,8 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
             # Draw all valid skeleton lines
             cv2.polylines(frame, lines, False, color_skeleton, 2, cv2.LINE_AA)
             
-            # COCO 17-keypoint colour scheme (valid for all backends — MoveNet, AlphaPose,
-            # OpenPose, HigherHRNet, EfficientHRNet all use the same COCO joint ordering):
-            # i==0 (nose) → cyan; odd i (right-side joints) → green; even i>0 (left-side) → red
+            # Simple colour rule for bodies that preserve the repo's COCO-17-style
+            # keypoint order: nose cyan, odd indices green, remaining indices red.
             for i,x_y in enumerate(body.keypoints):
                 if i >= len(body.keypoints_score):
                     continue
