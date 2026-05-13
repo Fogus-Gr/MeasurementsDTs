@@ -70,7 +70,7 @@ The top-level folders fall into three categories:
 
 | Folder | Entry Point | What it measures |
 |---|---|---|
-| `ffmpeg_hpe/` | `run_experiment.sh` / `run_experiment_bcc.sh` | HPE inference on H.264 stream + full monitoring stack |
+| `ffmpeg_hpe/` | `run_experiment.sh` / `run_experiment_bcc.sh` | HPE inference on RTSP stream + full monitoring stack |
 | `monitor_hpe/` | `run_experiment.sh` | HPE inference baseline — CPU/memory only, no streaming server |
 | `recent-dash/` | `run_experiment.sh` | DASH/HTTP caching research — separate thread |
 
@@ -78,7 +78,7 @@ The top-level folders fall into three categories:
 
 | Folder | Used by | Role in `docker-compose.yaml` |
 |---|---|---|
-| `jrottenberg/ffmpeg:4.4-nvidia` + `bluenviron/mediamtx:latest` | `ffmpeg_hpe/docker-compose.yaml` | Pre-built images for streamer and RTSP broker (replaced `rtsp-ipcam/`) |
+| `jrottenberg/ffmpeg:4.4-nvidia` + `bluenviron/mediamtx:1-ffmpeg` | `ffmpeg_hpe/docker-compose.yaml` | Pre-built images for streamer and RTSP broker (replaced `rtsp-ipcam/`) |
 | `recent-dash/perf_monitor/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `perf_monitor` container |
 | `ffmpeg_hpe/bpftrace-tracer/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `bcc-tracer` container |
 | `ffmpeg_hpe/Dockerfile.gpu_metrics` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `gpu-metrics` container |
@@ -123,7 +123,7 @@ MeasurementsDTs/
 │   ├── run_experiment.sh          # Basic experiment runner (GPU + CPU metrics only)
 │   ├── run_experiment_bcc.sh      # Full run with BCC kernel-level network tracing (recommended)
 │   ├── docker-compose.yaml        # Multi-service orchestration (5 services)
-│   ├── .env                       # VIDEO_FILE and SERVER_PORT configuration
+│   ├── .env                       # VIDEO_FILE_NAME configuration for the streamer
 │   ├── Dockerfile.gpu_metrics     # Dockerfile for GPU metrics sidecar
 │   ├── bpftrace-tracer/           # BCC/BPF-based network tracing tools
 │   │   ├── Dockerfile.bcc         # BCC tracer container
@@ -392,16 +392,19 @@ python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'
 │                  Docker Bridge Network                        │
 │                   (streaming-network)                         │
 │                                                               │
-│  ┌──────────────────────┐    HTTP H.264 Stream               │
-│  │  h264-streaming-server│ ──────────────────┐               │
-│  │  (FFmpeg/NGINX, :8089)│                   │               │
-│  │  2 CPU cores, 1 GB   │                   ▼               │
-│  └──────────────────────┘       ┌──────────────────────┐    │
-│                                  │      hpe container    │    │
-│                                  │  Python + OpenCV      │    │
-│                                  │  Pose Estimation      │    │
-│                                  │  4 CPU cores, 16 GB   │    │
-│                                  │  NVIDIA GPU (optional)│    │
+│  ┌──────────────────────┐    RTSP Stream                  │
+│  │      rtsp-broker     │ <──────────────────────────┐    │
+│  │   (MediaMTX, :8554)  │                            │    │
+│  │  2 CPU cores, 1 GB   │                            │    │
+│  └──────────┬───────────┘                            │    │
+│             ▲                                         │    │
+│             │                                         ▼    │
+│  ┌──────────────────────┐       ┌──────────────────────┐   │
+│  │       streamer       │       │      hpe container    │   │
+│  │   FFmpeg/NVENC       │       │  Python + OpenCV      │   │
+│  │  loops local video   │       │  Pose Estimation      │   │
+│  │  and publishes RTSP  │       │  4 CPU cores, 16 GB   │   │
+│  └──────────────────────┘       │  NVIDIA GPU (optional)│   │
 │                                  └─────────┬────────────┘    │
 │                                            │                  │
 │              ┌─────────────────────────────┼──────────┐      │
@@ -421,33 +424,38 @@ python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'
 
 > *For complete Docker configuration details, see [Docker Services Deep Dive](docs/docker-services.md).*
 
-#### 1. `h264-streaming-server`
-- **What it does:** Serves the benchmark video as an H.264 HTTP stream on port 8089.
-- **Image:** `jrottenberg/ffmpeg:4.4-nvidia` (pre-built; replaced `rtsp-ipcam/Dockerfile`)
+#### 1. `rtsp-broker`
+- **What it does:** Runs MediaMTX and exposes the RTSP endpoint on port 8554.
+- **Image:** `bluenviron/mediamtx:1-ffmpeg`
 - **Resources:** 2 CPU cores (limit), 1 GB RAM
-- **Config:** `VIDEO_FILE` from `.env`, `SERVER_PORT=8089`
-- **Healthcheck:** TCP connection check on port 8089; HPE container waits until healthy.
+- **Healthcheck:** Readiness is enforced by `run_experiment.sh`, which waits for port 8554 before starting dependents.
 
-#### 2. `hpe`
-- **What it does:** The main inference container. Reads from the stream, runs pose estimation, writes keypoint CSVs.
+#### 2. `streamer`
+- **What it does:** Loops the local benchmark video with FFmpeg/NVENC and publishes it to `rtsp://rtsp-broker:8554/stream`.
+- **Image:** `jrottenberg/ffmpeg:4.4-nvidia`
+- **Resources:** GPU-backed producer container
+- **Config:** `VIDEO_FILE_NAME` from `.env` selects the local video file under `../videos`.
+
+#### 3. `hpe`
+- **What it does:** The main inference container. Reads from the RTSP stream, runs pose estimation, writes keypoint CSVs.
 - **Built from:** `Dockerfile_base` at the repo root
-- **Command:** `python3 main.py --method <METHOD> --input http://h264-streaming-server:8089/stream.h264 --csv --output_dir /output/ --device <DEVICE> --measurement_interval_ms 10`
+- **Command:** `python3 main.py --method <METHOD> --input rtsp://rtsp-broker:8554/stream --csv --output_dir /output/ --device <DEVICE> --measurement_interval_ms 10`
 - **Resources:** 4 CPU cores (limit), 16 GB RAM, NVIDIA GPU (via `runtime: nvidia`)
 - **Environment:** `HPE_METHOD`, `HPE_INPUT`, `HPE_DEVICE` are injected by experiment scripts.
 - **Shared memory:** 8 GB (`shm_size`) — needed for large batch PyTorch operations.
 
-#### 3. `gpu-metrics`
+#### 4. `gpu-metrics`
 - **What it does:** Polls `nvidia-smi` every 500 ms and writes GPU temperature, power, utilization, and memory to `gpu_metrics.csv`.
 - **Output:** `results/gpu/gpu_metrics.csv`
 - **Requires:** NVIDIA GPU and `nvidia-container-toolkit`.
 
-#### 4. `perf_monitor`
+#### 5. `perf_monitor`
 - **What it does:** Uses bpftrace to monitor the HPE process's CPU usage and memory RSS. Runs in host PID namespace.
 - **Output:** `results/perf/aggregated_metrics.csv`
 - **Privileges:** `privileged: true`, `SYS_ADMIN`, `NET_ADMIN` — needed for kernel tracing.
 
-#### 5. `bcc-tracer`
-- **What it does:** Uses Linux BCC (BPF Compiler Collection) to trace network RX bytes at the kernel level, counting bytes received from the streaming server every 10 ms.
+#### 6. `bcc-tracer`
+- **What it does:** Uses Linux BCC (BPF Compiler Collection) to trace network RX bytes at the kernel level, counting bytes received from the RTSP broker every 10 ms.
 - **Output:** `tracer_output/hpe_video_rx.csv`
 - **Network mode:** Shares HPE container's network namespace (`network_mode: "service:hpe"`) to accurately capture the stream traffic.
 - **Privileges:** `privileged: true`, `seccomp:unconfined` — required for BPF kernel access.
@@ -459,7 +467,7 @@ When you run `./run_experiment_bcc.sh alphapose`, the script:
 1. **Generates a timestamped results directory name** (e.g., `results_alphapose_AMD_EPYC_7551P_20250428_120000/`).
 2. **Creates output subdirectories:** `logs/`, `perf/`, `gpu/`, `traces/bcc/`, `hpe_output/`.
 3. **Cleans up** any previous containers with `docker compose down -v --remove-orphans`.
-4. **Starts the streaming server** and waits for the healthcheck to pass (up to 30 s).
+4. **Starts `rtsp-broker` and `streamer`** and waits for the broker port probe to pass (up to 30 s).
 5. **Starts the HPE container** with the configured method and device.
 6. **Starts monitoring sidecars** in parallel: `gpu-metrics`, `perf_monitor`, `bcc-tracer`.
 7. **Polls the HPE container** until it exits (video finishes or timeout reached).
@@ -518,22 +526,21 @@ HPE_DEVICE=CPU ./run_experiment_bcc.sh ae3
 
 ### Configuring the Video Source
 
-The video file to stream is controlled by the `VIDEO_FILE` variable in `ffmpeg_hpe/.env`:
+The video file to stream is controlled by the `VIDEO_FILE_NAME` variable in `ffmpeg_hpe/.env`:
 
 ```bash
 # View current setting
 cat ffmpeg_hpe/.env
-# SERVER_PORT=8089
-# VIDEO_FILE=/app/videos/rangeOfMotion/vga_01_01.mp4
+# VIDEO_FILE_NAME=vga_01_01.mp4
 
 # Edit .env to use a different video
-echo "VIDEO_FILE=/app/videos/rangeOfMotion/hd_00_00.mp4" > ffmpeg_hpe/.env
+echo "VIDEO_FILE_NAME=hd_00_00.mp4" > ffmpeg_hpe/.env
 
 # Or export for a one-off run without editing .env
-VIDEO_FILE=/app/videos/ultimatum/hd_00_00.mp4 ./run_experiment_bcc.sh alphapose
+VIDEO_FILE_NAME=hd_00_00.mp4 ./run_experiment_bcc.sh alphapose
 ```
 
-The `../videos/` directory is mounted read-only into the streaming server container at `/app/videos/`.
+The `../videos/` directory is mounted read-only into the streamer container at `/data/`.
 
 ### Cleanup Between Runs
 
@@ -713,21 +720,20 @@ docker logs bcc-tracer | grep -i "monitor\|detect\|port"
 docker exec bcc-tracer ss -ntp
 
 # Check HPE container network connections
-docker exec hpe ss -ntp | grep 8089
+docker exec hpe ss -ntp | grep 8554
 ```
 
 ### Stream Connection Issues
 
 ```bash
-# Get streaming server IP address
-docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' h264-streaming-server
+# Get RTSP broker IP address
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' rtsp-broker
 
-# Test stream is accessible (replace IP)
-curl -I http://172.18.0.2:8089/stream.h264
-ffprobe http://172.18.0.2:8089/stream.h264
+# Test stream is accessible
+ffprobe rtsp://rtsp-broker:8554/stream
 
 # Verify stream from within the HPE container
-docker exec hpe curl -I http://h264-streaming-server:8089/stream.h264
+docker exec hpe ffprobe rtsp://rtsp-broker:8554/stream
 ```
 
 ### HPE Container Exits Immediately
@@ -895,7 +901,7 @@ conda install --file requirements.txt
 bash models/AlphaPose/build_extensions.sh
 
 # 4. Configure the video source
-echo "VIDEO_FILE=/app/videos/rangeOfMotion/vga_01_01.mp4" > ffmpeg_hpe/.env
+echo "VIDEO_FILE_NAME=vga_01_01.mp4" > ffmpeg_hpe/.env
 
 # 5. Build Docker images
 cd ffmpeg_hpe/

@@ -227,7 +227,7 @@ Each experiment rig lives in its own folder with a `run_experiment.sh` (the sing
 graph TD
     A[run_experiment.sh] --> B[docker-compose.yaml]
     B --> C[hpe\nruns main.py against a live stream]
-    B --> D[h264-streaming-server\nserves video over HTTP/H.264]
+    B --> D[rtsp-broker + streamer\nserves video over RTSP]
     B --> E[perf_monitor\nsamples CPU/memory/network]
     B --> F[gpu-metrics\npolls nvidia-smi]
     B --> G[bcc-tracer / bpftrace\neBPF network tracing - optional]
@@ -241,7 +241,7 @@ graph TD
 | `monitor_hpe/` | `run_experiment.sh` | Local video file (volume mount) | ✅ | CPU%, RSS memory | Baseline inference cost — no network |
 | `ffmpeg_hpe/` | `run_experiment.sh` `run_experiment_bcc.sh` | Live RTSP stream via MediaMTX (port 8554) | ✅ | CPU%, RSS, GPU, BCC RX bytes | Full streaming benchmark — main rig |
 | `recent-dash/` | `run_experiment.sh` | DASH segments via HTTP proxy | ❌ | CPU%, RSS, bpftrace RX/TX | HTTP caching proxy research — not HPE |
-| *(Streaming)* | — | — | — | — | RTSP streaming is handled by `jrottenberg/ffmpeg:4.4-nvidia` (streamer) + `bluenviron/mediamtx:latest` (broker) in `ffmpeg_hpe/docker-compose.yaml` |
+| *(Streaming)* | — | — | — | — | RTSP streaming is handled by `jrottenberg/ffmpeg:4.4-nvidia` (streamer) + `bluenviron/mediamtx:1-ffmpeg` (broker) in `ffmpeg_hpe/docker-compose.yaml` |
 | `Measure_Flops/` | `measure_flops.sh` | Any HPE command | ✅ | GPU FLOPS, TOPS, memory BW | One-shot Nsight Compute profiling |
 | `Measure_gpu_dcgm/` | `run_nvidia_dcgm.sh` | — (sidecar) | ❌ | GPU util, temp, power | Standalone GPU telemetry collector |
 | `Measure_plot_cpu_perf/` | `run_perf_plot.sh` | PID file | ❌ | CPU cycles via `perf stat` | Standalone CPU cycle counter |
@@ -288,7 +288,7 @@ Uses the same monitoring sidecars (`perf_monitor`, `bpftrace`). The observabilit
 cd recent-dash && ./run_experiment.sh
 ```
 
-> **Streaming architecture note:** The old `rtsp-ipcam/` streaming server has been removed. Streaming is now handled inside `ffmpeg_hpe/docker-compose.yaml` by `jrottenberg/ffmpeg:4.4-nvidia` (streamer) + `bluenviron/mediamtx:latest` (RTSP broker).
+> **Streaming architecture note:** The old `rtsp-ipcam/` streaming server has been removed. Streaming is now handled inside `ffmpeg_hpe/docker-compose.yaml` by `jrottenberg/ffmpeg:4.4-nvidia` (streamer) + `bluenviron/mediamtx:1-ffmpeg` (RTSP broker).
 
 ### Standalone Measurement Tools
 
