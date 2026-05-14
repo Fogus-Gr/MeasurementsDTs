@@ -44,6 +44,98 @@ After VM loss, established that active work was on `cuda-dev` around **July 2025
 
 ---
 
+### Reconstructed Timeline (Jun 2025 – May 2026)
+
+Based on shell history (`full_shell_history.txt`), experiment result directory timestamps, and git log:
+
+#### ~June 2025 — Initial Setup & CPU Profiling
+
+Earliest timestamped artifacts are from `monitor_hpe/`:
+- **Jun 19**: `results_perf_AMD_EPYC_7551P_..._20250619_143126` — first `perf` profiling on AMD EPYC
+- **Jun 23**: 7 result directories (`_20250623_*`) — heavy CPU benchmarking day, multiple experiments with `perf` monitoring
+
+Activities: exploring AMD EPYC 7551P (32-core) with `cpuid`, `lscpu`, `cpupower`, `lsmem`, `lshw` (history lines 114-124). Saved system info, installed `btop`/`htop` for monitoring.
+
+#### ~July 11-15, 2025 — Dockerized HPE Experiments with ffmpeg_hpe
+
+Busiest experiment period — 13 result directories:
+- **Jul 14**: movenet GPU (`130340`), alphapose GPU (`132547`), openpose CPU (`211145`)
+- **Jul 15**: alphapose/movenet/openpose CPU runs across VGA and HD resolutions, with and without MISO videos
+
+Atuin briefly active on **Jul 11** (4 timestamped entries: `atuin sync`, `nvim ~/.bashrc`, `source ~/.bashrc`, `exit`), then disabled.
+
+#### ~August 2025 — OpenVINO CPU Tuning & VPS Deployment
+
+Git commits show:
+- **Aug 28**: OpenVINO CPU tuning for 4-vCPU VPS (threads/hints/pinning) + WARP.md
+- **Aug 29-31**: gitignore cleanup, AlphaPose CPU fixes for Apple M1
+
+Shell history shows heavy `export OV_*` experimentation (lines 208-224): toggling `OV_MODE=latency/throughput`, `OV_STREAMS`, `OV_THREADS`, running MoveNet on CPU with different configs.
+
+#### ~September 2025 — HTTP Streaming, Async Processing, More Models
+
+- **Sep 11-12**: Added AlphaPose notebook, HTTP stream input support, async/threaded OpenVINO HPE, infrastructure + GitHub workflows
+- **Sep 14-15**: Enhanced `run_async_openvino_hpe`, timeout/frame-count detection for HTTP streams, OpenVINO simple test script
+- **Sep 17-18**: CUDA upgrade scripts, video capture handling, CPU performance optimization, Dockerfile for OpenCV+FFmpeg+CUDA
+
+Shell history shows the `ae1` (EfficientHRNet) method being tested extensively (lines 602-632), plus `openpose` and `alphapose` on both CPU and GPU with `--max_frames` and `--timeout` flags.
+
+#### ~Late 2025 — FFmpeg + CUDA Docker Build Saga
+
+Massive effort building `ffmpeg-cuda:8.0-focal` (history lines 298-569):
+- Multiple `Dockerfile_optimized_multistage_v4` build attempts
+- Disk space issues (`df -h`, `docker system prune`, `docker builder prune`)
+- Fighting with `libnpp`, `h264_nvenc`, `scale_npp` filters
+- Cleaning old FFmpeg builds from `/usr/local/` (lines 314-340)
+- Testing NVENC encoding with various quality presets (lines 553-569)
+
+#### ~Early 2026 — NVIDIA Driver Upgrade & Kernel HWE
+
+Painful driver upgrade (history lines 496-553):
+- Installing `linux-generic-hwe-20.04` (kernel 5.15)
+- Fighting `apt` broken packages, GRUB EFI issues, `dpkg --configure -a`
+- Switching apt mirrors to fix download issues
+- Installing `nvidia-driver-570` from `graphics-drivers/ppa`
+- Multiple reboots, fixing CUDA repo pin conflicts
+- Finally getting `nvidia-smi` and Docker GPU passthrough working
+
+#### ~Early-Mid 2026 — Performance Governor & Network Monitoring
+
+- Setting CPU to `performance` governor (history lines 575-638)
+- Installing `hwloc`, `nethogs`, `iftop` for network monitoring
+- Testing `lo` interface traffic (investigating RX/TX discrepancy for streaming)
+- Pulling `madtune/opencv-cuda:4.10.0` Docker image
+
+#### ~Mid 2026 — Final Optimization Round
+
+- Extensive OpenVINO env var tuning (history lines 667-741)
+- Testing `optimizations/optimized_main.py` with `--enable-cpu-opt`
+- Running `alphapose` on GPU, `openpose` and `movenet` on CPU
+- Network traffic analysis with `nethogs` and `iftop`
+- Cleaning up old model files (`rm -rf models/ONNX/`)
+
+#### May 7, 2026 — Server Rebooted, Atuin Reactivated
+
+- Server came back up, `source ~/.bashrc`, atuin lines uncommented
+- `git status`, `cat ~/.bashrc`
+
+#### Summary Table
+
+| Period | Main Activity |
+|---|---|
+| **Jun 2025** | Server setup, CPU profiling with `perf` on AMD EPYC |
+| **Jul 2025** | Dockerized HPE experiments (movenet/alphapose/openpose, CPU+GPU) |
+| **Aug 2025** | OpenVINO CPU tuning, VPS deployment, gitignore cleanup |
+| **Sep 2025** | HTTP streaming support, async HPE, ae1 model, git commits |
+| **Late 2025** | FFmpeg+CUDA Docker build, NVENC testing, disk space battles |
+| **Early 2026** | NVIDIA driver 570 upgrade, kernel HWE, GRUB/EFI fixes |
+| **Mid 2026** | CPU governor tuning, network monitoring, final optimization pass |
+| **May 2026** | Server restart, atuin reactivated |
+
+> **Note on git activity:** The last *branch-level* commit visible in git log before this session's fixes was Sep 18, 2025 (`7f0a1cc`). However, the shell history shows continuous infrastructure and optimization work (Docker builds, driver upgrades, env-var tuning) through mid-2026 that was never committed — likely because it was iterative experimentation rather than code changes. Commits by Vittorakis (`cacfe8a`, `8558aef`) and George Kal (`086c53a`) on `origin/perf-tuning-base` appeared later during the collaborative push phase.
+
+---
+
 ## 2. Full Bug Audit — 21 Issues Found
 
 All 8 non-main branches carried identical bugs. `main` and `evaluation` were unaffected (no benchmarking code present).

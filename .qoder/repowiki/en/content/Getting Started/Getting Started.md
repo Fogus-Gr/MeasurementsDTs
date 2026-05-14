@@ -2,8 +2,8 @@
 
 <cite>
 **Referenced Files in This Document**
-- [README.md](file://README.md)
 - [ONBOARDING.md](file://ONBOARDING.md)
+- [README.md](file://README.md)
 - [requirements.txt](file://requirements.txt)
 - [setup.py](file://setup.py)
 - [models/AlphaPose/build_extensions.sh](file://models/AlphaPose/build_extensions.sh)
@@ -17,16 +17,25 @@
 - [build_ffmpeg_cuda.sh](file://build_ffmpeg_cuda.sh)
 - [check_stream_compat.sh](file://check_stream_compat.sh)
 - [ffmpeg_hpe/docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
+- [ffmpeg_hpe/run_experiment_bcc.sh](file://ffmpeg_hpe/run_experiment_bcc.sh)
+- [docs/experiment-scripts.md](file://docs/experiment-scripts.md)
+- [docs/docker-services.md](file://docs/docker-services.md)
+- [docs/bcc-bpf-tracing.md](file://docs/bcc-bpf-tracing.md)
+- [docs/plotting-analysis.md](file://docs/plotting-analysis.md)
+- [docs/hpe-methods.md](file://docs/hpe-methods.md)
+- [ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py)
+- [ffmpeg_hpe/bpftrace-tracer/entrypoint.sh](file://ffmpeg_hpe/bpftrace-tracer/entrypoint.sh)
+- [Report on RX TX traffic discrepancy.md](file://Report on RX TX traffic discrepancy.md)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Added comprehensive ONBOARDING.md guidance with step-by-step setup instructions
-- Enhanced environment setup documentation with detailed prerequisites and requirements
-- Expanded model download instructions with specific file paths and verification steps
-- Added Docker-based experiment pipeline documentation with monitoring capabilities
-- Included troubleshooting guides for common setup and runtime issues
-- Updated performance optimization documentation with CPU tuning guidelines
+- Enhanced documentation with comprehensive experiment rig tables showing folder roles classification
+- Added detailed flow diagrams for experiment orchestration and network data collection
+- Updated results directory structure with corrected file naming conventions
+- Improved TX/RX network data collection explanations with detailed methodology
+- Enhanced experiment pipeline documentation with monitoring capabilities
+- Added troubleshooting guidance for network measurement discrepancies
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -39,41 +48,53 @@
 8. [Experiment Pipeline](#experiment-pipeline)
 9. [Performance Optimization](#performance-optimization)
 10. [Verification and Testing](#verification-and-testing)
-11. [Troubleshooting Guide](#troubleshooting-guide)
-12. [Conclusion](#conclusion)
+11. [Network Monitoring and Data Collection](#network-monitoring-and-data-collection)
+12. [Results Directory Structure](#results-directory-structure)
+13. [Troubleshooting Guide](#troubleshooting-guide)
+14. [Conclusion](#conclusion)
 
 ## Introduction
-This comprehensive guide provides complete setup instructions for the Human Pose Estimation framework, incorporating the new ONBOARDING.md documentation. The framework supports multiple state-of-the-art methods including AlphaPose, MoveNet, OpenPose, HigherHRNet, and EfficientHRNet variants. It offers both local execution and Docker-based benchmarking capabilities with comprehensive performance monitoring.
+This comprehensive guide provides complete setup instructions for the Human Pose Estimation framework, incorporating the new ONBOARDING.md documentation. The framework supports multiple state-of-the-art methods including AlphaPose, MoveNet, OpenPose, HigherHRNet, and EfficientHRNet variants. It offers both local execution and Docker-based benchmarking capabilities with comprehensive performance monitoring including detailed network traffic analysis.
 
-**Updated** Enhanced with detailed onboarding procedures from the comprehensive ONBOARDING.md guide, providing step-by-step instructions for environment setup, model configuration, and experiment execution.
+**Updated** Enhanced with comprehensive experiment rig tables, detailed flow diagrams, folder roles classification, and corrected file naming conventions for network data collection.
 
 ## Project Structure
-The repository provides a complete HPE benchmarking system with modular components:
+The repository provides a complete HPE benchmarking system with modular components organized into three main categories:
 
 ```mermaid
 graph TB
-A["main.py<br/>CLI entrypoint"] --> B["BaseHPE<br/>shared base"]
-B --> C["MoveNetHPE<br/>movenet_hpe.py"]
-B --> D["OpenVINOBaseHPE<br/>openvino_base_hpe.py"]
-B --> E["AlphaPoseHPE<br/>alphapose_hpe.py"]
-D --> F["OpenVINO models<br/>models/OpenVINO/pretrained_models"]
-E --> G["AlphaPose models<br/>models/AlphaPose/pretrained_models"]
-H["Experiment Pipeline<br/>ffmpeg_hpe/"] --> I["Docker Compose<br/>Multi-service orchestration"]
-J["Monitoring Tools"] --> K["GPU Metrics<br/>nvidia-smi polling"]
-J --> L["CPU Monitoring<br/>bpftrace/perf"]
-J --> M["Network Tracing<br/>BCC/BPF"]
+subgraph "Experiment Rigs"
+A["ffmpeg_hpe/<br/>run_experiment.sh<br/>run_experiment_bcc.sh"]
+B["monitor_hpe/<br/>run_experiment.sh"]
+C["recent-dash/<br/>HTTP caching research"]
+end
+subgraph "Service Implementations"
+D["rtsp-ipcam/<br/>h264-streaming-server"]
+E["recent-dash/perf_monitor/<br/>CPU monitoring"]
+F["ffmpeg_hpe/bpftrace-tracer/<br/>BCC network tracing"]
+G["ffmpeg_hpe/Dockerfile.gpu_metrics/<br/>GPU metrics collector"]
+H["Dockerfile_base<br/>Main HPE container"]
+end
+subgraph "Standalone Tools"
+I["Measure_Flops/<br/>GPU FLOPS measurement"]
+J["Measure_gpu_dcgm/<br/>GPU power/temp/util"]
+K["Measure_plot_cpu_perf/<br/>CPU cycles analysis"]
+L["optimizations/<br/>OpenVINO tuning"]
+M["dev_tools/<br/>Local streaming server"]
+end
+A --> D
+A --> E
+A --> F
+A --> G
+A --> H
 ```
 
 **Diagram sources**
-- [main.py:51-200](file://main.py#L51-L200)
-- [base_hpe.py:88-630](file://base_hpe.py#L88-L630)
-- [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
-- [openvino_base_hpe.py:55-395](file://openvino_base_hpe.py#L55-L395)
-- [alphapose_hpe.py:33-334](file://alphapose_hpe.py#L33-L334)
+- [ONBOARDING.md:69-96](file://ONBOARDING.md#L69-L96)
+- [ONBOARDING.md:122-173](file://ONBOARDING.md#L122-L173)
 
 **Section sources**
-- [README.md:63-231](file://README.md#L63-L231)
-- [ONBOARDING.md:63-142](file://ONBOARDING.md#L63-L142)
+- [ONBOARDING.md:63-173](file://ONBOARDING.md#L63-L173)
 
 ## Core Components
 The framework consists of several key components working together:
@@ -82,7 +103,7 @@ The framework consists of several key components working together:
 - **BaseHPE**: Common logic for input handling, preprocessing, inference timing, and output generation
 - **Method-Specific Classes**: Specialized implementations for each HPE algorithm
 - **Experiment Pipeline**: Docker-based benchmarking with comprehensive monitoring
-- **Monitoring Stack**: CPU, GPU, and network performance tracking
+- **Monitoring Stack**: CPU, GPU, and network performance tracking with kernel-level precision
 
 Key capabilities include automatic video property detection, HTTP stream support, JSON/COCO CSV export, and optional visualization output.
 
@@ -92,33 +113,37 @@ Key capabilities include automatic video property detection, HTTP stream support
 - [ONBOARDING.md:285-301](file://ONBOARDING.md#L285-L301)
 
 ## Architecture Overview
-The system provides both local execution and containerized benchmarking:
+The system provides both local execution and containerized benchmarking with sophisticated network monitoring:
 
 ```mermaid
 sequenceDiagram
 participant U as "User"
-participant M as "main.py"
-participant B as "BaseHPE"
-participant H as "MethodHPE"
-participant V as "Input Source"
-U->>M : "python3 main.py --method <method> --input <src>"
-M->>M : "parse_arguments()"
-M->>M : "get_hpe_method(args)"
-M->>H : "load_model()"
-H->>B : "initialize BaseHPE(...)"
-U->>M : "run main_loop/main_loop_with_timeout"
-M->>B : "process_frame(frame)"
-B->>H : "pad_and_resize(frame)"
-H->>H : "run_model(padded)"
-H-->>B : "predictions"
-B->>H : "postprocess(predictions)"
-H-->>B : "bodies"
-B-->>U : "render/save outputs"
+participant S as "run_experiment_bcc.sh"
+participant C as "Docker Compose"
+participant H as "h264-streaming-server"
+participant P as "HPE Container"
+participant M as "Monitoring Sidecars"
+participant T as "BCC Tracer"
+U->>S : "Execute experiment script"
+S->>C : "Start streaming server"
+C->>H : "Launch HTTP H.264 server"
+S->>C : "Start HPE container"
+C->>P : "Launch inference engine"
+S->>C : "Start monitoring services"
+C->>M : "Launch perf_monitor + gpu-metrics"
+S->>C : "Start BCC tracer"
+C->>T : "Launch kernel-level network tracer"
+T->>T : "Detect HPE port dynamically"
+P->>H : "Connect to HTTP stream"
+P->>P : "Process frames and collect metrics"
+M->>M : "Monitor CPU/Memory usage"
+T->>T : "Trace RX bytes at 10ms intervals"
+S->>S : "Collect and organize results"
 ```
 
 **Diagram sources**
-- [main.py:51-200](file://main.py#L51-L200)
-- [base_hpe.py:405-519](file://base_hpe.py#L405-L519)
+- [ONBOARDING.md:460-475](file://ONBOARDING.md#L460-L475)
+- [ffmpeg_hpe/run_experiment_bcc.sh:158-198](file://ffmpeg_hpe/run_experiment_bcc.sh#L158-L198)
 
 ## Installation and Setup
 
@@ -286,18 +311,40 @@ The framework provides comprehensive containerized benchmarking with multi-servi
 ```mermaid
 graph TD
 A["h264-streaming-server<br/>FFmpeg/NGINX, :8089"] --> B["H.264 HTTP Stream"]
-B --> C["hpe Container<br/>Python + OpenCV + Pose Estimation"]
+B --> C["HPE Container<br/>Python + OpenCV + Pose Estimation"]
 C --> D["perf_monitor<br/>bpftrace CPU/memory"]
 C --> E["bcc-tracer<br/>BPF network tracing"]
 C --> F["gpu-metrics<br/>nvidia-smi polling"]
-D --> G["aggregated_metrics.csv"]
-E --> H["video_rx.csv"]
-F --> I["gpu_metrics.csv"]
-C --> J["hpe_output/*.csv"]
+D --> G["results/perf/aggregated_metrics.csv"]
+E --> H["results/traces/bcc/video_rx.csv"]
+F --> I["results/gpu/gpu_metrics.csv"]
+C --> J["results/hpe_output/*.csv"]
 ```
 
 **Diagram sources**
 - [ONBOARDING.md:361-427](file://ONBOARDING.md#L361-L427)
+
+### Experiment Rig Tables
+
+#### Primary Experiment Rigs
+| Folder | Entry Point | What it measures | Key Features |
+|---|---|---|---|
+| `ffmpeg_hpe/` | `run_experiment.sh` / `run_experiment_bcc.sh` | HPE inference on H.264 stream + full monitoring stack | Full network tracing, comprehensive metrics |
+| `monitor_hpe/` | `run_experiment.sh` | HPE inference baseline — CPU/memory only, no streaming server | Simplified monitoring, local processing |
+| `recent-dash/` | `run_experiment.sh` | DASH/HTTP caching research — separate thread | HTTP caching analysis, Prometheus integration |
+
+#### Service Implementations
+| Folder | Used by | Role in `docker-compose.yaml` | Key Characteristics |
+|---|---|---|---|
+| `rtsp-ipcam/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `h264-streaming-server` container | H.264 HTTP streaming server |
+| `recent-dash/perf_monitor/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `perf_monitor` container | CPU/memory monitoring via bpftrace |
+| `ffmpeg_hpe/bpftrace-tracer/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `bcc-tracer` container | BCC/BPF-based network tracing |
+| `ffmpeg_hpe/Dockerfile.gpu_metrics` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `gpu-metrics` container | GPU metrics via nvidia-smi polling |
+| `Dockerfile_base` (repo root) | `ffmpeg_hpe/` + `monitor_hpe/` | Builds the `hpe` container | Main inference engine |
+
+**Section sources**
+- [ONBOARDING.md:69-96](file://ONBOARDING.md#L69-L96)
+- [ONBOARDING.md:77-86](file://ONBOARDING.md#L77-L86)
 
 ### Docker Services Configuration
 The experiment pipeline consists of five coordinated services:
@@ -326,13 +373,13 @@ The experiment pipeline consists of five coordinated services:
 
 #### 5. bcc-tracer Sidecar
 - **Purpose**: Kernel-level network RX byte tracing using BCC/BPF
-- **Output**: `tracer_output/hpe_video_rx.csv`
+- **Output**: `results/traces/bcc/video_rx.csv`
 - **Network Mode**: Shares HPE container's network namespace
 
 ### Experiment Execution Flow
 The `run_experiment_bcc.sh` script orchestrates the complete benchmarking process:
 
-1. **Timestamp Generation**: Creates unique results directory name
+1. **Timestamp Generation**: Creates unique results directory name with CPU thread count and device type
 2. **Directory Creation**: Sets up `logs/`, `perf/`, `gpu/`, `traces/bcc/`, `hpe_output/` subdirectories
 3. **Container Cleanup**: Removes previous containers and volumes
 4. **Service Startup**: Starts streaming server with health checks
@@ -422,6 +469,118 @@ cd ffmpeg_hpe/
 - [dev_tools/smoke_test.sh:1-42](file://dev_tools/smoke_test.sh#L1-L42)
 - [ONBOARDING.md:346-356](file://ONBOARDING.md#L346-L356)
 
+## Network Monitoring and Data Collection
+
+### TX and RX Network Data Collection
+
+Network measurement requires two different tools because TX and RX operate in different kernel contexts:
+
+| Direction | Tool | Container | Mechanism | Output file |
+|---|---|---|---|---|
+| **TX** (HPE → outside) | `bpftrace sys_enter_sendto` in `monitor_pid.sh` | `perf_monitor` | Syscall tracepoint — fires in HPE process context, PID filter valid | `results/perf/network_stats.csv` (rows where `sent=1`) |
+| **RX** (stream → HPE) | `bcc_rx_bytes.py` | `bcc-tracer` | BPF socket filter on `eth0`, filtered by streamer IP + port | `results/traces/bcc/video_rx.csv` |
+| ~~RX (attempted)~~ | ~~`bpftrace netif_receive_skb`~~ | ~~`perf_monitor`~~ | ~~Fires in softirq/kernel context — PID never matches HPE~~ | ~~Always ~0, ignore~~ |
+
+**Why the split is necessary:** `sendto()` is a syscall made by the HPE process — the kernel knows the PID. Incoming packets are processed by the kernel network stack in softirq context *before* being associated with any process — PID filtering is impossible at that point. `bcc-tracer` works around this by filtering by IP+port instead, running in a container that shares HPE's network namespace (`network_mode: service:hpe`).
+
+**Rule:** for RX data use `results/traces/bcc/video_rx.csv`. For TX data use `results/perf/network_stats.csv`. Never use the RX column from `results/perf/aggregated_metrics.csv` — it is always `0` by design.
+
+### BCC Tracer Architecture
+The BCC tracer uses kernel-level eBPF programs to capture network traffic with high precision:
+
+```mermaid
+graph LR
+A["Kernel Space"] --> B["BPF Socket Filter"]
+B --> C["count_rx() Function"]
+C --> D["rx_bytes Hash Map"]
+D --> E["User Space"]
+E --> F["bcc_rx_bytes.py"]
+F --> G["video_rx.csv Output"]
+subgraph "Filter Logic"
+H["Parse Ethernet Header"]
+I["Filter IPv4 Only"]
+J["Filter TCP Only"]
+K["Match Streamer IP:Port"]
+H --> I --> J --> K
+end
+B --> H
+```
+
+**Diagram sources**
+- [docs/bcc-bpf-tracing.md:23-53](file://docs/bcc-bpf-tracing.md#L23-L53)
+- [ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py:29-71](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py#L29-L71)
+
+### Port Detection Mechanism
+The BCC tracer automatically detects the HPE container's dynamic source port:
+
+1. **Resolve streaming server hostname** to IP address
+2. **Get network interface** from default route
+3. **Wait for HPE to establish TCP connection** to port 8089 (up to 10 attempts)
+4. **Extract HPE's dynamic source port** from established connections
+5. **Pass detected port** to BCC program for filtering
+
+**Section sources**
+- [docs/bcc-bpf-tracing.md:143-175](file://docs/bcc-bpf-tracing.md#L143-L175)
+- [ffmpeg_hpe/bpftrace-tracer/entrypoint.sh:29-47](file://ffmpeg_hpe/bpftrace-tracer/entrypoint.sh#L29-L47)
+
+## Results Directory Structure
+
+### Updated Directory Structure
+Results are saved to a timestamped directory with enhanced naming convention:
+
+```
+results_{method}_{cpu_threads}cores_{device}_{video_file}_{timestamp}/
+├── container_timing.txt         # Startup time per container (seconds)
+├── logs/
+│   ├── hpe_startup.log          # HPE container early startup output
+│   ├── hpe_startup_full.log     # Full HPE container log
+│   ├── hpe_exit.log             # HPE container exit code (0 = clean, non-zero = crash)
+│   ├── perf_monitor.log         # bpftrace perf monitor log
+│   ├── bcc-tracer.log           # BCC tracer log (port detection, tracing events)
+│   └── gpu-metrics.log          # GPU metrics collector log
+├── perf/
+│   ├── aggregated_metrics.csv   # Columns: timestamp, pid, cpu_percent, mem_rss_kb, tx_bytes*, rx_bytes*
+│   ├── network_stats.csv        # Columns: timestamp, pid, interface, bytes, sent  ← TX data lives here
+│   └── perf_metrics.csv         # Additional perf_monitor metrics
+├── gpu/
+│   └── gpu_metrics.csv          # Columns: timestamp, gpu_id, gpu_utilization, mem_utilization, temperature, power_usage
+├── traces/bcc/
+│   └── video_rx.csv             # Columns: timestamp_ms, rx_bytes (per 10ms interval)  ← RX data lives here
+└── hpe_output/
+    ├── *.csv                    # Keypoint data: frame, person_id, joint coordinates
+    └── *.json                   # COCO-format keypoint export (if --json flag used)
+```
+
+**Important Notes:**
+- `*` The `tx_bytes` and `rx_bytes` columns in `aggregated_metrics.csv` are always `0` — this is intentional
+- Network data is collected separately by two different tools as described above
+- The `video_rx.csv` file contains RX bytes measured at 10ms intervals
+- TX data is captured separately in `network_stats.csv` with proper PID filtering
+
+### Data Validation Commands
+```bash
+cd results_*/  # Navigate to your results directory
+
+# Total video data received (MB)
+awk -F, 'NR>1 {sum += $2} END {printf "%.2f MB\n", sum/1024/1024}' traces/bcc/video_rx.csv
+
+# Average GPU utilization
+awk -F, 'NR>1 {sum += $2; n++} END {printf "%.1f%%\n", sum/n}' gpu/gpu_metrics.csv
+
+# Peak memory usage (MB)
+awk -F, 'NR>1 {if ($3 > max) max=$3} END {print max/1024 " MB"}' perf/aggregated_metrics.csv
+
+# Number of frames processed
+wc -l hpe_output/*.csv
+
+# Experiment duration (from RX trace)
+head -2 traces/bcc/video_rx.csv && echo "..." && tail -1 traces/bcc/video_rx.csv
+```
+
+**Section sources**
+- [ONBOARDING.md:554-620](file://ONBOARDING.md#L554-L620)
+- [Report on RX TX traffic discrepancy.md:1-109](file://Report on RX TX traffic discrepancy.md#L1-L109)
+
 ## Troubleshooting Guide
 
 ### Common Setup Issues
@@ -479,10 +638,39 @@ docker kill hpe bcc-tracer gpu-metrics perf_monitor 2>/dev/null || true
 docker rm -f hpe bcc-tracer gpu-metrics perf_monitor 2>/dev/null || true
 ```
 
+### Network Measurement Discrepancies
+**Issue**: RX/TX traffic discrepancy between different measurement methods
+
+**Causes and Solutions:**
+1. **Protocol overhead differences**: Docker stats include all protocol overhead while bpftrace may only count payload
+2. **Sampling limitations**: bpftrace may miss packets due to kernel filtering or buffer overflows
+3. **Partial stream consumption**: HPE container may exit early or skip frames
+4. **Timing mismatches**: Different measurement start/stop times
+
+**Diagnosis Steps:**
+```bash
+# Check streaming server logs for complete file transmission
+docker logs h264-streaming-server | tail -20
+
+# Verify HPE container processed all frames
+docker logs hpe | grep -E "(frame|processed|exit)"
+
+# Compare durations
+echo "Stream duration (RX trace):"
+head -2 traces/bcc/video_rx.csv && echo "..." && tail -1 traces/bcc/video_rx.csv
+
+# Validate file sizes
+echo "Original file size:"
+stat -c%s /path/to/original/video.mp4
+```
+
 **Section sources**
 - [ONBOARDING.md:627-740](file://ONBOARDING.md#L627-L740)
+- [Report on RX TX traffic discrepancy.md:41-56](file://Report on RX TX traffic discrepancy.md#L41-L56)
 
 ## Conclusion
-You now have comprehensive guidance for setting up and using the Human Pose Estimation framework. The ONBOARDING.md documentation provides detailed step-by-step instructions for environment setup, model configuration, and experiment execution. Whether running locally or using the Docker-based benchmarking pipeline, the framework offers extensive monitoring capabilities and performance optimization features. Use the provided verification steps and troubleshooting guidance to ensure a smooth setup experience.
+You now have comprehensive guidance for setting up and using the Human Pose Estimation framework. The ONBOARDING.md documentation provides detailed step-by-step instructions for environment setup, model configuration, and experiment execution. Whether running locally or using the Docker-based benchmarking pipeline, the framework offers extensive monitoring capabilities and performance optimization features.
 
-The framework supports multiple HPE methods with flexible deployment options, making it suitable for both development and production benchmarking scenarios. The comprehensive monitoring stack enables detailed performance analysis across CPU, GPU, and network domains.
+The enhanced documentation includes comprehensive experiment rig tables, detailed flow diagrams, corrected file naming conventions, and improved network monitoring capabilities. The framework supports multiple HPE methods with flexible deployment options, making it suitable for both development and production benchmarking scenarios. The comprehensive monitoring stack enables detailed performance analysis across CPU, GPU, and network domains with kernel-level precision.
+
+**Updated** Enhanced with comprehensive experiment rig tables, detailed flow diagrams, folder roles classification, TX/RX network data collection explanations, and corrected file naming conventions for improved accuracy and reliability.

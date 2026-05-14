@@ -12,6 +12,7 @@
 - [monitor_hpe/Dockerfile](file://monitor_hpe/Dockerfile)
 - [monitor_hpe/monitor_pid.sh](file://monitor_hpe/monitor_pid.sh)
 - [monitor_hpe/run_experiment.sh](file://monitor_hpe/run_experiment.sh)
+- [monitor_hpe/plot_graph.py](file://monitor_hpe/plot_graph.py)
 - [recent-dash/prometheus.yml](file://recent-dash/prometheus.yml)
 - [recent-dash/docker-compose.yml](file://recent-dash/docker-compose.yml)
 - [ffmpeg_hpe/docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
@@ -19,14 +20,15 @@
 - [Measure_gpu_dcgm/run_nvidia_dcgm.sh](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh)
 - [utils/evaluator.py](file://utils/evaluator.py)
 - [utils/visualizer.py](file://utils/visualizer.py)
+- [measure_flops/measure_flops.sh](file://measure_flops/measure_flops.sh)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Added comprehensive PoseMonitor system integration into BaseHPE and main classes
-- Documented real-time frame processing metrics and memory usage tracking capabilities
-- Updated architecture diagrams to reflect PoseMonitor integration
-- Enhanced monitoring capabilities with pose-specific metrics collection
+- Updated experiment orchestration documentation to reflect corrected run_experiment.sh script improvements
+- Documented monitoring script fixes for double-write bugs and CPU calculation methods
+- Enhanced plotting script command-line argument support and file path accuracy
+- Updated monitoring architecture to address corrected file paths and output formats
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -80,6 +82,7 @@ end
 subgraph "Evaluation and Visualization"
 K["utils/evaluator.py"]
 L["utils/visualizer.py"]
+M["monitor_hpe/plot_graph.py<br/>Enhanced command-line support"]
 end
 A --> B
 B --> C
@@ -90,6 +93,7 @@ H --> J
 D --> K
 I --> K
 J --> K
+M --> K
 ```
 
 **Diagram sources**
@@ -97,11 +101,13 @@ J --> K
 - [base_hpe.py:482-600](file://base_hpe.py#L482-L600)
 - [main.py:51-188](file://main.py#L51-L188)
 - [monitor_hpe/docker-compose.yaml:1-52](file://monitor_hpe/docker-compose.yaml#L1-L52)
-- [monitor_hpe/monitor_pid.sh:1-204](file://monitor_hpe/monitor_pid.sh#L1-L204)
+- [monitor_hpe/monitor_pid.sh:1-216](file://monitor_hpe/monitor_pid.sh#L1-L216)
+- [monitor_hpe/run_experiment.sh:1-138](file://monitor_hpe/run_experiment.sh#L1-L138)
+- [monitor_hpe/plot_graph.py:1-59](file://monitor_hpe/plot_graph.py#L1-L59)
 - [recent-dash/prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
 - [recent-dash/docker-compose.yml:1-103](file://recent-dash/docker-compose.yml#L1-L103)
 - [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
-- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-84](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L84)
+- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-86](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L86)
 - [Measure_gpu_dcgm/run_nvidia_dcgm.sh:1-29](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh#L1-L29)
 - [utils/evaluator.py](file://utils/evaluator.py)
 - [utils/visualizer.py](file://utils/visualizer.py)
@@ -121,14 +127,16 @@ J --> K
 - **Prometheus configuration**: Defines scraping jobs for node and cluster agents and a Coroot endpoint
 - **HPE pipeline with GPU metrics**: Runs HPE alongside GPU metrics logging and optional BPF/BCC tracing
 - **Evaluation and visualization**: Provides utilities to compute COCO metrics and visualize pose results
+- **Enhanced plotting system**: Improved command-line argument support and file path accuracy for metric visualization
 
 **Section sources**
 - [pose_monitor.py:8-170](file://pose_monitor.py#L8-L170)
-- [monitor_hpe/monitor_pid.sh:1-204](file://monitor_hpe/monitor_pid.sh#L1-L204)
+- [monitor_hpe/monitor_pid.sh:1-216](file://monitor_hpe/monitor_pid.sh#L1-L216)
 - [monitor_hpe/run_experiment.sh:1-138](file://monitor_hpe/run_experiment.sh#L1-L138)
+- [monitor_hpe/plot_graph.py:1-59](file://monitor_hpe/plot_graph.py#L1-L59)
 - [recent-dash/prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
 - [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
-- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-84](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L84)
+- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-86](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L86)
 - [utils/evaluator.py](file://utils/evaluator.py)
 - [utils/visualizer.py](file://utils/visualizer.py)
 
@@ -162,7 +170,7 @@ Exp-->>Dash : Load CSV and Prometheus data for visualization
 
 **Diagram sources**
 - [monitor_hpe/docker-compose.yaml:1-52](file://monitor_hpe/docker-compose.yaml#L1-L52)
-- [monitor_hpe/monitor_pid.sh:1-204](file://monitor_hpe/monitor_pid.sh#L1-L204)
+- [monitor_hpe/monitor_pid.sh:1-216](file://monitor_hpe/monitor_pid.sh#L1-L216)
 - [recent-dash/prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
 - [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
 - [pose_monitor.py:49-170](file://pose_monitor.py#L49-L170)
@@ -248,15 +256,18 @@ BaseHPE->>BaseHPE : Postprocess and render
 
 ### PID-based Metrics Collection
 The monitor container traces a target PID and exports:
-- CPU percentage
+- CPU percentage calculated from /proc/$PID/stat deltas
 - Memory RSS (KB)
 - Network TX/RX bytes (via bpftrace)
 - Timestamps for temporal alignment
+
+**Updated** Fixed double-write bugs and improved CPU calculation methods
 
 Key behaviors:
 - Reads the target PID from a mounted file and waits for it with a timeout
 - Starts a bpftrace script to accumulate TX/RX bytes per 10 ms interval and emits rates to a FIFO
 - Writes metrics to CSV files with atomic append and locking to avoid corruption
+- Uses precise CPU% calculation from /proc/$PID/stat deltas with proper time scaling
 - Continues until the target process exits or terminated
 
 ```mermaid
@@ -268,17 +279,18 @@ WaitPID --> ReadPID["Read PID from file"]
 ReadPID --> StartBpf["Start bpftrace (TX/RX counters)"]
 StartBpf --> ReadFifo["Read FIFO for TX/RX updates"]
 ReadFifo --> Loop["Main loop: ps + proc parsing"]
-Loop --> WriteCSV["Atomic write to CSV"]
+Loop --> CalcCPU["Calculate CPU% from /proc/$PID/stat deltas"]
+CalcCPU --> WriteCSV["Atomic write to CSV"]
 WriteCSV --> Sleep["Sleep 500ms"]
 Sleep --> Loop
 ReadPID --> Loop
 ```
 
 **Diagram sources**
-- [monitor_hpe/monitor_pid.sh:1-204](file://monitor_hpe/monitor_pid.sh#L1-L204)
+- [monitor_hpe/monitor_pid.sh:1-216](file://monitor_hpe/monitor_pid.sh#L1-L216)
 
 **Section sources**
-- [monitor_hpe/monitor_pid.sh:1-204](file://monitor_hpe/monitor_pid.sh#L1-L204)
+- [monitor_hpe/monitor_pid.sh:1-216](file://monitor_hpe/monitor_pid.sh#L1-L216)
 - [monitor_hpe/docker-compose.yaml:1-52](file://monitor_hpe/docker-compose.yaml#L1-L52)
 
 ### Experiment Orchestration
@@ -288,6 +300,7 @@ The experiment runner:
 - Captures container logs after completion
 - Copies CSV outputs from the Docker volume and attempts to generate plots
 - Supports graceful shutdown via signal handling
+- **Updated** Enhanced with improved plotting script command-line argument support
 
 ```mermaid
 sequenceDiagram
@@ -302,7 +315,7 @@ Runner->>Compose : docker compose up -d (start)
 Runner->>Runner : Wait for containers running
 Runner->>Compose : docker compose logs (after completion)
 Runner->>Runner : Copy CSV from results volume
-Runner->>Runner : Generate plots (fallback to simple plot)
+Runner->>Runner : Generate plots with enhanced error handling
 Runner->>Compose : docker compose down (cleanup)
 Runner-->>User : Results saved to timestamped folder
 ```
@@ -363,12 +376,37 @@ TR-->>DC : Write PID metrics CSV
 
 **Diagram sources**
 - [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
-- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-84](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L84)
+- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-86](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L86)
 - [pose_monitor.py:1-170](file://pose_monitor.py#L1-L170)
 
 **Section sources**
 - [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
-- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-84](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L84)
+- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-86](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L86)
+
+### Enhanced Plotting System
+**Updated** The plotting system now includes improved command-line argument support and file path accuracy:
+
+- **monitor_hpe/plot_graph.py**: Enhanced with proper command-line argument validation and error handling
+- **File path accuracy**: Corrected output file path generation and directory handling
+- **Error handling**: Improved fallback mechanisms for plot generation
+- **Command-line interface**: Standardized usage pattern with explicit CSV file argument
+
+```mermaid
+flowchart TD
+Start(["plot_graph.py"]) --> ParseArgs["Parse command-line arguments"]
+ParseArgs --> CheckFile["Check CSV file existence"]
+CheckFile --> ReadCSV["Read CSV data"]
+ReadCSV --> ProcessData["Process timestamp and metrics"]
+ProcessData --> CreatePlots["Generate CPU and Memory plots"]
+CreatePlots --> SavePlot["Save PNG to same directory"]
+SavePlot --> ShowPlot["Display plot"]
+```
+
+**Diagram sources**
+- [monitor_hpe/plot_graph.py:1-59](file://monitor_hpe/plot_graph.py#L1-L59)
+
+**Section sources**
+- [monitor_hpe/plot_graph.py:1-59](file://monitor_hpe/plot_graph.py#L1-L59)
 
 ### Evaluation Utilities and Visualization
 - **evaluator.py**: Provides COCO-format evaluation utilities for pose estimation tasks
@@ -387,6 +425,7 @@ The monitoring stack exhibits the following dependencies:
 - Prometheus depends on exporters being reachable at configured targets
 - The HPE pipeline depends on GPU runtime and optional BPF/BCC tracing containers
 - **PoseMonitor system**: Depends on BaseHPE.process_frame integration and real-time metrics processing
+- **Enhanced plotting system**: Depends on pandas, matplotlib, and proper CSV file structure
 
 ```mermaid
 graph TB
@@ -400,25 +439,28 @@ PR["prometheus.yml"] --> EXP["Exporters"]
 FH["ffmpeg_hpe/docker-compose.yaml"] --> GM["gpu-metrics"]
 FH --> HPE["hpe container"]
 FH --> TR["bcc-tracer"]
+PG["plot_graph.py"] --> CSV
 ```
 
 **Diagram sources**
 - [pose_monitor.py:1-170](file://pose_monitor.py#L1-L170)
 - [base_hpe.py:482-600](file://base_hpe.py#L482-L600)
 - [main.py:51-188](file://main.py#L51-L188)
-- [monitor_hpe/monitor_pid.sh:1-204](file://monitor_hpe/monitor_pid.sh#L1-L204)
+- [monitor_hpe/monitor_pid.sh:1-216](file://monitor_hpe/monitor_pid.sh#L1-L216)
 - [monitor_hpe/run_experiment.sh:1-138](file://monitor_hpe/run_experiment.sh#L1-L138)
 - [recent-dash/prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
 - [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
+- [monitor_hpe/plot_graph.py:1-59](file://monitor_hpe/plot_graph.py#L1-L59)
 
 **Section sources**
 - [pose_monitor.py:1-170](file://pose_monitor.py#L1-L170)
 - [base_hpe.py:482-600](file://base_hpe.py#L482-L600)
 - [main.py:51-188](file://main.py#L51-L188)
-- [monitor_hpe/monitor_pid.sh:1-204](file://monitor_hpe/monitor_pid.sh#L1-L204)
+- [monitor_hpe/monitor_pid.sh:1-216](file://monitor_hpe/monitor_pid.sh#L1-L216)
 - [monitor_hpe/run_experiment.sh:1-138](file://monitor_hpe/run_experiment.sh#L1-L138)
 - [recent-dash/prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
 - [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
+- [monitor_hpe/plot_graph.py:1-59](file://monitor_hpe/plot_graph.py#L1-L59)
 
 ## Performance Considerations
 - **Sampling intervals**: Prometheus scrape_interval and exporter intervals are tuned to 500 ms for responsiveness
@@ -427,6 +469,8 @@ FH --> TR["bcc-tracer"]
 - **BPF tracing**: bpftrace TX/RX aggregation runs at 10 ms intervals; ensure host permissions and kernel modules are available
 - **PoseMonitor overhead**: Real-time metrics processing adds minimal overhead to inference pipeline
 - **Disk I/O**: Atomic CSV writes and sync reduce race conditions but can increase I/O pressure; consider SSD-backed storage for results volumes
+- **CPU calculation precision**: Updated to use /proc/$PID/stat deltas for accurate instantaneous CPU% calculation
+- **Double-write prevention**: Enhanced file locking mechanisms prevent concurrent write conflicts
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -437,22 +481,27 @@ Common issues and resolutions:
 - **CSV write conflicts**: The monitor uses file locks; verify filesystem supports flock semantics and volumes are writable
 - **PoseMonitor integration issues**: Ensure BaseHPE.process_frame is properly calling PoseMonitor.update() with valid keypoints and inference_time
 - **Memory usage tracking**: PoseMonitor tracks frame processing metrics; verify sufficient memory for real-time statistics accumulation
+- **Plot generation failures**: **Updated** Enhanced error handling and fallback mechanisms in run_experiment.sh for improved reliability
+- **Command-line argument errors**: **Updated** plot_graph.py now includes proper argument validation and usage instructions
 
 **Section sources**
-- [monitor_hpe/monitor_pid.sh:1-204](file://monitor_hpe/monitor_pid.sh#L1-L204)
+- [monitor_hpe/monitor_pid.sh:1-216](file://monitor_hpe/monitor_pid.sh#L1-L216)
 - [monitor_hpe/Dockerfile:1-8](file://monitor_hpe/Dockerfile#L1-L8)
 - [recent-dash/prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
 - [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
-- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-84](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L84)
+- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-86](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L86)
 - [pose_monitor.py:1-170](file://pose_monitor.py#L1-L170)
+- [monitor_hpe/plot_graph.py:1-59](file://monitor_hpe/plot_graph.py#L1-L59)
+- [monitor_hpe/run_experiment.sh:1-138](file://monitor_hpe/run_experiment.sh#L1-L138)
 
 ## Conclusion
 The HPE monitoring and analytics stack provides comprehensive real-time monitoring capabilities through the integrated PoseMonitor system. The system offers:
-- Real-time PID-level metrics via bpftrace
+- Real-time PID-level metrics via bpftrace with improved CPU calculation methods
 - **Pose-specific metrics tracking** with FPS, inference time, and coordinate statistics
 - Prometheus-based system and GPU telemetry
-- A repeatable experiment workflow with artifact collection and plotting
+- A repeatable experiment workflow with artifact collection and enhanced plotting capabilities
 - Integration points for COCO evaluation and visualization
+- **Updated** Enhanced reliability with corrected double-write prevention and improved command-line argument support
 Adopt the recommended configurations, interpret metrics carefully, and iteratively optimize resource allocation and tracing overhead to achieve reliable, low-latency performance.
 
 ## Appendices
@@ -484,17 +533,18 @@ Adopt the recommended configurations, interpret metrics carefully, and iterative
 - Duration: configurable via METRICS_DURATION (default 0 means indefinite)
 
 **Section sources**
-- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-84](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L84)
+- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-86](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L86)
 - [Measure_gpu_dcgm/run_nvidia_dcgm.sh:1-29](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh#L1-L29)
 
 ### Monitoring Container Notes
 - Requires host PID namespace and elevated privileges for bpftrace and process tracing
 - Writes CSV files to a mounted output directory for later ingestion by Grafana or custom scripts
 - Uses atomic file locking to prevent concurrent writes
+- **Updated** Improved CPU calculation using /proc/$PID/stat deltas for better accuracy
 
 **Section sources**
 - [monitor_hpe/docker-compose.yaml:28-50](file://monitor_hpe/docker-compose.yaml#L28-L50)
-- [monitor_hpe/monitor_pid.sh:1-204](file://monitor_hpe/monitor_pid.sh#L1-L204)
+- [monitor_hpe/monitor_pid.sh:1-216](file://monitor_hpe/monitor_pid.sh#L1-L216)
 
 ### BaseHPE Integration Points
 - **process_frame method**: Enhanced with PoseMonitor.update() calls
@@ -505,3 +555,12 @@ Adopt the recommended configurations, interpret metrics carefully, and iterative
 **Section sources**
 - [base_hpe.py:482-600](file://base_hpe.py#L482-L600)
 - [pose_monitor.py:49-170](file://pose_monitor.py#L49-L170)
+
+### Enhanced Plotting System Features
+- **Command-line argument validation**: plot_graph.py now properly validates CSV file arguments
+- **Error handling**: Improved fallback mechanisms for plot generation
+- **File path accuracy**: Corrected output file path generation
+- **Usage instructions**: Clear usage messages with proper argument requirements
+
+**Section sources**
+- [monitor_hpe/plot_graph.py:1-59](file://monitor_hpe/plot_graph.py#L1-L59)

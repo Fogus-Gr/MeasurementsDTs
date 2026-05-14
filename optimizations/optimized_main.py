@@ -175,7 +175,7 @@ def get_hpe_method(args):
     else:
         # Non-OpenVINO models or GPU - use standard implementations
         method_map = {
-            'movenet': lambda: MoveNetHPE(device=args.device, detbatch=args.detbatch, **base_args_dict),
+            'movenet': lambda: MoveNetHPE(device=args.device, **base_args_dict),
             'alphapose': lambda: AlphaPoseHPE(device=args.device, detbatch=args.detbatch, **base_args_dict),
         }
         

@@ -27,7 +27,7 @@ MODEL_CONFIGS = {
         "gpu_supported": True,
     },
     "efficienthrnet1": {
-        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.xml",
+        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP32/human-pose-estimation-0005.xml",
         "input_size": (288, 288),
         "architecture": "HPE-associative-embedding",
         "gpu_supported": True,
