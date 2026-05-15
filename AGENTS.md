@@ -43,7 +43,6 @@ unit_tests/
 monitor_hpe/                   # Rig 1: baseline CPU monitoring (no streaming server)
 ffmpeg_hpe/                    # Rig 2: H.264 stream + full monitoring stack
 recent-dash/                   # Rig 3: DASH/HTTP caching experiment (separate research thread)
-rtsp-ipcam/                    # Shared H.264 streaming server used by ffmpeg_hpe/
 Measure_Flops/                 # Standalone: GPU FLOPS via Nsight Compute
 Measure_gpu_dcgm/              # Standalone: GPU power/temp/util via nvidia-smi
 Measure_plot_cpu_perf/         # Standalone: CPU cycles via perf stat
@@ -181,7 +180,6 @@ issues.
 | 12 | Both `monitor_pid.sh` files | `netif_receive_skb` bpftrace PID filter fires in softirq context — RX bytes always ~0 | ⚠️ Open — use `bcc-tracer` for accurate RX |
 | 13 | `monitor_hpe/plot_graph.py` | Calls `plt.show()` — blocks in headless containers | ✅ Fixed (`76b8f30`) — now uses the Agg backend and saves PNGs |
 | 14 | `ffmpeg_hpe/plot_graph.py` | Empty file (0 bytes) | ✅ Fixed (`76b8f30`) — now plots `pid_metrics.csv` + `hpe_video_rx.csv` |
-| 15 | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | ✅ Fixed (`76b8f30`) — default mount now uses `VIDEO_HOST_PATH` with repo-root fallback |
 
 ### Known TODOs in HPE Inference Code
 - `movenet_hpe.py`: keypoint-level score filtering not yet applied to body

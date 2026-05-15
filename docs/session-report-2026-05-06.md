@@ -306,7 +306,7 @@ Documented in both `README.md` and `AGENTS.md`.
 | — | Both `monitor_pid.sh` | `netif_receive_skb` bpftrace RX always ~0 | By design — use `bcc-tracer` for RX |
 | — | `monitor_hpe/plot_graph.py` | Calls `plt.show()` — blocks in headless containers | One-line fix when needed |
 | — | `ffmpeg_hpe/plot_graph.py` | Empty file (0 bytes) | Delete or implement |
-| — | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | Breaks on any other machine |
+| — | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | **Removed** — folder deleted; streaming now handled by `jrottenberg/ffmpeg:4.4-nvidia` + `mediamtx` in `ffmpeg_hpe/docker-compose.yaml` |
 | — | `run_experiment_bcc.sh` | `HPE_INPUT` still uses raw IP (not DNS hostname) | Intentional workaround — low risk |
 | — | TX/RX zeros in `pid_metrics.csv` | Network columns always `0,0` | By design — network data is in `network_stats.csv` |
 
@@ -320,4 +320,3 @@ Documented in both `README.md` and `AGENTS.md`.
 | `ffmpeg_hpe/` | `run_experiment_bcc.sh` | ✅ Yes | All accuracy fixes synced; use for RX validation |
 | `monitor_hpe/` | `run_experiment.sh` | ✅ Yes | No network metrics (by design) |
 | `recent-dash/` | `run_experiment.sh` | ⚠️ Partial | Separate research thread; not HPE-focused |
-| `rtsp-ipcam/` | `start_server.sh` | ⚠️ Partial | Volume mount hardcoded to old VM path |

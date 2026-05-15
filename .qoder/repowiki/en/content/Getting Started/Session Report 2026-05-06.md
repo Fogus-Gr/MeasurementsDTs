@@ -16,7 +16,18 @@
 - [optimizations/enhanced_openvino_hpe.py](file://optimizations/enhanced_openvino_hpe.py)
 - [ffmpeg_hpe/docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [ffmpeg_hpe/run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
+- [docker-compose.rtsp.yml](file://docker-compose.rtsp.yml)
+- [ffmpeg_hpe/review.md](file://ffmpeg_hpe/review.md)
+- [full_shell_history.txt](file://full_shell_history.txt)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Comprehensive reconstruction of timeline documenting evolution from CPU profiling to final RTSP migration
+- Updated architecture diagrams to reflect RTSP streaming infrastructure
+- Added detailed troubleshooting guidance for RTSP migration issues
+- Enhanced performance optimization recommendations for RTSP streaming environments
+- Updated experiment rig documentation to reflect RTSP-based streaming architecture
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -24,20 +35,22 @@
 3. [Core Components](#core-components)
 4. [Architecture Overview](#architecture-overview)
 5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Dependency Analysis](#dependency-analysis)
-7. [Performance Considerations](#performance-considerations)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Conclusion](#conclusion)
-10. [Appendices](#appendices)
+6. [Timeline of Evolution](#timeline-of-evolution)
+7. [Dependency Analysis](#dependency-analysis)
+8. [Performance Considerations](#performance-considerations)
+9. [Troubleshooting Guide](#troubleshooting-guide)
+10. [Conclusion](#conclusion)
+11. [Appendices](#appendices)
 
 ## Introduction
-This document summarizes the audit and fixes applied to the benchmarking platform as documented in the session report dated 2026-05-06. It consolidates the branch history, identifies and resolves 21 critical bugs across monitoring, plotting, orchestration, and Docker configurations, and clarifies the TX/RX measurement architecture. It also outlines the HPE pipeline, CPU optimization strategies, and experiment rig usage.
+This document summarizes the audit and fixes applied to the benchmarking platform as documented in the session report dated 2026-05-06. The platform has evolved from CPU profiling experiments to a comprehensive RTSP-based streaming infrastructure. This update documents the complete timeline of this evolution, including the migration from HTTP streaming to RTSP, comprehensive troubleshooting guidance, and detailed performance optimization recommendations for RTSP environments.
 
 ## Project Structure
 The repository combines:
 - An HPE inference library supporting five backends (MoveNet, AlphaPose, OpenPose, HigherHRNet, EfficientHRNet)
 - A performance benchmarking platform built with Docker Compose and eBPF/BCC tracing
 - CPU optimization tools tailored for 4-vCPU AMD EPYC environments
+- RTSP streaming infrastructure using MediaMTX broker and FFmpeg NVENC encoder
 
 ```mermaid
 graph TB
@@ -50,8 +63,9 @@ B --> G["utils/evaluator.py<br/>COCO JSON/CSV + Tx bytes"]
 B --> H["utils/visualizer.py<br/>Render skeletons"]
 I["optimizations/*<br/>CPU tuning"] --> D
 I --> E
-J["ffmpeg_hpe/*<br/>Docker rigs + scripts"] --> K["docker-compose.yaml"]
+J["ffmpeg_hpe/*<br/>RTSP streaming + scripts"] --> K["docker-compose.yaml<br/>MediaMTX + FFmpeg NVENC"]
 J --> L["run_experiment.sh<br/>Full lifecycle orchestration"]
+M["RTSP Infrastructure<br/>MediaMTX + FFmpeg"] --> K
 ```
 
 **Diagram sources**
@@ -64,14 +78,14 @@ J --> L["run_experiment.sh<br/>Full lifecycle orchestration"]
 - [utils/evaluator.py:11-47](file://utils/evaluator.py#L11-L47)
 - [utils/visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
 - [optimizations/optimized_main.py:19-26](file://optimizations/optimized_main.py#L19-L26)
-- [ffmpeg_hpe/docker-compose.yaml:1-205](file://ffmpeg_hpe/docker-compose.yaml#L1-L205)
-- [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
+- [ffmpeg_hpe/docker-compose.yaml:1-190](file://ffmpeg_hpe/docker-compose.yaml#L1-L190)
+- [ffmpeg_hpe/run_experiment.sh:1-283](file://ffmpeg_hpe/run_experiment.sh#L1-L283)
 
 **Section sources**
 - [README.md:20-44](file://README.md#L20-L44)
 - [README.md:209-327](file://README.md#L209-L327)
-- [ffmpeg_hpe/docker-compose.yaml:1-205](file://ffmpeg_hpe/docker-compose.yaml#L1-L205)
-- [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
+- [ffmpeg_hpe/docker-compose.yaml:1-190](file://ffmpeg_hpe/docker-compose.yaml#L1-L190)
+- [ffmpeg_hpe/run_experiment.sh:1-283](file://ffmpeg_hpe/run_experiment.sh#L1-L283)
 
 ## Core Components
 - HPE backends:
@@ -79,8 +93,9 @@ J --> L["run_experiment.sh<br/>Full lifecycle orchestration"]
   - MoveNet (CPU-only)
   - AlphaPose (PyTorch + YOLO detector)
 - Base pipeline: input detection, model loading, main loop, inference, postprocessing, rendering, and COCO serialization
-- Benchmarking platform: orchestrated via Docker Compose with streaming server, HPE container, perf monitor, GPU metrics, and optional BCC tracer
+- Benchmarking platform: orchestrated via Docker Compose with RTSP streaming server, HPE container, perf monitor, GPU metrics, and optional BCC tracer
 - CPU optimization: automatic thread/stream tuning for 4-vCPU EPYC, NUMA-aware configuration, and system-level hints
+- RTSP infrastructure: MediaMTX broker for RTSP streaming and FFmpeg NVENC encoder for H.264 production
 
 **Section sources**
 - [README.md:20-44](file://README.md#L20-L44)
@@ -92,34 +107,36 @@ J --> L["run_experiment.sh<br/>Full lifecycle orchestration"]
 - [optimizations/cpu_performance_optimizer.py:34-484](file://optimizations/cpu_performance_optimizer.py#L34-L484)
 
 ## Architecture Overview
-The benchmarking platform runs a live H.264 HTTP stream served by a dedicated container, feeds it into the HPE container, and collects CPU/GPU/network metrics via sidecars. The TX measurement uses bpftrace in-process tracing; RX measurement uses BCC socket filtering in a shared network namespace.
+The benchmarking platform has migrated from HTTP streaming to RTSP streaming infrastructure. The RTSP architecture uses MediaMTX as the broker and FFmpeg NVENC as the producer, providing more reliable and scalable streaming for performance benchmarking.
 
 ```mermaid
 graph TB
-subgraph "Streaming"
-S1["h264-streaming-server<br/>Dockerfile (rtsp-ipcam)"]
+subgraph "RTSP Streaming Infrastructure"
+S1["MediaMTX Broker<br/>Port 8554"]
+S2["FFmpeg NVENC Producer<br/>H.264 Encoding"]
 end
 subgraph "Inference"
-H1["hpe<br/>main.py + selected backend"]
+H1["HPE Container<br/>main.py + backend"]
 end
 subgraph "Monitoring"
 P1["perf_monitor<br/>CPU/memory/network"]
 G1["gpu-metrics<br/>nvidia-smi polling"]
 B1["bcc-tracer<br/>BCC RX byte counter"]
 end
-S1 --> H1
+S1 --> S2
+S2 --> H1
 H1 --> P1
 H1 --> G1
 H1 --> B1
 ```
 
 **Diagram sources**
-- [ffmpeg_hpe/docker-compose.yaml:2-205](file://ffmpeg_hpe/docker-compose.yaml#L2-L205)
-- [README.md:213-235](file://README.md#L213-L235)
+- [ffmpeg_hpe/docker-compose.yaml:2-190](file://ffmpeg_hpe/docker-compose.yaml#L2-L190)
+- [README.md:263-276](file://README.md#L263-L276)
 
 **Section sources**
-- [README.md:213-235](file://README.md#L213-L235)
-- [ffmpeg_hpe/docker-compose.yaml:2-205](file://ffmpeg_hpe/docker-compose.yaml#L2-L205)
+- [README.md:263-276](file://README.md#L263-L276)
+- [ffmpeg_hpe/docker-compose.yaml:2-190](file://ffmpeg_hpe/docker-compose.yaml#L2-L190)
 
 ## Detailed Component Analysis
 
@@ -165,18 +182,18 @@ Q --> End(["Sync run_experiment_bcc.sh"])
 
 **Diagram sources**
 - [docs/session-report-2026-05-06.md:91-181](file://docs/session-report-2026-05-06.md#L91-L181)
-- [ffmpeg_hpe/run_experiment.sh:125-279](file://ffmpeg_hpe/run_experiment.sh#L125-L279)
+- [ffmpeg_hpe/run_experiment.sh:125-283](file://ffmpeg_hpe/run_experiment.sh#L125-L283)
 - [ffmpeg_hpe/docker-compose.yaml:14-18](file://ffmpeg_hpe/docker-compose.yaml#L14-L18)
 
 **Section sources**
 - [docs/session-report-2026-05-06.md:47-86](file://docs/session-report-2026-05-06.md#L47-L86)
 - [docs/session-report-2026-05-06.md:89-181](file://docs/session-report-2026-05-06.md#L89-L181)
-- [ffmpeg_hpe/run_experiment.sh:125-279](file://ffmpeg_hpe/run_experiment.sh#L125-L279)
+- [ffmpeg_hpe/run_experiment.sh:125-283](file://ffmpeg_hpe/run_experiment.sh#L125-L283)
 - [ffmpeg_hpe/docker-compose.yaml:14-18](file://ffmpeg_hpe/docker-compose.yaml#L14-L18)
 
 ### TX vs RX Measurement Architecture
 - TX (HPE → outside): bpftrace sys_enter_sendto in perf_monitor filters by PID of the HPE process.
-- RX (stream → HPE): bcc-tracer filters by streamer IP and port on eth0; runs in a container sharing HPE’s network namespace.
+- RX (stream → HPE): bcc-tracer filters by streamer IP and port on eth0; runs in a container sharing HPE's network namespace.
 - Never use RX from network_stats.csv; use traces/bcc/hpe_video_rx.csv for RX.
 
 ```mermaid
@@ -289,13 +306,16 @@ OVE-->>User : "model loaded with optimizations"
 sequenceDiagram
 participant Orchestrator as "run_experiment.sh"
 participant Compose as "docker-compose.yaml"
-participant Server as "h264-streaming-server"
+participant Broker as "MediaMTX Broker"
+participant Streamer as "FFmpeg NVENC Streamer"
 participant HPE as "hpe"
 participant Perf as "perf_monitor"
 participant GPU as "gpu-metrics"
 participant BCC as "bcc-tracer"
-Orchestrator->>Compose : "up h264-streaming-server"
-Compose-->>Server : "healthy"
+Orchestrator->>Compose : "up rtsp-broker"
+Compose-->>Broker : "healthy"
+Orchestrator->>Compose : "up streamer"
+Compose-->>Streamer : "producing RTSP stream"
 Orchestrator->>Compose : "up hpe"
 Orchestrator->>Compose : "up perf_monitor, gpu-metrics, bcc-tracer"
 Orchestrator->>Perf : "extract PID for monitoring"
@@ -305,18 +325,67 @@ Orchestrator-->>Orchestrator : "collect CSVs, logs, traces"
 ```
 
 **Diagram sources**
-- [ffmpeg_hpe/run_experiment.sh:77-279](file://ffmpeg_hpe/run_experiment.sh#L77-L279)
-- [ffmpeg_hpe/docker-compose.yaml:2-205](file://ffmpeg_hpe/docker-compose.yaml#L2-L205)
+- [ffmpeg_hpe/run_experiment.sh:77-283](file://ffmpeg_hpe/run_experiment.sh#L77-L283)
+- [ffmpeg_hpe/docker-compose.yaml:2-190](file://ffmpeg_hpe/docker-compose.yaml#L2-L190)
 
 **Section sources**
-- [ffmpeg_hpe/run_experiment.sh:77-279](file://ffmpeg_hpe/run_experiment.sh#L77-L279)
-- [ffmpeg_hpe/docker-compose.yaml:2-205](file://ffmpeg_hpe/docker-compose.yaml#L2-L205)
+- [ffmpeg_hpe/run_experiment.sh:77-283](file://ffmpeg_hpe/run_experiment.sh#L77-L283)
+- [ffmpeg_hpe/docker-compose.yaml:2-190](file://ffmpeg_hpe/docker-compose.yaml#L2-L190)
+
+## Timeline of Evolution
+
+### Initial CPU Profiling Phase (June 2025)
+The earliest artifacts in the repository show extensive CPU profiling work on AMD EPYC systems:
+- **Jun 19**: First `perf` profiling results on AMD EPYC 7551P (32-core)
+- **Jun 23**: Multiple experiments with `perf` monitoring across 7 result directories
+- Activities included system profiling with `cpuid`, `lscpu`, `cpupower`, `lsmem`, `lshw`
+
+### Dockerized HPE Experiments (July 2025)
+- **Jul 14-15**: Heavy experimentation period with 13 result directories
+- Multiple backend tests: movenet GPU, alphapose GPU, openpose CPU, various resolutions
+- Introduction of HTTP streaming server for initial benchmarking
+
+### OpenVINO CPU Tuning and VPS Deployment (August 2025)
+- Extensive OpenVINO environment variable experimentation
+- CPU performance optimization for 4-vCPU VPS deployments
+- Git commits show tuning of `OV_MODE=latency/throughput`, `OV_STREAMS`, `OV_THREADS`
+
+### HTTP Streaming and Async Processing (September 2025)
+- Addition of AlphaPose notebook and HTTP stream input support
+- Enhanced async/threaded OpenVINO HPE implementation
+- Infrastructure improvements and GitHub workflows
+
+### FFmpeg + CUDA Docker Build Challenges (Late 2025)
+- Massive effort to build `ffmpeg-cuda:8.0-focal` with multiple optimization attempts
+- Disk space management and dependency resolution challenges
+- NVENC encoding testing with various quality presets
+
+### NVIDIA Driver Upgrade and Kernel HWE (Early 2026)
+- Complex driver upgrade process with kernel 5.15 and graphics-drivers/ppa
+- GRUB EFI issues and apt mirror switching
+- Multiple reboots and CUDA repository conflict resolution
+
+### Performance Governor and Network Monitoring (Early-Mid 2026)
+- CPU governor set to `performance` mode
+- Installation of `hwloc`, `nethogs`, `iftop` for network monitoring
+- Extensive OpenVINO environment variable tuning
+- Cleanup of old model files and final optimization passes
+
+### RTSP Migration and Final Optimization (May 2026)
+- Server reboot and Atuin reactivation
+- Complete migration from HTTP to RTSP streaming infrastructure
+- Final optimization round with comprehensive bug fixes
+
+**Section sources**
+- [docs/session-report-2026-05-06.md:47-135](file://docs/session-report-2026-05-06.md#L47-L135)
+- [full_shell_history.txt:1-200](file://full_shell_history.txt#L1-L200)
 
 ## Dependency Analysis
 - main.py depends on backend implementations and evaluation utilities.
 - Backends inherit from BaseHPE and implement load_model(), run_model(), and postprocess().
 - Optimizations integrate with OpenVINO properties and environment variables.
 - Benchmarking relies on Docker Compose service dependencies and shared network namespaces.
+- RTSP infrastructure uses MediaMTX broker and FFmpeg NVENC encoder.
 
 ```mermaid
 graph LR
@@ -332,6 +401,7 @@ OPT["optimizations/*"] --> OV
 OPT --> MV
 EXP["ffmpeg_hpe/*"] --> DC["docker-compose.yaml"]
 EXP --> RE["run_experiment.sh"]
+RTSP["RTSP Infrastructure"] --> DC
 ```
 
 **Diagram sources**
@@ -342,8 +412,8 @@ EXP --> RE["run_experiment.sh"]
 - [movenet_hpe.py:12-27](file://movenet_hpe.py#L12-L27)
 - [alphapose_hpe.py:33-56](file://alphapose_hpe.py#L33-L56)
 - [optimizations/optimized_main.py:19-26](file://optimizations/optimized_main.py#L19-L26)
-- [ffmpeg_hpe/docker-compose.yaml:1-205](file://ffmpeg_hpe/docker-compose.yaml#L1-L205)
-- [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
+- [ffmpeg_hpe/docker-compose.yaml:1-190](file://ffmpeg_hpe/docker-compose.yaml#L1-L190)
+- [ffmpeg_hpe/run_experiment.sh:1-283](file://ffmpeg_hpe/run_experiment.sh#L1-L283)
 
 **Section sources**
 - [main.py:10-14](file://main.py#L10-L14)
@@ -351,45 +421,44 @@ EXP --> RE["run_experiment.sh"]
 - [movenet_hpe.py:12-27](file://movenet_hpe.py#L12-L27)
 - [alphapose_hpe.py:33-56](file://alphapose_hpe.py#L33-L56)
 - [optimizations/optimized_main.py:19-26](file://optimizations/optimized_main.py#L19-L26)
-- [ffmpeg_hpe/docker-compose.yaml:1-205](file://ffmpeg_hpe/docker-compose.yaml#L1-L205)
-- [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
+- [ffmpeg_hpe/docker-compose.yaml:1-190](file://ffmpeg_hpe/docker-compose.yaml#L1-L190)
+- [ffmpeg_hpe/run_experiment.sh:1-283](file://ffmpeg_hpe/run_experiment.sh#L1-L283)
 
 ## Performance Considerations
 - CPU tuning for 4-vCPU EPYC: NUMA-aware thread allocation, streams, and performance hints; validated via benchmarking script.
 - OpenVINO configuration: environment-driven tuning (threads, streams, performance mode) with safe defaults.
 - Monitoring cadence: 500ms sampling for CPU/GPU/network metrics; RX via BCC socket filter; TX via bpftrace PID filter.
 - Resource limits: CPU and memory caps defined in compose files to prevent noisy-neighbor effects.
-
-[No sources needed since this section provides general guidance]
+- RTSP streaming optimization: MediaMTX broker configuration, FFmpeg NVENC encoding settings, TCP transport enforcement.
 
 ## Troubleshooting Guide
-Common issues and resolutions:
-- BCC RX filter disabled: re-enable IP/port filter to avoid counting all TCP traffic.
-- Plotting scripts with hardcoded paths: updated to accept CSV path and save PNG alongside.
-- GPU plot column mismatch: align column names with nvidia-smi output.
-- Docker build context: change from hardcoded path to relative context.
-- Service name mismatch: ensure scripts reference `bcc-tracer` instead of commented-out `trace_container`.
-- Double writing in monitor_pid.sh: remove direct write; rely on flock/cat only.
-- Unreachable GPU metrics cleanup: move cleanup to EXIT trap before exec.
-- CPU% lifetime average: replace pidstat with `/proc/stat` deltas for 500ms intervals.
-- Incorrect filenames: perf_monitor outputs `perf_metrics.csv`, `pid_metrics.csv`, `network_stats.csv`; BCC tracer outputs `hpe_video_rx.csv`.
-- HPE output collection: copy CSV/JSON from host path after container exit.
-- Startup timer order: capture start time before `docker compose up`.
-- Default HPE_METHOD: default to `movenet` to avoid crashes on no-arg runs.
-- PID file parsing: use `pgrep -f "python.*main.py"` for reliable PID extraction.
-- Exit code checks: log and distinguish crash vs clean exit.
-- Missing container_name: add `container_name: perf_monitor` for predictable names.
-- VIDEO_FILE default: set fallback for FFmpeg input.
+
+### RTSP Migration Issues
+- **MediaMTX broker not starting**: Check port 8554 availability and MediaMTX logs for initialization errors.
+- **FFmpeg NVENC encoding failures**: Verify NVIDIA driver compatibility and CUDA runtime configuration.
+- **TCP transport issues**: Ensure both MediaMTX and HPE consumers use TCP transport (`OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp`).
+- **Stream quality problems**: Adjust FFmpeg NVENC preset and tune parameters for desired latency vs quality balance.
+
+### Network Monitoring Troubleshooting
+- **BCC RX filter disabled**: Re-enable IP/port filter to avoid counting all TCP traffic instead of video stream only.
+- **Plotting scripts with hardcoded paths**: Updated to accept CSV path and save PNG alongside.
+- **GPU plot column mismatch**: Align column names with nvidia-smi output.
+- **Double writing in monitor_pid.sh**: Remove direct write; rely on flock/cat only.
+- **CPU% lifetime average**: Replace pidstat with `/proc/stat` deltas for 500ms intervals.
+
+### Performance Optimization Recommendations
+- **CPU optimization**: Use EPIC CPU Optimizer for NUMA-aware thread/stream configuration on 4-vCPU EPYC systems.
+- **OpenVINO tuning**: Experiment with `OV_MODE=latency/throughput`, `OV_STREAMS`, and `OV_THREADS` environment variables.
+- **Memory management**: Set `PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32` to prevent fragmentation.
+- **Network optimization**: Use RTSP over TCP for reliable streaming; configure MediaMTX for optimal buffer management.
 
 **Section sources**
 - [docs/session-report-2026-05-06.md:101-181](file://docs/session-report-2026-05-06.md#L101-L181)
-- [ffmpeg_hpe/run_experiment.sh:125-279](file://ffmpeg_hpe/run_experiment.sh#L125-L279)
+- [ffmpeg_hpe/run_experiment.sh:125-283](file://ffmpeg_hpe/run_experiment.sh#L125-L283)
 - [ffmpeg_hpe/docker-compose.yaml:14-18](file://ffmpeg_hpe/docker-compose.yaml#L14-L18)
 
 ## Conclusion
-The benchmarking platform audit and fixes restore accurate RX/TX measurements, improve orchestration reliability, and standardize monitoring outputs. The TX/RX tool split is now clearly documented, and the platform consistently collects CPU, GPU, and network telemetry. CPU optimization modules provide practical tuning for 4-vCPU EPYC environments, enabling reproducible performance comparisons.
-
-[No sources needed since this section summarizes without analyzing specific files]
+The benchmarking platform has successfully evolved from CPU profiling experiments to a comprehensive RTSP-based streaming infrastructure. The comprehensive timeline documented in this report shows the complete journey from early AMD EPYC profiling through complex NVIDIA driver upgrades to the final RTSP migration. The platform now provides accurate RX/TX measurements, improved orchestration reliability, and standardized monitoring outputs. The RTSP infrastructure using MediaMTX and FFmpeg NVENC provides scalable and reliable streaming for performance benchmarking, while CPU optimization modules continue to provide practical tuning for 4-vCPU EPYC environments.
 
 ## Appendices
 
@@ -400,8 +469,17 @@ The benchmarking platform audit and fixes restore accurate RX/TX measurements, i
 - Export utilities: ensure global accumulator reset between runs.
 - Visualizer: verify keypoint coloring correctness beyond MoveNet.
 
+### RTSP Infrastructure Improvements
+- **Network Measurement Accuracy**: Current implementation uses `sk_rmem_alloc` which shows kernel buffer usage. Recommended approach uses `kretprobe:__netif_receive_skb` for more accurate packet-level monitoring.
+- **Timing Precision**: Current 100ms sampling can be improved to 10ms for H.264 streams with hardware timestamp support.
+- **RTSP Authentication**: Add RTSP authentication mechanisms for secure streaming environments.
+- **SDP Negotiation**: Implement proper SDP negotiation for dynamic stream configuration.
+- **Multi-stream Support**: Enable multiple concurrent RTSP streams for comprehensive testing scenarios.
+- **Network Simulation**: Add capability to simulate network conditions (latency, packet loss, jitter).
+
 **Section sources**
 - [docs/session-report-2026-05-06.md:77-86](file://docs/session-report-2026-05-06.md#L77-L86)
 - [openvino_base_hpe.py:262-276](file://openvino_base_hpe.py#L262-L276)
 - [utils/evaluator.py:77-84](file://utils/evaluator.py#L77-L84)
 - [utils/visualizer.py:26-35](file://utils/visualizer.py#L26-L35)
+- [ffmpeg_hpe/review.md:28-72](file://ffmpeg_hpe/review.md#L28-L72)

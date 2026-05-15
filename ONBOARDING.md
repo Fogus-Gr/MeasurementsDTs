@@ -78,7 +78,7 @@ The top-level folders fall into three categories:
 
 | Folder | Used by | Role in `docker-compose.yaml` |
 |---|---|---|
-| `rtsp-ipcam/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `h264-streaming-server` container |
+| `jrottenberg/ffmpeg:4.4-nvidia` + `bluenviron/mediamtx:latest` | `ffmpeg_hpe/docker-compose.yaml` | Pre-built images for streamer and RTSP broker (replaced `rtsp-ipcam/`) |
 | `recent-dash/perf_monitor/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `perf_monitor` container |
 | `ffmpeg_hpe/bpftrace-tracer/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `bcc-tracer` container |
 | `ffmpeg_hpe/Dockerfile.gpu_metrics` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `gpu-metrics` container |
@@ -161,11 +161,6 @@ MeasurementsDTs/
 │   ├── cpu_performance_optimizer.py
 │   ├── enhanced_openvino_hpe.py
 │   └── optimized_main.py
-│
-├── rtsp-ipcam/                    # NGINX RTSP proxy / H.264 HTTP streaming server
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   └── direct_stream_server.py
 │
 ├── Dockerfile_base                # Main HPE Docker image (used by ffmpeg_hpe experiments)
 ├── Dockerfile.hpe                 # Alternative HPE Dockerfile
@@ -428,7 +423,7 @@ python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'
 
 #### 1. `h264-streaming-server`
 - **What it does:** Serves the benchmark video as an H.264 HTTP stream on port 8089.
-- **Built from:** `rtsp-ipcam/Dockerfile`
+- **Image:** `jrottenberg/ffmpeg:4.4-nvidia` (pre-built; replaced `rtsp-ipcam/Dockerfile`)
 - **Resources:** 2 CPU cores (limit), 1 GB RAM
 - **Config:** `VIDEO_FILE` from `.env`, `SERVER_PORT=8089`
 - **Healthcheck:** TCP connection check on port 8089; HPE container waits until healthy.

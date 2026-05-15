@@ -108,20 +108,6 @@ No model files or Python stack — kept intentionally minimal.
 
 ---
 
-### `rtsp-ipcam/Dockerfile` (Streaming Server)
-
-| Property | Value |
-|----------|-------|
-| Base | `python:3.12-slim-bookworm` |
-| Packages | `ffmpeg`, `curl`, `netcat-openbsd` |
-| User | Non-root (`appuser`) |
-| Exposed port | `8089` |
-| Entrypoint | `python direct_stream_server.py --video "$VIDEO_FILE" --port "$SERVER_PORT"` |
-
-Serves a looping H.264 video stream over HTTP for HPE containers to consume.
-
----
-
 ## Docker Compose Services
 
 ### `ffmpeg_hpe/docker-compose.yaml` (Primary Experiment Compose)
@@ -130,45 +116,11 @@ This is the main compose file used for benchmarking experiments.
 
 ---
 
-#### `h264-streaming-server`
+#### `rtsp-broker` + `streamer` (replaced `h264-streaming-server`)
 
-Streams a pre-recorded video file over HTTP for the HPE service to consume.
-
-| Property | Value |
-|----------|-------|
-| Build context | `../rtsp-ipcam` |
-| Port | `8089:8089` |
-| Network | `streaming-network` (bridge) |
-
-**Volumes:**
-
-| Host | Container | Mode |
-|------|-----------|------|
-| `./results` | `/output` | `rw` |
-| `../rtsp-ipcam/config` | `/app/config` | `ro` |
-| `../videos` | `/app/videos` | `ro` |
-
-**Environment:**
-- `SERVER_PORT=8089`
-- `VIDEO_FILE` — sourced from `.env`
-
-**Healthcheck:**
-```
-test: TCP connect localhost:8089
-interval: 5s | timeout: 10s | retries: 6 | start_period: 10s
-```
-
-**Resource limits:**
-
-| Resource | Limit | Reservation |
-|----------|-------|-------------|
-| CPU | 2.0 | 1.0 |
-| Memory | 1G | 512M |
-
-**Security hardening:**
-- `no-new-privileges: true`
-- `read_only: true`
-- `tmpfs: /tmp`
+> The old `h264-streaming-server` built from `rtsp-ipcam/` has been removed. Streaming is now handled by two pre-built images in `ffmpeg_hpe/docker-compose.yaml`:
+> - **`rtsp-broker`** (`bluenviron/mediamtx:latest`) — RTSP broker on port `8554`
+> - **`streamer`** (`jrottenberg/ffmpeg:4.4-nvidia`) — FFmpeg/NVENC producer, mounts `../videos:/data:ro`
 
 ---
 
@@ -370,15 +322,6 @@ python3 main.py --method movenet --input /videos/${VIDEO_FILE:-ultimatum/hd_00_0
 **Resource limits:** CPU 1.0, Memory 512M
 
 ---
-
-### `rtsp-ipcam/docker-compose.yml` (Standalone Streaming)
-
-Standalone compose for running the streaming server in isolation.
-
-- Single `h264-streaming-server` service
-- Port: `${SERVER_PORT}:${SERVER_PORT}`
-- Hardcoded video: `hd_00_00.mp4`
-- Resource limits: CPU 1.0/0.5, Memory 500M/128M
 
 ---
 

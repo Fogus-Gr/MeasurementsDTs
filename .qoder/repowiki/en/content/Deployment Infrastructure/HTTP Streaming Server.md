@@ -2,21 +2,26 @@
 
 <cite>
 **Referenced Files in This Document**
-- [direct_stream_server.py](file://rtsp-ipcam/direct_stream_server.py)
-- [Dockerfile](file://rtsp-ipcam/Dockerfile)
-- [docker-compose.yml](file://rtsp-ipcam/docker-compose.yml)
-- [start_server.sh](file://rtsp-ipcam/start_server.sh)
-- [requirements.txt](file://rtsp-ipcam/requirements.txt)
-- [README.md](file://rtsp-ipcam/README.md)
-- [changes_improvemnts.txt](file://rtsp-ipcam/changes_improvemnts.txt)
-- [nginx.conf](file://rtsp-ipcam/nginx.conf.template/nginx.conf)
-- [stream_video_server.py](file://dev_tools/stream_video_server.py)
-- [stream_video_server_adaptive.py](file://dev_tools/stream_video_server_adaptive.py)
-- [run_experiment.sh](file://recent-dash/run_experiment.sh)
-- [prometheus.yml](file://recent-dash/prometheus.yml)
-- [review.md](file://ffmpeg_hpe/review.md)
+- [docker-compose.rtsp.yml](file://docker-compose.rtsp.yml)
+- [docker-compose.yml](file://docker-compose.yml)
+- [ffmpeg_hpe/docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
+- [ffmpeg_hpe/run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
+- [dev_tools/stream_video_server.py](file://dev_tools/stream_video_server.py)
+- [dev_tools/stream_video_server_adaptive.py](file://dev_tools/stream_video_server_adaptive.py)
+- [recent-dash/README.md](file://recent-dash/README.md)
+- [recent-dash/prometheus.yml](file://recent-dash/prometheus.yml)
 - [full_shell_history.txt](file://full_shell_history.txt)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Complete replacement of HTTP streaming architecture with MediaMTX RTSP broker implementation
+- Updated architecture overview to reflect RTSP-based streaming pipeline
+- Removed all references to HTTP streaming server components
+- Added comprehensive MediaMTX RTSP broker configuration and deployment
+- Updated client connectivity patterns to RTSP URLs
+- Revised performance considerations for RTSP streaming
+- Enhanced troubleshooting guide for RTSP-specific issues
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -31,299 +36,272 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document describes the HTTP streaming server implementation for delivering H.264 video over HTTP to media players and web clients. It covers RTSP/IP camera emulation concepts, HTTP server configuration, client connectivity patterns, real-time video feed management, adaptive streaming strategies, and performance tuning. It also provides integration examples for web clients, mobile applications, and monitoring systems, along with guidance for latency, quality metrics, and troubleshooting.
+This document describes the HTTP streaming server implementation for delivering H.264 video over HTTP to media players and web clients. **Updated**: The implementation now uses MediaMTX as an RTSP broker instead of direct HTTP streaming. It covers RTSP/IP camera integration, video streaming architecture, client connectivity patterns, real-time video feed management, adaptive streaming strategies, and performance tuning. It also provides integration examples for web clients, mobile applications, and monitoring systems, along with guidance for latency, quality metrics, and troubleshooting.
 
 ## Project Structure
-The streaming stack consists of:
-- An HTTP server that streams H.264 via FFmpeg subprocess
-- A containerized deployment with optional Nginx reverse proxy
+The streaming stack now consists of:
+- MediaMTX RTSP broker for managing video streams
+- FFmpeg NVENC streamer for producing H.264 content
+- RTSP-based client connections for media players and web clients
 - Development tools for adaptive JPEG streaming and performance experiments
 - Monitoring and tracing utilities for network and performance analysis
 
 ```mermaid
 graph TB
 subgraph "Host Machine"
-Client["Media Players<br/>Web Browser"]
+Client["Media Players<br/>Web Browser<br/>RTSP Clients"]
 end
-subgraph "Streaming Server"
-HTTP["Python HTTP Server<br/>direct_stream_server.py"]
-FF["FFmpeg Subprocess"]
+subgraph "RTSP Streaming Infrastructure"
+Broker["MediaMTX RTSP Broker<br/>Port 8554"]
+Streamer["FFmpeg NVENC Streamer<br/>H.264 Producer"]
 end
-subgraph "Optional Reverse Proxy"
-NGINX["Nginx Reverse Proxy<br/>nginx.conf"]
-end
-Client --> |HTTP GET| HTTP
-HTTP --> FF
-HTTP -. optional .-> NGINX
-NGINX --> HTTP
+Client --> |RTSP| Broker
+Broker --> Streamer
+Streamer --> Broker
 ```
 
 **Diagram sources**
-- [direct_stream_server.py:45-151](file://rtsp-ipcam/direct_stream_server.py#L45-L151)
-- [nginx.conf:12-30](file://rtsp-ipcam/nginx.conf.template/nginx.conf#L12-L30)
+- [ffmpeg_hpe/docker-compose.yaml:2-58](file://ffmpeg_hpe/docker-compose.yaml#L2-L58)
+- [docker-compose.rtsp.yml:2-36](file://docker-compose.rtsp.yml#L2-L36)
 
 **Section sources**
-- [direct_stream_server.py:1-304](file://rtsp-ipcam/direct_stream_server.py#L1-L304)
-- [Dockerfile:1-40](file://rtsp-ipcam/Dockerfile#L1-L40)
-- [docker-compose.yml:1-64](file://rtsp-ipcam/docker-compose.yml#L1-L64)
-- [nginx.conf:1-31](file://rtsp-ipcam/nginx.conf.template/nginx.conf#L1-L31)
+- [ffmpeg_hpe/docker-compose.yaml:1-190](file://ffmpeg_hpe/docker-compose.yaml#L1-L190)
+- [docker-compose.rtsp.yml:1-37](file://docker-compose.rtsp.yml#L1-L37)
+- [docker-compose.yml:1-30](file://docker-compose.yml#L1-L30)
 
 ## Core Components
-- HTTP streaming handler: Serves H.264 over HTTP with configurable port and video path
-- FFmpeg integration: Encodes and streams video frames to clients
-- Containerization: Docker image and compose configuration for production
-- Optional Nginx proxy: Reverse proxy for HTTP routing and buffering behavior
-- Development tools: Flask-based adaptive streaming servers for JPEG and testing
-- Monitoring and experiments: Scripts and configurations for performance and network analysis
+- **MediaMTX RTSP Broker**: Central RTSP server managing video streams on port 8554
+- **FFmpeg NVENC Streamer**: Hardware-accelerated H.264 video producer using NVIDIA GPUs
+- **RTSP Client Integration**: Support for RTSP clients including VLC, FFplay, and web browsers
+- **Development Tools**: Flask-based adaptive streaming servers for JPEG and testing
+- **Monitoring and Experiments**: Scripts and configurations for performance and network analysis
 
 Key responsibilities:
-- Validate video file and serve HTTP responses
-- Spawn FFmpeg to encode and stream H.264 frames
-- Manage client connections and headers
-- Provide containerized deployment with resource limits and health checks
-- Offer alternative adaptive streaming for JPEG-based clients
+- MediaMTX handles RTSP protocol negotiation and stream distribution
+- FFmpeg NVENC streamer produces hardware-accelerated H.264 streams
+- RTSP clients connect using standard RTSP URLs (rtsp://host:8554/stream)
+- Development tools provide alternative streaming methods for testing
+- Comprehensive monitoring with Prometheus and BCC tracing
 
 **Section sources**
-- [direct_stream_server.py:45-151](file://rtsp-ipcam/direct_stream_server.py#L45-L151)
-- [direct_stream_server.py:156-207](file://rtsp-ipcam/direct_stream_server.py#L156-L207)
-- [Dockerfile:1-40](file://rtsp-ipcam/Dockerfile#L1-L40)
-- [docker-compose.yml:1-64](file://rtsp-ipcam/docker-compose.yml#L1-L64)
-- [stream_video_server.py:1-228](file://dev_tools/stream_video_server.py#L1-L228)
-- [stream_video_server_adaptive.py:1-195](file://dev_tools/stream_video_server_adaptive.py#L1-L195)
+- [ffmpeg_hpe/docker-compose.yaml:2-58](file://ffmpeg_hpe/docker-compose.yaml#L2-L58)
+- [docker-compose.rtsp.yml:2-36](file://docker-compose.rtsp.yml#L2-L36)
+- [dev_tools/stream_video_server.py:1-228](file://dev_tools/stream_video_server.py#L1-L228)
+- [dev_tools/stream_video_server_adaptive.py:1-195](file://dev_tools/stream_video_server_adaptive.py#L1-L195)
 
 ## Architecture Overview
-The HTTP streaming server integrates a Python HTTP server with FFmpeg to deliver H.264 video. Clients connect via HTTP GET to a dedicated endpoint. The server validates the video file, configures FFmpeg with appropriate encoding parameters, and streams raw H.264 frames to the client. For production deployments, an optional Nginx reverse proxy can be used to improve buffering and HTTP handling.
+**Updated**: The HTTP streaming server has been completely replaced with a MediaMTX RTSP broker architecture. The new system uses MediaMTX as a central RTSP server that manages video streams, with FFmpeg NVENC streamers producing H.264 content. RTSP clients connect to the broker using standard RTSP URLs. The architecture supports hardware acceleration through NVIDIA GPUs and provides robust stream management with automatic reconnection capabilities.
 
 ```mermaid
 sequenceDiagram
-participant Client as "Client"
-participant Server as "HTTP Server"
-participant FF as "FFmpeg Process"
-participant FS as "Video File"
-Client->>Server : "GET /stream.h264"
-Server->>Server : "Validate video path"
-Server->>FF : "Spawn FFmpeg with encoding params"
-FF->>FS : "Read frames"
-loop "Frame loop"
-FF-->>Server : "Write H.264 bytes"
-Server-->>Client : "HTTP response body (chunk)"
-end
-FF-->>Server : "Process exit"
-Server-->>Client : "Connection closed"
+participant Client as "RTSP Client"
+participant Broker as "MediaMTX Broker"
+participant Streamer as "FFmpeg NVENC Streamer"
+Client->>Broker : "RTSP SETUP rtsp : //host : 8554/stream"
+Broker->>Streamer : "Request video stream"
+Streamer->>Streamer : "NVENC H.264 encoding"
+Streamer-->>Broker : "H.264 RTP packets"
+Broker-->>Client : "RTSP PLAY response"
+Broker-->>Client : "RTP stream (H.264)"
+Note over Client,Broker : Hardware-accelerated streaming with TCP transport
 ```
 
 **Diagram sources**
-- [direct_stream_server.py:52-138](file://rtsp-ipcam/direct_stream_server.py#L52-L138)
-- [direct_stream_server.py:113-133](file://rtsp-ipcam/direct_stream_server.py#L113-L133)
+- [ffmpeg_hpe/docker-compose.yaml:54-58](file://ffmpeg_hpe/docker-compose.yaml#L54-L58)
+- [ffmpeg_hpe/run_experiment.sh:116-124](file://ffmpeg_hpe/run_experiment.sh#L116-L124)
 
 ## Detailed Component Analysis
 
-### HTTP Streaming Handler
-The handler manages HTTP GET and HEAD requests for the H.264 stream endpoint. It sets appropriate headers, validates the video file, spawns FFmpeg with encoding parameters, and streams chunks to the client. It supports graceful shutdown and logging.
+### MediaMTX RTSP Broker
+**New**: MediaMTX serves as the central RTSP server managing video streams. It provides:
+- RTSP server on port 8554 with HLS support on port 8080
+- Automatic stream source management and on-demand streaming
+- API access on port 8081 for monitoring and control
+- TCP transport for reliable streaming over networks
+- Resource limits and GPU acceleration support
 
-```mermaid
-classDiagram
-class H264StreamHandler {
-+do_GET()
-+do_HEAD()
-+log_message(format, *args)
--video_path
-}
-class DirectStreamServer {
-+start()
-+stop()
--create_handler()
--port
--video_path
--server
-}
-H264StreamHandler <|-- DirectStreamServer : "uses handler"
-```
-
-**Diagram sources**
-- [direct_stream_server.py:45-151](file://rtsp-ipcam/direct_stream_server.py#L45-L151)
-- [direct_stream_server.py:156-207](file://rtsp-ipcam/direct_stream_server.py#L156-L207)
+Configuration includes environment variables for stream sources, transport protocols, and logging levels.
 
 **Section sources**
-- [direct_stream_server.py:45-151](file://rtsp-ipcam/direct_stream_server.py#L45-L151)
-- [direct_stream_server.py:156-207](file://rtsp-ipcam/direct_stream_server.py#L156-L207)
+- [ffmpeg_hpe/docker-compose.yaml:2-16](file://ffmpeg_hpe/docker-compose.yaml#L2-L16)
+- [docker-compose.rtsp.yml:9-17](file://docker-compose.rtsp.yml#L9-L17)
 
-### FFmpeg Encoding Pipeline
-The server invokes FFmpeg to encode the input video into H.264 and stream it over HTTP. The pipeline includes:
-- Real-time input (-re)
-- H.264 encoder with presets tuned for low latency
-- Bitstream filters and flags for streaming compatibility
-- Output format suitable for HTTP streaming
+### FFmpeg NVENC Streamer
+**New**: Hardware-accelerated video producer using NVIDIA GPUs:
+- NVENC H.264 encoding with low-latency presets (p2 + ll tune)
+- TCP transport for reliable RTP streaming
+- Infinite video looping for continuous experimentation
+- GPU resource allocation and visibility configuration
+- Stream format optimized for RTSP distribution
 
-Encoding parameters and options are defined in the handler’s FFmpeg invocation.
-
-**Section sources**
-- [direct_stream_server.py:74-94](file://rtsp-ipcam/direct_stream_server.py#L74-L94)
-- [changes_improvemnts.txt:44-71](file://rtsp-ipcam/changes_improvemnts.txt#L44-L71)
-
-### Containerized Deployment
-The Dockerfile builds a minimal image with FFmpeg and Python, exposes the default port, and runs the HTTP server. The compose file defines:
-- Port mapping and volume mounts for video files
-- Health checks against the stream endpoint
-- Resource limits and security hardening
-- Optional Nginx reverse proxy service
+The streamer automatically connects to the MediaMTX broker and begins producing H.264 content.
 
 **Section sources**
-- [Dockerfile:1-40](file://rtsp-ipcam/Dockerfile#L1-L40)
-- [docker-compose.yml:1-64](file://rtsp-ipcam/docker-compose.yml#L1-L64)
+- [ffmpeg_hpe/docker-compose.yaml:26-58](file://ffmpeg_hpe/docker-compose.yaml#L26-L58)
+- [docker-compose.rtsp.yml:19-36](file://docker-compose.rtsp.yml#L19-L36)
 
-### Optional Nginx Reverse Proxy
-The Nginx configuration proxies HTTP requests to the streaming server, disables proxy buffering for live streaming, and forwards essential headers. This improves buffering behavior and HTTP handling for clients.
+### RTSP Client Integration
+**Updated**: RTSP clients connect using standard RTSP URLs:
+- Media players: VLC, FFplay, MPV with RTSP support
+- Web browsers: RTSP-compatible plugins or external players
+- Mobile applications: RTSP streaming endpoints
+- Monitoring systems: RTSP stream consumption for analysis
+
+Client configuration requires TCP transport for reliable streaming and proper RTSP URL format.
 
 **Section sources**
-- [nginx.conf:12-30](file://rtsp-ipcam/nginx.conf.template/nginx.conf#L12-L30)
+- [ffmpeg_hpe/run_experiment.sh:116-124](file://ffmpeg_hpe/run_experiment.sh#L116-L124)
+- [recent-dash/README.md:14-18](file://recent-dash/README.md#L14-L18)
 
 ### Development Tools: Adaptive JPEG Streaming
-Two Flask-based servers demonstrate alternative streaming approaches:
+**Preserved**: Two Flask-based servers demonstrate alternative streaming approaches:
 - Basic multipart streaming server for JPEG frames
 - Adaptive server that adjusts JPEG quality and resolution based on video properties
 
-These tools aid in testing and validating client compatibility and performance trade-offs.
+These tools aid in testing and validating client compatibility and performance trade-offs, though they are not part of the production RTSP pipeline.
 
 **Section sources**
-- [stream_video_server.py:1-228](file://dev_tools/stream_video_server.py#L1-L228)
-- [stream_video_server_adaptive.py:1-195](file://dev_tools/stream_video_server_adaptive.py#L1-L195)
-
-### RTSP/IP Camera Emulation Concepts
-While the primary implementation streams H.264 over HTTP, the repository includes notes and templates for RTSP/IP camera emulation, including:
-- Playback commands for various players
-- Network tweaks and troubleshooting steps
-- Nginx template for reverse proxying
-
-These materials inform RTSP/IP camera emulation strategies and HTTP streaming comparisons.
-
-**Section sources**
-- [changes_improvemnts.txt:73-106](file://rtsp-ipcam/changes_improvemnts.txt#L73-L106)
-- [nginx.conf:12-30](file://rtsp-ipcam/nginx.conf.template/nginx.conf#L12-L30)
+- [dev_tools/stream_video_server.py:1-228](file://dev_tools/stream_video_server.py#L1-L228)
+- [dev_tools/stream_video_server_adaptive.py:1-195](file://dev_tools/stream_video_server_adaptive.py#L1-L195)
 
 ## Dependency Analysis
-The HTTP streaming server relies on:
-- Python standard library for HTTP handling and subprocess integration
-- FFmpeg for H.264 encoding and streaming
-- Docker and Docker Compose for containerization
-- Optional Nginx for reverse proxying
+**Updated**: The RTSP streaming architecture relies on:
+- MediaMTX RTSP broker for stream management and distribution
+- FFmpeg NVENC for hardware-accelerated H.264 encoding
+- Docker and Docker Compose for container orchestration
+- NVIDIA GPU drivers and CUDA runtime for hardware acceleration
+- Monitoring tools including Prometheus and BCC tracing
 
 ```mermaid
 graph LR
-Py["Python Standard Lib"] --> HS["HTTP Server"]
-HS --> FF["FFmpeg"]
-HS --> DC["Docker Runtime"]
-DC --> Img["Docker Image"]
-Img --> Cmp["Docker Compose"]
-Cmp --> NG["Nginx (optional)"]
-NG --> HS
+MediaMTX["MediaMTX RTSP Broker"] --> FFNVENC["FFmpeg NVENC Streamer"]
+FFNVENC --> GPU["NVIDIA GPU"]
+FFNVENC --> RTSP["RTSP Protocol"]
+Client["RTSP Clients"] --> RTSP
+Monitor["Monitoring Stack"] --> MediaMTX
+Monitor --> FFNVENC
 ```
 
 **Diagram sources**
-- [requirements.txt:1-11](file://rtsp-ipcam/requirements.txt#L1-L11)
-- [Dockerfile:1-40](file://rtsp-ipcam/Dockerfile#L1-L40)
-- [docker-compose.yml:1-64](file://rtsp-ipcam/docker-compose.yml#L1-L64)
+- [ffmpeg_hpe/docker-compose.yaml:2-58](file://ffmpeg_hpe/docker-compose.yaml#L2-L58)
+- [docker-compose.yml:4-29](file://docker-compose.yml#L4-L29)
 
 **Section sources**
-- [requirements.txt:1-11](file://rtsp-ipcam/requirements.txt#L1-L11)
-- [Dockerfile:1-40](file://rtsp-ipcam/Dockerfile#L1-L40)
-- [docker-compose.yml:1-64](file://rtsp-ipcam/docker-compose.yml#L1-L64)
+- [ffmpeg_hpe/docker-compose.yaml:1-190](file://ffmpeg_hpe/docker-compose.yaml#L1-L190)
+- [docker-compose.yml:1-30](file://docker-compose.yml#L1-L30)
 
 ## Performance Considerations
-- Latency: The implementation targets low-latency streaming with FFmpeg presets tuned for zero-latency and fast-start flags.
-- CPU and memory: Minimal buffering and lightweight encoding reduce CPU and memory usage.
-- Concurrency: Multiple clients can connect simultaneously; each connection spawns an FFmpeg process.
-- Network tuning: Kernel buffer sizes can be increased to improve throughput and reduce drops.
-- Monitoring: Scripts and Prometheus configurations enable performance and network measurements.
+**Updated**: RTSP streaming performance characteristics:
+- **Latency**: Hardware-accelerated NVENC encoding with low-latency presets (p2 + ll tune)
+- **Throughput**: Optimized for continuous streaming with TCP transport
+- **Resource Usage**: GPU utilization maximized through NVENC acceleration
+- **Scalability**: MediaMTX handles multiple concurrent RTSP client connections
+- **Network Efficiency**: TCP transport ensures reliable streaming over various network conditions
 
-Practical tips:
-- Use ultrafast preset and zerolatency tune for minimal latency
-- Enable faststart and global_header flags for streaming compatibility
-- Adjust resolution and bitrate to match client capabilities
-- Consider Nginx proxy for improved buffering behavior
+Practical optimizations:
+- Use NVENC low-latency presets for minimal encoding delay
+- Configure TCP transport for reliable RTP streaming
+- Monitor GPU utilization and adjust stream quality dynamically
+- Implement proper resource limits for containerized deployment
+- Utilize MediaMTX API for runtime monitoring and adjustments
 
 **Section sources**
-- [README.md:456-461](file://rtsp-ipcam/README.md#L456-L461)
-- [changes_improvemnts.txt:84-94](file://rtsp-ipcam/changes_improvemnts.txt#L84-L94)
-- [review.md:20-72](file://ffmpeg_hpe/review.md#L20-L72)
-- [prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
+- [ffmpeg_hpe/docker-compose.yaml:52-58](file://ffmpeg_hpe/docker-compose.yaml#L52-L58)
+- [ffmpeg_hpe/run_experiment.sh:83-110](file://ffmpeg_hpe/run_experiment.sh#L83-L110)
+- [docker-compose.yml:14-29](file://docker-compose.yml#L14-L29)
 
 ## Troubleshooting Guide
-Common issues and remedies:
-- Content-type mismatch: Verify the server sends the correct MIME type for H.264
-- FFmpeg errors: Inspect stderr output from the FFmpeg process for encoding failures
-- Client playback problems: Use playback commands tailored for raw H.264 streams
-- Network drops: Increase kernel buffer sizes and consider Nginx proxy buffering
-- Health checks: Ensure the health check endpoint is reachable from the compose network
+**Updated**: Common RTSP streaming issues and remedies:
+- **RTSP connection failures**: Verify MediaMTX is running on port 8554 and accessible
+- **Stream not found**: Check RTSP URL format (rtsp://host:8554/stream) and stream name
+- **Client playback problems**: Ensure RTSP client supports TCP transport and H.264
+- **GPU encoding issues**: Verify NVIDIA drivers and CUDA runtime are properly configured
+- **Performance degradation**: Monitor GPU utilization and adjust encoding parameters
+- **MediaMTX API access**: Use port 8081 for broker management and monitoring
 
 Diagnostic steps:
-- Check server logs for error messages
-- Validate video file path and permissions
-- Confirm FFmpeg availability in PATH
-- Use curl to inspect headers and capture a short segment for analysis
+- Check MediaMTX logs for connection and stream errors
+- Verify RTSP broker readiness before starting streamer
+- Monitor GPU metrics for encoding performance
+- Use MediaMTX API endpoints for stream status and statistics
+- Validate network connectivity between containers
 
 **Section sources**
-- [direct_stream_server.py:127-132](file://rtsp-ipcam/direct_stream_server.py#L127-L132)
-- [changes_improvemnts.txt:96-106](file://rtsp-ipcam/changes_improvemnts.txt#L96-L106)
-- [docker-compose.yml:20-24](file://rtsp-ipcam/docker-compose.yml#L20-L24)
+- [ffmpeg_hpe/run_experiment.sh:41-51](file://ffmpeg_hpe/run_experiment.sh#L41-L51)
+- [ffmpeg_hpe/docker-compose.yaml:11-16](file://ffmpeg_hpe/docker-compose.yaml#L11-L16)
+- [docker-compose.yml:14-29](file://docker-compose.yml#L14-L29)
 
 ## Conclusion
-The HTTP streaming server delivers a simple, reliable, and low-latency H.264 streaming solution using FFmpeg and Python. It supports containerized deployment, optional reverse proxying, and development tools for adaptive streaming. With proper configuration and monitoring, it can be integrated into web clients, mobile applications, and monitoring systems while maintaining predictable performance and ease of operation.
+**Updated**: The HTTP streaming server has been successfully replaced with a robust MediaMTX RTSP broker architecture. This new implementation provides hardware-accelerated H.264 streaming through FFmpeg NVENC, reliable RTSP client support, and comprehensive monitoring capabilities. The system maintains low latency through NVENC encoding while providing scalable stream management through MediaMTX. With proper configuration and monitoring, it can be integrated into web clients, mobile applications, and monitoring systems while leveraging NVIDIA GPU acceleration for optimal performance.
 
 ## Appendices
 
 ### Configuration Options
-- Video file path: Provided via command-line argument or environment variable
-- Port: Configurable via command-line or environment variable
-- FFmpeg encoding parameters: Preset, tune, bitstream filters, and flags
-- Container environment: SERVER_PORT, VIDEO_FILE, and resource limits
+**Updated**: RTSP streaming configuration:
+- **MediaMTX Environment**: RTSP address (:8554), HLS address (:8080), API address (:8081)
+- **Stream Parameters**: Stream name (stream), source URL, on-demand streaming
+- **GPU Configuration**: NVIDIA_VISIBLE_DEVICES, CUDA_VISIBLE_DEVICES, driver capabilities
+- **Client Settings**: RTSP transport (TCP), connection timeouts, retry policies
 
 **Section sources**
-- [direct_stream_server.py:208-240](file://rtsp-ipcam/direct_stream_server.py#L208-L240)
-- [Dockerfile:35-37](file://rtsp-ipcam/Dockerfile#L35-L37)
-- [docker-compose.yml:14-16](file://rtsp-ipcam/docker-compose.yml#L14-L16)
+- [ffmpeg_hpe/docker-compose.yaml:9-17](file://ffmpeg_hpe/docker-compose.yaml#L9-L17)
+- [ffmpeg_hpe/docker-compose.yaml:65-78](file://ffmpeg_hpe/docker-compose.yaml#L65-L78)
+- [docker-compose.rtsp.yml:9-17](file://docker-compose.rtsp.yml#L9-L17)
 
 ### Client Connectivity Patterns
-- Media players: VLC, FFplay, MPV with HTTP raw H.264 support
-- Web browsers: Embedded playback via HTML5 video
-- Mobile apps: HTTP streaming endpoints compatible with HTTP live streaming
+**Updated**: RTSP client connectivity:
+- **Media players**: VLC, FFplay, MPV with RTSP support and TCP transport
+- **Web browsers**: RTSP-compatible plugins or external players
+- **Mobile apps**: RTSP streaming endpoints with proper transport configuration
+- **Monitoring systems**: RTSP stream consumption for analysis and recording
+
+Connection URL format: `rtsp://host:8554/stream`
 
 **Section sources**
-- [changes_improvemnts.txt:73-82](file://rtsp-ipcam/changes_improvemnts.txt#L73-L82)
-- [README.md:1-484](file://rtsp-ipcam/README.md#L1-L484)
+- [ffmpeg_hpe/run_experiment.sh:116-124](file://ffmpeg_hpe/run_experiment.sh#L116-L124)
+- [recent-dash/README.md:14-18](file://recent-dash/README.md#L14-L18)
 
 ### Real-time Video Feed Management
-- Frame delivery: FFmpeg reads frames in real time and writes to HTTP response
-- Looping behavior: The server does not loop; clients reconnect as needed
-- Resolution and frame rate: Controlled by FFmpeg parameters and input video properties
+**Updated**: RTSP stream management:
+- **Hardware acceleration**: NVENC encoding with low-latency presets
+- **Stream distribution**: MediaMTX manages multiple concurrent client connections
+- **Quality control**: Dynamic adjustment through MediaMTX configuration
+- **Transport protocol**: TCP for reliable RTP streaming over networks
+- **Resource management**: GPU allocation and container resource limits
 
 **Section sources**
-- [direct_stream_server.py:113-133](file://rtsp-ipcam/direct_stream_server.py#L113-L133)
+- [ffmpeg_hpe/docker-compose.yaml:52-58](file://ffmpeg_hpe/docker-compose.yaml#L52-L58)
+- [ffmpeg_hpe/docker-compose.yaml:187-190](file://ffmpeg_hpe/docker-compose.yaml#L187-L190)
 
 ### Adaptive Streaming Server (JPEG)
-- Dynamic quality: Adjusts JPEG quality and resolution based on input video
-- Multipart streaming: Uses multipart/x-mixed-replace for continuous frame delivery
-- Downscaling: Optionally downscales HD videos for better performance
+**Preserved**: Development-only JPEG streaming for testing:
+- Dynamic quality adjustment based on video properties
+- Multipart streaming with frame boundaries
+- Downscaling for HD video optimization
+- Test pattern generation when video files are unavailable
 
 **Section sources**
-- [stream_video_server_adaptive.py:35-106](file://dev_tools/stream_video_server_adaptive.py#L35-L106)
+- [dev_tools/stream_video_server_adaptive.py:35-106](file://dev_tools/stream_video_server_adaptive.py#L35-L106)
 
 ### Integration Examples
-- Web client embedding: Serve an HTML page that embeds the HTTP stream
-- Mobile application: Connect via HTTP stream URL in native or hybrid apps
-- Monitoring systems: Use Prometheus and scripts to collect performance metrics
+**Updated**: RTSP-based integration examples:
+- **Web client embedding**: RTSP URL integration in HTML5 video with proper transport
+- **Mobile application**: RTSP stream URL configuration in native or hybrid apps
+- **Monitoring systems**: MediaMTX API integration for stream statistics and control
+- **Development testing**: Flask-based JPEG streaming for local testing scenarios
 
 **Section sources**
-- [stream_video_server.py:173-204](file://dev_tools/stream_video_server.py#L173-L204)
-- [prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
-- [run_experiment.sh:1-286](file://recent-dash/run_experiment.sh#L1-L286)
+- [recent-dash/README.md:14-18](file://recent-dash/README.md#L14-L18)
+- [dev_tools/stream_video_server.py:173-204](file://dev_tools/stream_video_server.py#L173-L204)
 
 ### Latency, Quality Metrics, and Tracing
-- Latency: Target ~1–3 seconds depending on network and client buffering
-- Quality metrics: Frame sizes, inter-arrival times, and bitrate calculations
-- Tracing: BPF tracing and tcpdump capture for RX/TX analysis
+**Updated**: RTSP streaming metrics and monitoring:
+- **Latency**: Hardware-accelerated NVENC with low-latency presets (p2 + ll tune)
+- **Quality metrics**: Stream statistics through MediaMTX API, GPU utilization
+- **Tracing**: BCC tracing for network packet analysis, Prometheus metrics collection
+- **Performance monitoring**: GPU metrics, stream statistics, and container resource usage
 
 **Section sources**
-- [README.md:456-461](file://rtsp-ipcam/README.md#L456-L461)
-- [review.md:28-72](file://ffmpeg_hpe/review.md#L28-L72)
-- [full_shell_history.txt:219-233](file://full_shell_history.txt#L219-L233)
+- [ffmpeg_hpe/docker-compose.yaml:52-58](file://ffmpeg_hpe/docker-compose.yaml#L52-L58)
+- [docker-compose.yml:14-29](file://docker-compose.yml#L14-L29)
+- [full_shell_history.txt:671-698](file://full_shell_history.txt#L671-L698)

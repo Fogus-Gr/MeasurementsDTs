@@ -241,7 +241,7 @@ graph TD
 | `monitor_hpe/` | `run_experiment.sh` | Local video file (volume mount) | ✅ | CPU%, RSS memory | Baseline inference cost — no network |
 | `ffmpeg_hpe/` | `run_experiment.sh` `run_experiment_bcc.sh` | Live RTSP stream via MediaMTX (port 8554) | ✅ | CPU%, RSS, GPU, BCC RX bytes | Full streaming benchmark — main rig |
 | `recent-dash/` | `run_experiment.sh` | DASH segments via HTTP proxy | ❌ | CPU%, RSS, bpftrace RX/TX | HTTP caching proxy research — not HPE |
-| `rtsp-ipcam/` | `start_server.sh` | — (is the server) | ❌ | — | Shared RTSP / MediaMTX streaming server used by `ffmpeg_hpe/` |
+| *(Streaming)* | — | — | — | — | RTSP streaming is handled by `jrottenberg/ffmpeg:4.4-nvidia` (streamer) + `bluenviron/mediamtx:latest` (broker) in `ffmpeg_hpe/docker-compose.yaml` |
 | `Measure_Flops/` | `measure_flops.sh` | Any HPE command | ✅ | GPU FLOPS, TOPS, memory BW | One-shot Nsight Compute profiling |
 | `Measure_gpu_dcgm/` | `run_nvidia_dcgm.sh` | — (sidecar) | ❌ | GPU util, temp, power | Standalone GPU telemetry collector |
 | `Measure_plot_cpu_perf/` | `run_perf_plot.sh` | PID file | ❌ | CPU cycles via `perf stat` | Standalone CPU cycle counter |
@@ -264,7 +264,7 @@ cd monitor_hpe && ./run_experiment.sh
 
 The main experiment rig. Six containers total, with `bcc-tracer` optional:
 - `rtsp-broker` (MediaMTX) — RTSP broker on port 8554
-- `streamer` (from `rtsp-ipcam/`) — FFmpeg/NVENC producer that loops a local video file and publishes it to the broker
+- `streamer` (`jrottenberg/ffmpeg:4.4-nvidia`) — FFmpeg/NVENC producer that loops a local video file and publishes it to the broker
 - `hpe` — runs `main.py --method <X> --input rtsp://<server-ip>:8554/stream`
 - `perf_monitor` (from `recent-dash/perf_monitor/`) — samples CPU/memory/network
 - `gpu-metrics` — polls `nvidia-smi` every 500ms
@@ -288,9 +288,7 @@ Uses the same monitoring sidecars (`perf_monitor`, `bpftrace`). The observabilit
 cd recent-dash && ./run_experiment.sh
 ```
 
-#### `rtsp-ipcam/` — H.264 streaming server (shared component)
-
-Not an experiment itself — the reusable streaming server consumed by `ffmpeg_hpe/`. A Python script (`direct_stream_server.py`) uses FFmpeg to transcode a video file and serve it over HTTP as a raw H.264 stream. Includes a `Makefile` and Windows PowerShell scripts (`build.ps1`, `validate.ps1`) for cross-platform use.
+> **Streaming architecture note:** The old `rtsp-ipcam/` streaming server has been removed. Streaming is now handled inside `ffmpeg_hpe/docker-compose.yaml` by `jrottenberg/ffmpeg:4.4-nvidia` (streamer) + `bluenviron/mediamtx:latest` (RTSP broker).
 
 ### Standalone Measurement Tools
 
@@ -379,7 +377,6 @@ These are confirmed issues in the codebase. Fixes marked ✅ are already applied
 | 12 | `ffmpeg_hpe/monitor_pid.sh` | `netif_receive_skb` bpftrace PID filter fires in softirq context — PID never matches HPE process, RX bytes always ~0 | ⚠️ Known — use `bcc-tracer` for accurate RX measurement |
 | 13 | `monitor_hpe/plot_graph.py` | Calls `plt.show()` — blocks indefinitely in headless containers | ⚠️ Open |
 | 14 | `ffmpeg_hpe/plot_graph.py` | Empty file (0 bytes) | ⚠️ Open |
-| 15 | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | ⚠️ Open |
 
 #### HPE inference code
 
