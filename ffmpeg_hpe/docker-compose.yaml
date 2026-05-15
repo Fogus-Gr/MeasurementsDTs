@@ -1,6 +1,6 @@
 services:
   rtsp-broker:
-    image: bluenviron/mediamtx:latest
+    image: bluenviron/mediamtx:1-ffmpeg
     container_name: mediamtx
     restart: unless-stopped
     ports:
@@ -170,6 +170,7 @@ services:
       - STREAMER_IP=rtsp-broker
       - STREAMER_PORT=8554
       - PORT_DETECTION_TIMEOUT=30
+      - BCC_POLL_INTERVAL_S=0.01
     network_mode: "service:hpe"
     depends_on:
       - hpe
