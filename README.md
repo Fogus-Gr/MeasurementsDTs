@@ -314,16 +314,16 @@ See `optimizations/README.md` and `OPTIMIZATION_PLAN.md` for configuration detai
 
 ### Root-level Dockerfiles
 
-Six Dockerfiles at the repo root represent iteration history on the HPE container image. Only `Dockerfile_base` is actively used by the experiment rigs.
+Six Dockerfiles at the repo root represent iteration history on the HPE container image. `monitor_hpe/` uses `Dockerfile_base`; the active `ffmpeg_hpe/` RTSP rig uses `Dockerfile_optimized_multistage_v4`.
 
 | File | Purpose |
 |---|---|
-| `Dockerfile_base` | Current base image used by `monitor_hpe/` and `ffmpeg_hpe/` |
+| `Dockerfile_base` | Base image used by `monitor_hpe/` |
 | `Dockerfile.hpe` | Earlier variant |
 | `Dockerfile_with_opencv` | Adds a custom OpenCV build |
 | `Dockerfile_cuda_ffmpeg_hpe` | CUDA + FFmpeg + HPE combined |
 | `Dockerfile_combined_multistage_app` | Multi-stage build attempt |
-| `Dockerfile_optimized_multistage_v4` | Latest multi-stage optimised build |
+| `Dockerfile_optimized_multistage_v4` | Active multi-stage HPE image used by `ffmpeg_hpe/` |
 
 ### Network Monitoring Architecture
 
@@ -333,7 +333,7 @@ each handling one direction. They are complementary, not redundant.
 | Tool | Container | Direction | Method | Works? |
 |---|---|---|---|---|
 | `bpftrace` in `monitor_pid.sh` | `perf_monitor` | **TX** (HPE → outside) | `sys_enter_sendto` tracepoint — fires in HPE process context, PID filter valid | ✅ |
-| `bcc_rx_bytes.py` | `bcc-tracer` | **RX** (stream → HPE) | BPF socket filter on `eth0` filtered by streamer IP + port | ✅ |
+| `bcc_rx_bytes.py` | `bcc-tracer` | **RX** (stream → HPE) | BPF socket filter on the detected tracer interface, filtered by RTSP broker IP + ports | ✅ |
 | `bpftrace netif_receive_skb` in `monitor_pid.sh` | `perf_monitor` | RX (attempted) | Fires in softirq/kernel context — PID filter never matches HPE process | ❌ always 0 |
 
 **Why the split?**
@@ -344,8 +344,8 @@ each handling one direction. They are complementary, not redundant.
   kernel's network stack in softirq context, before they are associated with
   any process. The only reliable way to filter is by IP address and port.
 
-`bcc-tracer` solves this by running a BPF socket filter attached directly to
-`eth0`, filtering packets from the streamer's IP and port. It runs in a
+`bcc-tracer` solves this by running a BPF socket filter attached to the
+detected tracer interface, filtering packets from the RTSP broker IP and ports. It runs in a
 separate container that shares HPE's network namespace
 (`network_mode: service:hpe`) so it sees exactly the same traffic HPE sees.
 

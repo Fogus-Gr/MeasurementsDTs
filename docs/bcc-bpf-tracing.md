@@ -37,7 +37,7 @@ This document explains the kernel-level network traffic tracing system used to m
 │  └──────────────────────────────────────────┘        │
 │                                                        │
 └──────────────────────────────────────────────────────┘
-         ↑ attach_raw_socket(eth0)
+         ↑ attach_raw_socket(<detected interface>)
          │
 ┌────────┴─────────────────────────────────────────────┐
 │ User Space (bcc_rx_bytes.py)                          │
@@ -106,8 +106,11 @@ int count_rx(struct __sk_buff *skb) {
 ```python
 b = BPF(text=bpf_program, cflags=["-Wno-macro-redefined", "-Wno-address-of-packed-member"])
 fn = b.load_func("count_rx", BPF.SOCKET_FILTER)
-b.attach_raw_socket(fn, "eth0")
+b.attach_raw_socket(fn, interface)
 ```
+
+`entrypoint.sh` selects `interface` from `BCC_INTERFACE`, then the default route,
+then the first non-loopback interface as a fallback.
 
 ---
 
@@ -289,7 +292,7 @@ dmesg | grep -i bpf
 
 - Full packet capture:
   ```bash
-  tcpdump -i eth0 tcp port 8554 -nn -tt
+  tcpdump -i "${BCC_INTERFACE:-eth0}" tcp port 8554 -nn -tt
   ```
 - Higher overhead — writes full packet data to disk.
 - Useful for debugging: analyze packet contents, TCP flags, retransmissions.
@@ -359,5 +362,5 @@ The BCC/BPF tracing stack provides a low-overhead, kernel-level measurement of n
 
 - **In-kernel aggregation** eliminates per-packet userspace overhead.
 - **Shared network namespace** (`network_mode: service:hpe`) ensures the tracer sees exactly the same traffic as the HPE process.
-- **Dynamic port detection** handles the ephemeral source port assigned by the OS when HPE opens its TCP connection to the streamer.
+- **Dynamic interface and port detection** selects the tracer interface and handles the ephemeral source port assigned by the OS when HPE opens its TCP connection to the RTSP broker.
 - **Raw socket filter** (not XDP or tc) keeps the implementation portable across kernel versions ≥ 4.4.

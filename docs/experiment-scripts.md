@@ -90,7 +90,7 @@ Enhanced experiment runner with **BCC (BPF Compiler Collection)** kernel-level n
 | CPU thread count | Not extracted | Extracted via `lscpu \| awk '/^CPU\(s\):/ {print $2}'` |
 | VIDEO_FILE | N/A | Loaded from `.env` if not in environment |
 | Results dir naming | `method_cpu_timestamp` | `method_threads-cores_device_videoname_timestamp` |
-| Tracer output cleanup | No | `rm -rf ./tracer_output/*` |
+| Tracer output cleanup | Yes | `rm -rf ./tracer_output && mkdir -p ./tracer_output` |
 | BCC startup wait | None | Extra **8-second** wait for BPF compilation |
 | Port detection | None | Monitors logs for detected HPE video port |
 | Extra data collected | — | `video_rx.csv`, BCC tracer logs |
@@ -311,7 +311,9 @@ Always clean up stale state before starting a new experiment run to avoid contam
 
 ```bash
 docker compose down -v --remove-orphans
-rm -rf ./results/*.csv ./traces/*.csv ./tracer_output/*
+rm -f ./results/*.csv ./traces/*.csv ./perf_monitor/output/*.csv
+rm -rf ./tracer_output
+mkdir -p ./tracer_output
 ```
 
 ### Post-Run Data Inspection

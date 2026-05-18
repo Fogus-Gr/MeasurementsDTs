@@ -82,7 +82,8 @@ The top-level folders fall into three categories:
 | `recent-dash/perf_monitor/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `perf_monitor` container |
 | `ffmpeg_hpe/bpftrace-tracer/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `bcc-tracer` container |
 | `ffmpeg_hpe/Dockerfile.gpu_metrics` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `gpu-metrics` container |
-| `Dockerfile_base` (repo root) | `ffmpeg_hpe/` + `monitor_hpe/` | Builds the `hpe` container (the inference engine) |
+| `Dockerfile_base` (repo root) | `monitor_hpe/` | Builds the baseline HPE container |
+| `Dockerfile_optimized_multistage_v4` (repo root) | `ffmpeg_hpe/` | Builds the active RTSP experiment `hpe` container |
 
 #### Standalone Tools — run independently, not part of any compose stack
 
@@ -162,7 +163,8 @@ MeasurementsDTs/
 │   ├── enhanced_openvino_hpe.py
 │   └── optimized_main.py
 │
-├── Dockerfile_base                # Main HPE Docker image (used by ffmpeg_hpe experiments)
+├── Dockerfile_base                # Baseline HPE Docker image (used by monitor_hpe)
+├── Dockerfile_optimized_multistage_v4  # Active HPE image used by ffmpeg_hpe
 ├── Dockerfile.hpe                 # Alternative HPE Dockerfile
 ├── docker-compose.yml             # Root-level compose (GPU metrics stack)
 └── README.md                      # Project README with model download links
@@ -438,9 +440,9 @@ python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'
 
 #### 3. `hpe`
 - **What it does:** The main inference container. Reads from the RTSP stream, runs pose estimation, writes keypoint CSVs.
-- **Built from:** `Dockerfile_base` at the repo root
+- **Built from:** `Dockerfile_optimized_multistage_v4` at the repo root
 - **Command:** `python3 main.py --method <METHOD> --input rtsp://rtsp-broker:8554/stream --csv --output_dir /output/ --device <DEVICE> --measurement_interval_ms 10`
-- **Resources:** 4 CPU cores (limit), 16 GB RAM, NVIDIA GPU (via `runtime: nvidia`)
+- **Resources:** 4 CPU cores (limit), 16 GB RAM, GPU runtime only for GPU methods (`alphapose`, `openpose`)
 - **Environment:** `HPE_METHOD`, `HPE_INPUT`, `HPE_DEVICE` are injected by experiment scripts.
 - **Shared memory:** 8 GB (`shm_size`) — needed for large batch PyTorch operations.
 
@@ -591,7 +593,7 @@ Network measurement requires two different tools because TX and RX operate in di
 | Direction | Tool | Container | Mechanism | Output file |
 |---|---|---|---|---|
 | **TX** (HPE → outside) | `bpftrace sys_enter_sendto` in `monitor_pid.sh` | `perf_monitor` | Syscall tracepoint — fires in HPE process context, PID filter valid | `perf/network_stats.csv` (rows where `sent=1`) |
-| **RX** (stream → HPE) | `bcc_rx_bytes.py` | `bcc-tracer` | BPF socket filter on `eth0`, filtered by streamer IP + port | `traces/bcc/hpe_video_rx.csv` |
+| **RX** (stream → HPE) | `bcc_rx_bytes.py` | `bcc-tracer` | BPF socket filter on the detected tracer interface, filtered by RTSP broker IP + ports | `traces/bcc/hpe_video_rx.csv` |
 | ~~RX (attempted)~~ | ~~`bpftrace netif_receive_skb`~~ | ~~`perf_monitor`~~ | ~~Fires in softirq/kernel context — PID never matches HPE~~ | ~~Always ~0, ignore~~ |
 
 **Why the split is necessary:** `sendto()` is a syscall made by the HPE process — the kernel knows the PID. Incoming packets are processed by the kernel network stack in softirq context *before* being associated with any process — PID filtering is impossible at that point. `bcc-tracer` works around this by filtering by IP+port instead, running in a container that shares HPE's network namespace (`network_mode: service:hpe`).
@@ -701,7 +703,8 @@ Containers run as root. Output files may be owned by root on the host:
 sudo chown -R $(whoami):$(whoami) ffmpeg_hpe/results*
 sudo chown -R $(whoami):$(whoami) ffmpeg_hpe/tracer_output
 
-# Pre-create directories with open permissions (workaround)
+# Pre-create directories with open permissions if running tools manually.
+# run_experiment.sh removes and recreates tracer_output for normal runs.
 mkdir -p ffmpeg_hpe/results ffmpeg_hpe/tracer_output
 chmod 777 ffmpeg_hpe/results ffmpeg_hpe/tracer_output
 ```
@@ -710,7 +713,7 @@ chmod 777 ffmpeg_hpe/results ffmpeg_hpe/tracer_output
 
 > *For BPF architecture, kernel requirements, and troubleshooting, see [BCC/BPF Tracing Deep Dive](docs/bcc-bpf-tracing.md).*
 
-The BCC tracer auto-detects the port the HPE container is using to connect to the streaming server. If it fails:
+The BCC tracer resolves the RTSP broker IP, detects the tracer interface, and auto-detects the HPE source port for the exact broker connection. If it fails:
 
 ```bash
 # Check what the tracer detected

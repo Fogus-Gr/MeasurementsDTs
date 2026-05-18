@@ -14,7 +14,7 @@ The `perf-tuning-base` branch adds Docker-based experiment rigs for measuring
 HPE inference performance — throughput, CPU/GPU utilisation, memory, and
 network bandwidth — under realistic streaming conditions.
 
-**Stack:** Python 3.8.10 · OpenVINO 2024.2.0 · PyTorch 2.4.1+cu121 · OpenCV · Docker · NVIDIA DCGM
+**Stack:** Python 3.8.10 · OpenVINO 2024.4.0 · PyTorch 2.4.1+cu121 · OpenCV · Docker · NVIDIA DCGM
 
 ---
 
@@ -47,8 +47,8 @@ Measure_Flops/                 # Standalone: GPU FLOPS via Nsight Compute
 Measure_gpu_dcgm/              # Standalone: GPU power/temp/util via nvidia-smi
 Measure_plot_cpu_perf/         # Standalone: CPU cycles via perf stat
 optimizations/                 # OpenVINO CPU thread/stream tuning for 4-vCPU cloud instances
-Dockerfile_base                # Active HPE container image (used by monitor_hpe/ and ffmpeg_hpe/)
-Dockerfile_optimized_multistage_v4  # Latest multi-stage build iteration
+Dockerfile_base                # Baseline HPE container image (used by monitor_hpe/)
+Dockerfile_optimized_multistage_v4  # Active HPE image used by ffmpeg_hpe/
 docker-compose.yml             # GPU observability stack (DCGM + Prometheus + Grafana)
 ```
 
@@ -126,9 +126,11 @@ into timestamped directories inside each rig folder. Do not hardcode other
 output paths.
 
 ### Docker Images
-`Dockerfile_base` is the active HPE container image. The other Dockerfiles at
-the repo root are iteration history — do not use them for new work without
-checking whether `Dockerfile_base` already covers the need.
+`Dockerfile_base` is the baseline HPE container image used by `monitor_hpe/`.
+`ffmpeg_hpe/` uses `Dockerfile_optimized_multistage_v4` for the active RTSP
+experiment rig. The other Dockerfiles at the repo root are iteration history —
+do not use them for new work without checking whether one of the active images
+already covers the need.
 
 ### Network Monitoring — TX vs RX Tool Split
 
@@ -139,7 +141,7 @@ modifying any monitoring code.
 | Tool | Container | Direction | Mechanism | Status |
 |---|---|---|---|---|
 | `bpftrace sys_enter_sendto` in `monitor_pid.sh` | `perf_monitor` | **TX** (HPE → outside) | Syscall tracepoint — fires in HPE process context, PID filter valid | ✅ works |
-| `bcc_rx_bytes.py` | `bcc-tracer` | **RX** (stream → HPE) | BPF socket filter on `eth0`, filtered by streamer IP + port | ✅ works (filter re-enabled `256a21c`) |
+| `bcc_rx_bytes.py` | `bcc-tracer` | **RX** (stream → HPE) | BPF socket filter on detected interface, filtered by RTSP broker IP + ports | ✅ works (filter re-enabled `256a21c`) |
 | `bpftrace netif_receive_skb` in `monitor_pid.sh` | `perf_monitor` | RX (attempted) | Network tracepoint fires in softirq context — PID never matches HPE | ❌ always ~0 |
 
 **Why TX and RX need different approaches:**
@@ -150,9 +152,10 @@ modifying any monitoring code.
   impossible. Must filter by IP/port instead.
 
 `bcc-tracer` runs in a container sharing HPE's network namespace
-(`network_mode: service:hpe`) and attaches a BPF socket filter to `eth0`
-filtering by streamer IP + HPE ephemeral port (auto-detected via `ss -ntp`
-in `entrypoint.sh`).
+(`network_mode: service:hpe`) and attaches a BPF socket filter to the detected
+interface (`BCC_INTERFACE`, default route, then first non-loopback fallback),
+filtering by RTSP broker IP/port + HPE ephemeral port (auto-detected via
+`ss -ntp` in `entrypoint.sh`).
 
 **Rule:** for RX data use `traces/bcc/hpe_video_rx.csv`. For TX data use
 `network_stats.csv` from `perf_monitor`. Never use the RX column from

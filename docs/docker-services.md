@@ -8,7 +8,7 @@ This document provides detailed reference for all Docker images, Compose service
 
 ## Docker Images
 
-### `Dockerfile_base` (Primary HPE Image)
+### `Dockerfile_base` (Baseline HPE Image)
 
 | Property | Value |
 |----------|-------|
@@ -26,7 +26,7 @@ This document provides detailed reference for all Docker images, Compose service
 
 **Python frameworks:**
 - `PyNvCodec` — built from NVIDIA VideoProcessingFramework Git source
-- `OpenVINO 2024.2.0`
+- `OpenVINO 2024.4.0`
 - `gdown` — used for model downloads during build
 
 **Models downloaded via `gdown` at build time:**
@@ -130,8 +130,8 @@ Runs the HPE inference pipeline against the video stream.
 
 | Property | Value |
 |----------|-------|
-| Build context | Project root (`Dockerfile_base`) |
-| Runtime | `nvidia` |
+| Build context | Project root (`Dockerfile_optimized_multistage_v4`) |
+| Runtime | `${HPE_RUNTIME:-runc}` (`nvidia` only for GPU methods) |
 | Shared memory | `8gb` |
 | Depends on | `rtsp-broker`, `streamer` (`service_started`) |
 
@@ -146,7 +146,7 @@ Runs the HPE inference pipeline against the video stream.
 
 | Variable | Value |
 |----------|-------|
-| `NVIDIA_VISIBLE_DEVICES` | `all` |
+| `NVIDIA_VISIBLE_DEVICES` | `${NVIDIA_VISIBLE_DEVICES:-all}` for GPU methods, `none` for CPU-only methods |
 | `CUDA_VISIBLE_DEVICES` | `0` |
 | `PYTHONUNBUFFERED` | `1` |
 | `WAIT_HOSTS` | `rtsp-broker:8554` |
@@ -154,6 +154,7 @@ Runs the HPE inference pipeline against the video stream.
 | `PYTORCH_CUDA_ALLOC_CONF` | `max_split_size_mb:32` |
 | `OPENCV_FFMPEG_OPEN_TIMEOUT` | `300000` (5 min) |
 | `OPENCV_FFMPEG_READ_TIMEOUT` | `300000` (5 min) |
+| `OPENCV_FFMPEG_CAPTURE_OPTIONS` | `rtsp_transport;tcp` |
 
 **Command:**
 ```bash
@@ -357,7 +358,8 @@ python3 main.py --method movenet --input /videos/${VIDEO_FILE:-ultimatum/hd_00_0
 | `HPE_METHOD` | (set by script) | `hpe` | Pose estimation method (`movenet`, `alphapose`, etc.) |
 | `HPE_INPUT` | (set by script) | `hpe` | Stream URL or file path |
 | `HPE_DEVICE` | `GPU` | `hpe` | Inference device (`CPU` or `GPU`) |
-| `NVIDIA_VISIBLE_DEVICES` | `all` | `hpe`, `gpu-metrics` | GPU visibility for container |
+| `HPE_RUNTIME` | `runc` / `nvidia` | `hpe` | Runtime selected by `run_experiment.sh`; `nvidia` only for GPU methods |
+| `NVIDIA_VISIBLE_DEVICES` | `all` / `none` | `hpe`, `gpu-metrics` | GPU visibility for container; CPU-only HPE methods use `none` |
 | `CUDA_VISIBLE_DEVICES` | `0` | `hpe` | GPU device index |
 | `PYTORCH_CUDA_ALLOC_CONF` | `max_split_size_mb:32` | `hpe` | PyTorch CUDA memory allocator config |
 | `OPENCV_FFMPEG_OPEN_TIMEOUT` | `300000` | `hpe` | Stream open timeout in milliseconds |
@@ -366,6 +368,7 @@ python3 main.py --method movenet --input /videos/${VIDEO_FILE:-ultimatum/hd_00_0
 | `TARGET_CONTAINER` | `hpe` | `bcc-tracer` | Name of container to attach eBPF probes to |
 | `STREAMER_IP` | `rtsp-broker` | `bcc-tracer` | RTSP broker hostname |
 | `STREAMER_PORT` | `8554` | `bcc-tracer` | RTSP port used by the broker |
+| `BCC_INTERFACE` | auto-detected | `bcc-tracer` | Optional override for the raw socket interface |
 | `PORT_DETECTION_TIMEOUT` | `30` | `bcc-tracer` | Seconds to wait for port detection |
 | `OUTPUT_DIR` | `/output` | `perf_monitor` | Directory to write metrics output |
 | `EXPERIMENT_TYPE` | `ffmpeg_hpe` | `perf_monitor` | Experiment label for output files |
