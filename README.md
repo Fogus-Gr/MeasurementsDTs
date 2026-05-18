@@ -314,16 +314,16 @@ See `optimizations/README.md` and `OPTIMIZATION_PLAN.md` for configuration detai
 
 ### Root-level Dockerfiles
 
-Six Dockerfiles at the repo root represent iteration history on the HPE container image. `monitor_hpe/` uses `Dockerfile_base`; the active `ffmpeg_hpe/` RTSP rig uses `Dockerfile_optimized_multistage_v4`.
+Six Dockerfiles at the repo root represent iteration history on the HPE container image. `monitor_hpe/` and the active `ffmpeg_hpe/` RTSP rig use `Dockerfile_base`.
 
 | File | Purpose |
 |---|---|
-| `Dockerfile_base` | Base image used by `monitor_hpe/` |
+| `Dockerfile_base` | Active HPE app image used by `monitor_hpe/` and `ffmpeg_hpe/` |
 | `Dockerfile.hpe` | Earlier variant |
 | `Dockerfile_with_opencv` | Adds a custom OpenCV build |
 | `Dockerfile_cuda_ffmpeg_hpe` | CUDA + FFmpeg + HPE combined |
 | `Dockerfile_combined_multistage_app` | Multi-stage build attempt |
-| `Dockerfile_optimized_multistage_v4` | Active multi-stage HPE image used by `ffmpeg_hpe/` |
+| `Dockerfile_optimized_multistage_v4` | FFmpeg-only multi-stage image; not suitable for the HPE service |
 
 ### Network Monitoring Architecture
 

@@ -60,7 +60,7 @@ services:
   hpe:
     build:
       context: ..
-      dockerfile: Dockerfile_optimized_multistage_v4
+      dockerfile: Dockerfile_base
     # runtime: nvidia is NOT set here unconditionally.
     # run_experiment.sh sets NVIDIA_VISIBLE_DEVICES=none for CPU-only methods
     # (ae1, ae2, ae3, hrnet, movenet) so the NVIDIA container runtime is not

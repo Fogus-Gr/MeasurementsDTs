@@ -8,7 +8,7 @@ This document provides detailed reference for all Docker images, Compose service
 
 ## Docker Images
 
-### `Dockerfile_base` (Baseline HPE Image)
+### `Dockerfile_base` (Primary HPE Image)
 
 | Property | Value |
 |----------|-------|
@@ -130,7 +130,7 @@ Runs the HPE inference pipeline against the video stream.
 
 | Property | Value |
 |----------|-------|
-| Build context | Project root (`Dockerfile_optimized_multistage_v4`) |
+| Build context | Project root (`Dockerfile_base`) |
 | Runtime | `${HPE_RUNTIME:-runc}` (`nvidia` only for GPU methods) |
 | Shared memory | `8gb` |
 | Depends on | `rtsp-broker`, `streamer` (`service_started`) |

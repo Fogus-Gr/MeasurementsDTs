@@ -82,8 +82,7 @@ The top-level folders fall into three categories:
 | `recent-dash/perf_monitor/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `perf_monitor` container |
 | `ffmpeg_hpe/bpftrace-tracer/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `bcc-tracer` container |
 | `ffmpeg_hpe/Dockerfile.gpu_metrics` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `gpu-metrics` container |
-| `Dockerfile_base` (repo root) | `monitor_hpe/` | Builds the baseline HPE container |
-| `Dockerfile_optimized_multistage_v4` (repo root) | `ffmpeg_hpe/` | Builds the active RTSP experiment `hpe` container |
+| `Dockerfile_base` (repo root) | `ffmpeg_hpe/` + `monitor_hpe/` | Builds the HPE application container |
 
 #### Standalone Tools — run independently, not part of any compose stack
 
@@ -163,8 +162,8 @@ MeasurementsDTs/
 │   ├── enhanced_openvino_hpe.py
 │   └── optimized_main.py
 │
-├── Dockerfile_base                # Baseline HPE Docker image (used by monitor_hpe)
-├── Dockerfile_optimized_multistage_v4  # Active HPE image used by ffmpeg_hpe
+├── Dockerfile_base                # Active HPE Docker image used by monitor_hpe and ffmpeg_hpe
+├── Dockerfile_optimized_multistage_v4  # FFmpeg-only image; not used for the HPE service
 ├── Dockerfile.hpe                 # Alternative HPE Dockerfile
 ├── docker-compose.yml             # Root-level compose (GPU metrics stack)
 └── README.md                      # Project README with model download links
@@ -440,7 +439,7 @@ python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'
 
 #### 3. `hpe`
 - **What it does:** The main inference container. Reads from the RTSP stream, runs pose estimation, writes keypoint CSVs.
-- **Built from:** `Dockerfile_optimized_multistage_v4` at the repo root
+- **Built from:** `Dockerfile_base` at the repo root
 - **Command:** `python3 main.py --method <METHOD> --input rtsp://rtsp-broker:8554/stream --csv --output_dir /output/ --device <DEVICE> --measurement_interval_ms 10`
 - **Resources:** 4 CPU cores (limit), 16 GB RAM, GPU runtime only for GPU methods (`alphapose`, `openpose`)
 - **Environment:** `HPE_METHOD`, `HPE_INPUT`, `HPE_DEVICE` are injected by experiment scripts.

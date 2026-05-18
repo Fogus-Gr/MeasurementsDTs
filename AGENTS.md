@@ -47,8 +47,8 @@ Measure_Flops/                 # Standalone: GPU FLOPS via Nsight Compute
 Measure_gpu_dcgm/              # Standalone: GPU power/temp/util via nvidia-smi
 Measure_plot_cpu_perf/         # Standalone: CPU cycles via perf stat
 optimizations/                 # OpenVINO CPU thread/stream tuning for 4-vCPU cloud instances
-Dockerfile_base                # Baseline HPE container image (used by monitor_hpe/)
-Dockerfile_optimized_multistage_v4  # Active HPE image used by ffmpeg_hpe/
+Dockerfile_base                # Active HPE container image (used by monitor_hpe/ and ffmpeg_hpe/)
+Dockerfile_optimized_multistage_v4  # FFmpeg-only image; not used for the HPE service
 docker-compose.yml             # GPU observability stack (DCGM + Prometheus + Grafana)
 ```
 
@@ -126,11 +126,11 @@ into timestamped directories inside each rig folder. Do not hardcode other
 output paths.
 
 ### Docker Images
-`Dockerfile_base` is the baseline HPE container image used by `monitor_hpe/`.
-`ffmpeg_hpe/` uses `Dockerfile_optimized_multistage_v4` for the active RTSP
-experiment rig. The other Dockerfiles at the repo root are iteration history —
-do not use them for new work without checking whether one of the active images
-already covers the need.
+`Dockerfile_base` is the active HPE container image used by `monitor_hpe/` and
+`ffmpeg_hpe/`. `Dockerfile_optimized_multistage_v4` is an FFmpeg-only image
+and must not be used for the HPE service. The other Dockerfiles at the repo root
+are iteration history — do not use them for new work without checking whether
+`Dockerfile_base` already covers the need.
 
 ### Network Monitoring — TX vs RX Tool Split
 
