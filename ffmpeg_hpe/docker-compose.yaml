@@ -60,8 +60,15 @@ services:
   hpe:
     build:
       context: ..
-      dockerfile: Dockerfile_base
-    runtime: nvidia
+      dockerfile: Dockerfile_optimized_multistage_v4
+    # runtime: nvidia is NOT set here unconditionally.
+    # run_experiment.sh sets NVIDIA_VISIBLE_DEVICES=none for CPU-only methods
+    # (ae1, ae2, ae3, hrnet, movenet) so the NVIDIA container runtime is not
+    # required and the container starts on hosts without a GPU driver.
+    # For GPU methods (alphapose, openpose) run_experiment.sh leaves
+    # NVIDIA_VISIBLE_DEVICES unset (defaults to "all") and passes
+    # --gpus all via DOCKER_COMPOSE_HPE_RUNTIME, which is substituted below.
+    runtime: ${HPE_RUNTIME:-runc}
     environment:
       - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
       - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
@@ -90,11 +97,6 @@ services:
         limits:
           cpus: '4.0'
           memory: 16G
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     container_name: hpe
     depends_on:
       rtsp-broker:
@@ -124,8 +126,8 @@ services:
       - hpe
     healthcheck:
       test: ["CMD", "pgrep", "-f", "nvidia-smi"]
-      interval: 30s
-      timeout: 10s
+      interval: 10s
+      timeout: 5s
       retries: 3
       start_period: 10s
 
@@ -175,6 +177,7 @@ services:
     depends_on:
       - hpe
       - rtsp-broker
+      - streamer
     privileged: true
     cap_add:
       - SYS_ADMIN

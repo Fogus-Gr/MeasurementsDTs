@@ -4,19 +4,20 @@ import socket
 import struct
 import sys
 import ctypes
+import os
 
 def log(message, level="INFO"):
     print(f"[{level}] {message}", file=sys.stderr)
 
 def main(poll_interval_s=0.1):
     if len(sys.argv) < 4:
-        log("Usage: python3 bcc_rx_bytes.py <streamer_ip> <streamer_port> <hpe_port>", "ERROR")
+        log("Usage: python3 bcc_rx_bytes.py <streamer_ip> <streamer_port> <hpe_port> [interface]", "ERROR")
         sys.exit(1)
 
     STREAMER_IP = sys.argv[1]
     STREAMER_PORT = int(sys.argv[2])
     HPE_PORT = int(sys.argv[3])
-    INTERFACE = "eth0"
+    INTERFACE = sys.argv[4] if len(sys.argv) > 4 else os.getenv("BCC_INTERFACE", "eth0")
     OUTPUT_CSV = "/opt/tracer/output/hpe_video_rx.csv"
 
     # Convert IP to integer for BPF

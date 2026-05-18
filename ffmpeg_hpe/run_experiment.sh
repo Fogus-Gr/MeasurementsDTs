@@ -60,9 +60,16 @@ arguments=${2:-""}
 results_dir="results_${container_type}_${cpu_model}_${timestamp}"
 mkdir -p "$results_dir/logs" "$results_dir/traces" "$results_dir/perf"
 
-# Step 5: Clean up old CSV files before starting a new experiment
+# Step 5: Clean up old CSV files and tracer output before starting a new experiment
 rm -f ./results/*.csv ./traces/*.csv ./perf_monitor/output/*.csv 2>/dev/null || true
 rm -f ./csv/*.csv 2>/dev/null || true
+# Clean up previous BCC tracer output so stale data from prior runs is never
+# mixed with the current run's results.
+rm -rf ./tracer_output 2>/dev/null || true
+# Pre-create the tracer_output directory so the Docker volume mount succeeds.
+# If the directory doesn't exist when `docker compose up` runs, Docker creates
+# it as root and the bcc-tracer container cannot write into it.
+mkdir -p ./tracer_output
 
 echo "Preparing results directory: $results_dir"
 
@@ -109,21 +116,79 @@ until probe_rtsp_port; do
 done
 echo "[DEBUG] rtsp-broker accepting connections on localhost:8554"
 
-# Step 8b: Start the NVENC streamer
-echo "Starting video-producer (FFmpeg NVENC streamer)..."
-docker compose -f $docker_compose_file up -d streamer
-
-# Step 9: Set HPE_INPUT directly from RTSP URL (no dynamic IP lookup needed)
-# The rtsp-broker service name resolves via Docker bridge DNS
+# Step 9: Resolve HPE method, device, and GPU runtime before starting any containers.
+# The rtsp-broker service name resolves via Docker bridge DNS.
 export HPE_METHOD="${1:-alphapose}"
 export HPE_INPUT="rtsp://rtsp-broker:8554/stream"
 export HPE_DEVICE="CPU"
-if [[ "$1" == "alphapose" || "$arguments" == *"--method alphapose"* || \
-      "$1" == "openpose" || "$arguments" == *"--method openpose"* ]]; then
-  export HPE_DEVICE="GPU"
-fi
 
-echo "[DEBUG] HPE_INPUT=$HPE_INPUT  HPE_METHOD=$HPE_METHOD  HPE_DEVICE=$HPE_DEVICE"
+# GPU runtime: only alphapose and openpose actually use the GPU.
+# For all other methods (movenet, ae1, ae2, ae3, hrnet) we set
+# NVIDIA_VISIBLE_DEVICES=none so the NVIDIA container runtime is not required
+# and the container can start on hosts without a GPU driver.
+GPU_METHODS=("alphapose" "openpose")
+HPE_RUNTIME="runc"
+if [[ " ${GPU_METHODS[*]} " == *" $HPE_METHOD "* ]]; then
+  export HPE_DEVICE="GPU"
+  HPE_RUNTIME="nvidia"
+  export NVIDIA_VISIBLE_DEVICES="${NVIDIA_VISIBLE_DEVICES:-all}"
+else
+  export NVIDIA_VISIBLE_DEVICES="none"
+fi
+export HPE_RUNTIME
+
+echo "[DEBUG] HPE_INPUT=$HPE_INPUT  HPE_METHOD=$HPE_METHOD  HPE_DEVICE=$HPE_DEVICE  HPE_RUNTIME=$HPE_RUNTIME"
+
+# Step 9b: Validate that the video file exists before starting the streamer.
+# The streamer mounts ../videos as /data inside the container.
+VIDEO_FILE="${VIDEO_FILE_NAME:-vga_01_01.mp4}"
+VIDEO_HOST_PATH="$(dirname "$0")/../videos/${VIDEO_FILE}"
+if [ ! -f "$VIDEO_HOST_PATH" ]; then
+  echo "[ERROR] Video file not found: $VIDEO_HOST_PATH"
+  echo "[ERROR] Set VIDEO_FILE_NAME to a file that exists under $(dirname "$0")/../videos/"
+  exit 1
+fi
+echo "[DEBUG] Video file validated: $VIDEO_HOST_PATH"
+
+# Step 9c: Start the NVENC streamer (video file validated above)
+echo "Starting video-producer (FFmpeg NVENC streamer)..."
+docker compose -f $docker_compose_file up -d streamer
+
+# Step 9c: Wait for the streamer to publish the RTSP stream before starting HPE.
+# Probing localhost:8554 only confirms MediaMTX is listening; it does NOT mean
+# the /stream path is being published. We use ffprobe if available, otherwise
+# fall back to the MediaMTX REST API.
+wait_for_rtsp_stream() {
+  local url="rtsp://127.0.0.1:8554/stream"
+  local timeout=60
+  local waited=0
+  echo "[INFO] Waiting for RTSP stream to be published at $url ..."
+  while [ $waited -lt $timeout ]; do
+    if command -v ffprobe >/dev/null 2>&1; then
+      if ffprobe -v quiet -rtsp_transport tcp \
+           -read_intervals "%+#1" \
+           "$url" >/dev/null 2>&1; then
+        echo "[INFO] RTSP stream is live (ffprobe confirmed)."
+        return 0
+      fi
+    else
+      # Fallback: check that MediaMTX has at least one active publisher by
+      # querying its REST API (port 8888 exposes the API on mediamtx:1-ffmpeg).
+      if curl -sf "http://127.0.0.1:8888/v3/paths/list" 2>/dev/null \
+           | grep -q '"readyTime"'; then
+        echo "[INFO] RTSP stream is live (MediaMTX API confirmed)."
+        return 0
+      fi
+    fi
+    echo "[DEBUG] Stream not yet available, retrying in 2s... (${waited}s elapsed)"
+    sleep 2
+    waited=$((waited + 2))
+  done
+  echo "[ERROR] RTSP stream not confirmed after ${timeout}s; aborting experiment."
+  echo "[ERROR] Check video-producer and mediamtx logs before retrying."
+  return 1
+}
+wait_for_rtsp_stream
 
 # Step 10: Start hpe container
 hpe_start=$(date +%s.%N)
