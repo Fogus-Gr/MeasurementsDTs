@@ -1,3 +1,58 @@
+.vscode/
+models/MoveNet
+models/AlphaPose/pretrained_models/fast_res50_256x192.pth
+models/AlphaPose/detector/yolo/data/yolov3-spp.weights
+models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.bin     
+models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP16/human-pose-estimation-0005.bin
+models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
+models/OpenVINO/pretrained_models/intel/human-pose-estimation-0006/FP16/human-pose-estimation-0006.bin
+models/OpenVINO/pretrained_models/intel/human-pose-estimation-0006/FP32/human-pose-estimation-0006.bin
+models/OpenVINO/pretrained_models/intel/human-pose-estimation-0007/FP16/human-pose-estimation-0007.bin
+models/OpenVINO/pretrained_models/intel/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
+models/OpenVINO/pretrained_models/public/FP16/
+models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.bin
+out/
+iperf-test/pcap/*
+*.log
+*.csv
+
+# Compiled Cython/C++ files
+*.cpp
+*.so
+*.cu
+*.c
+*.o
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Environment files
+test-env/
+/myenv/*
+results/
+timestamps.txt
+recent-dash/results_dash_*
+recent-dash/results
+recent-dash/pids
+recent-dash/dash_proxy_traffic_analysis_*
+monitor/results_*
+Measure_rx_tx_bftrace/results_*
+/.DS_Store
+segments/
+captures/
+results_dash_*/
+videos/*
+monitor_hpe/results_*/
+ffmpeg_hpe/results_*
+models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
+models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
+rtsp-ipcam/.DS_Store
+.DS_Store
+*aider*
+uv.lock
+
+# --- New Rules Added in this Session ---
 
 # Local development artifacts
 .kiro/
@@ -5,3 +60,4 @@ kernel.errors.txt
 
 # Large model directories / submodules
 open_model_zoo/
+models/OpenVINO/pretrained_models/
