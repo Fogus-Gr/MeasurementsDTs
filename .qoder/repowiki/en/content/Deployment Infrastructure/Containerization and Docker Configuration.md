@@ -14,20 +14,22 @@
 - [HTTP-Server.Dockerfile](file://recent-dash/HTTP-Server.Dockerfile)
 - [HTTP-Proxy.Dockerfile](file://recent-dash/HTTP-Proxy.Dockerfile)
 - [entrypoint.sh](file://recent-dash/entrypoint.sh)
-- [docker-compose.yml](file://monitor_hpe/docker-compose.yaml)
+- [docker-compose.yaml](file://monitor_hpe/docker-compose.yaml)
 - [Dockerfile](file://monitor_hpe/Dockerfile)
 - [Dockerfile.hpe](file://Dockerfile.hpe)
 - [prometheus.yml](file://prometheus.yml)
 - [docker-compose.yml](file://docker-compose.yml)
+- [README.md](file://README.md)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Updated RTSP streaming architecture with new MediaMTX broker and FFmpeg streamer services
+- Updated RTSP streaming architecture with new MediaMTX broker and FFmpeg NVENC streamer services
 - Replaced legacy HTTP H.264 streaming server with RTSP-based streaming pipeline
 - Updated Docker Compose configuration to reflect new service dependencies and networking
 - Revised component analysis to reflect RTSP broker (rtsp-broker:8554) and streamer service using jrottenberg/ffmpeg:4.4-nvidia
 - Updated troubleshooting guidance to address RTSP-specific configurations
+- Enhanced documentation to reflect the migration from HTTP-based streaming to RTSP-based streaming
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -130,7 +132,7 @@ R --> Q
 - [docker-compose.yaml](file://monitor_hpe/docker-compose.yaml)
 
 ## Core Components
-- RTSP Broker (mediamtx): Provides RTSP streaming infrastructure with HLS support for debugging.
+- RTSP Broker (MediaMTX): Provides RTSP streaming infrastructure with HLS support for debugging.
 - FFmpeg Streamer: Encodes and streams video using NVENC H.264 encoding with low-latency settings.
 - HPE Application: Performs pose estimation on the RTSP stream; supports GPU acceleration and configurable device selection.
 - GPU metrics collector: Gathers GPU utilization and telemetry periodically.
@@ -450,7 +452,7 @@ The repository has migrated from HTTP H.264 streaming to RTSP streaming for impr
 - Direct HTTP stream consumption by HPE application
 
 **Current Architecture:**
-- rtsp-broker: RTSP streaming broker (bluenviron/mediamtx:latest)
+- rtsp-broker: RTSP streaming broker (bluenviron/mediamtx:1-ffmpeg)
 - streamer: Hardware-accelerated NVENC encoding (jrottenberg/ffmpeg:4.4-nvidia)
 - HPE application: RTSP stream consumption with TCP transport
 
@@ -463,3 +465,4 @@ The repository has migrated from HTTP H.264 streaming to RTSP streaming for impr
 **Section sources**
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.rtsp.yml](file://docker-compose.rtsp.yml)
+- [README.md](file://README.md)

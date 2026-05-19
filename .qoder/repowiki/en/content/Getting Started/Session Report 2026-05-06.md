@@ -19,15 +19,18 @@
 - [docker-compose.rtsp.yml](file://docker-compose.rtsp.yml)
 - [ffmpeg_hpe/review.md](file://ffmpeg_hpe/review.md)
 - [full_shell_history.txt](file://full_shell_history.txt)
+- [dev_tools/stream_video_server.py](file://dev_tools/stream_video_server.py)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Comprehensive reconstruction of timeline documenting evolution from CPU profiling to final RTSP migration
-- Updated architecture diagrams to reflect RTSP streaming infrastructure
+- Comprehensive reconstruction of timeline documenting evolution from HTTP streaming to RTSP migration
+- Updated architecture diagrams to reflect RTSP streaming infrastructure using MediaMTX and FFmpeg NVENC
+- Removed references to old HTTP streaming server's hardcoded volume mount path
 - Added detailed troubleshooting guidance for RTSP migration issues
 - Enhanced performance optimization recommendations for RTSP streaming environments
 - Updated experiment rig documentation to reflect RTSP-based streaming architecture
+- Documented the removal of the legacy rtsp-ipcam streaming server
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -43,7 +46,7 @@
 11. [Appendices](#appendices)
 
 ## Introduction
-This document summarizes the audit and fixes applied to the benchmarking platform as documented in the session report dated 2026-05-06. The platform has evolved from CPU profiling experiments to a comprehensive RTSP-based streaming infrastructure. This update documents the complete timeline of this evolution, including the migration from HTTP streaming to RTSP, comprehensive troubleshooting guidance, and detailed performance optimization recommendations for RTSP environments.
+This document summarizes the audit and fixes applied to the benchmarking platform as documented in the session report dated 2026-05-06. The platform has evolved from HTTP streaming experiments to a comprehensive RTSP-based streaming infrastructure. This update documents the complete timeline of this evolution, including the migration from HTTP streaming to RTSP, comprehensive troubleshooting guidance, and detailed performance optimization recommendations for RTSP environments.
 
 ## Project Structure
 The repository combines:
@@ -66,6 +69,7 @@ I --> E
 J["ffmpeg_hpe/*<br/>RTSP streaming + scripts"] --> K["docker-compose.yaml<br/>MediaMTX + FFmpeg NVENC"]
 J --> L["run_experiment.sh<br/>Full lifecycle orchestration"]
 M["RTSP Infrastructure<br/>MediaMTX + FFmpeg"] --> K
+N["Legacy HTTP Server<br/>Removed"] -.-> O["stream_video_server.py<br/>Development-only Flask server"]
 ```
 
 **Diagram sources**
@@ -78,14 +82,15 @@ M["RTSP Infrastructure<br/>MediaMTX + FFmpeg"] --> K
 - [utils/evaluator.py:11-47](file://utils/evaluator.py#L11-L47)
 - [utils/visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
 - [optimizations/optimized_main.py:19-26](file://optimizations/optimized_main.py#L19-L26)
-- [ffmpeg_hpe/docker-compose.yaml:1-190](file://ffmpeg_hpe/docker-compose.yaml#L1-L190)
-- [ffmpeg_hpe/run_experiment.sh:1-283](file://ffmpeg_hpe/run_experiment.sh#L1-L283)
+- [ffmpeg_hpe/docker-compose.yaml:1-194](file://ffmpeg_hpe/docker-compose.yaml#L1-L194)
+- [ffmpeg_hpe/run_experiment.sh:1-348](file://ffmpeg_hpe/run_experiment.sh#L1-L348)
+- [dev_tools/stream_video_server.py:1-228](file://dev_tools/stream_video_server.py#L1-L228)
 
 **Section sources**
 - [README.md:20-44](file://README.md#L20-L44)
 - [README.md:209-327](file://README.md#L209-L327)
-- [ffmpeg_hpe/docker-compose.yaml:1-190](file://ffmpeg_hpe/docker-compose.yaml#L1-L190)
-- [ffmpeg_hpe/run_experiment.sh:1-283](file://ffmpeg_hpe/run_experiment.sh#L1-L283)
+- [ffmpeg_hpe/docker-compose.yaml:1-194](file://ffmpeg_hpe/docker-compose.yaml#L1-L194)
+- [ffmpeg_hpe/run_experiment.sh:1-348](file://ffmpeg_hpe/run_experiment.sh#L1-L348)
 
 ## Core Components
 - HPE backends:
@@ -131,12 +136,12 @@ H1 --> B1
 ```
 
 **Diagram sources**
-- [ffmpeg_hpe/docker-compose.yaml:2-190](file://ffmpeg_hpe/docker-compose.yaml#L2-L190)
+- [ffmpeg_hpe/docker-compose.yaml:2-194](file://ffmpeg_hpe/docker-compose.yaml#L2-L194)
 - [README.md:263-276](file://README.md#L263-L276)
 
 **Section sources**
 - [README.md:263-276](file://README.md#L263-L276)
-- [ffmpeg_hpe/docker-compose.yaml:2-190](file://ffmpeg_hpe/docker-compose.yaml#L2-L190)
+- [ffmpeg_hpe/docker-compose.yaml:2-194](file://ffmpeg_hpe/docker-compose.yaml#L2-L194)
 
 ## Detailed Component Analysis
 
@@ -182,13 +187,13 @@ Q --> End(["Sync run_experiment_bcc.sh"])
 
 **Diagram sources**
 - [docs/session-report-2026-05-06.md:91-181](file://docs/session-report-2026-05-06.md#L91-L181)
-- [ffmpeg_hpe/run_experiment.sh:125-283](file://ffmpeg_hpe/run_experiment.sh#L125-L283)
+- [ffmpeg_hpe/run_experiment.sh:125-348](file://ffmpeg_hpe/run_experiment.sh#L125-L348)
 - [ffmpeg_hpe/docker-compose.yaml:14-18](file://ffmpeg_hpe/docker-compose.yaml#L14-L18)
 
 **Section sources**
 - [docs/session-report-2026-05-06.md:47-86](file://docs/session-report-2026-05-06.md#L47-L86)
 - [docs/session-report-2026-05-06.md:89-181](file://docs/session-report-2026-05-06.md#L89-L181)
-- [ffmpeg_hpe/run_experiment.sh:125-283](file://ffmpeg_hpe/run_experiment.sh#L125-L283)
+- [ffmpeg_hpe/run_experiment.sh:125-348](file://ffmpeg_hpe/run_experiment.sh#L125-L348)
 - [ffmpeg_hpe/docker-compose.yaml:14-18](file://ffmpeg_hpe/docker-compose.yaml#L14-L18)
 
 ### TX vs RX Measurement Architecture
@@ -325,12 +330,12 @@ Orchestrator-->>Orchestrator : "collect CSVs, logs, traces"
 ```
 
 **Diagram sources**
-- [ffmpeg_hpe/run_experiment.sh:77-283](file://ffmpeg_hpe/run_experiment.sh#L77-L283)
-- [ffmpeg_hpe/docker-compose.yaml:2-190](file://ffmpeg_hpe/docker-compose.yaml#L2-L190)
+- [ffmpeg_hpe/run_experiment.sh:77-348](file://ffmpeg_hpe/run_experiment.sh#L77-L348)
+- [ffmpeg_hpe/docker-compose.yaml:2-194](file://ffmpeg_hpe/docker-compose.yaml#L2-L194)
 
 **Section sources**
-- [ffmpeg_hpe/run_experiment.sh:77-283](file://ffmpeg_hpe/run_experiment.sh#L77-L283)
-- [ffmpeg_hpe/docker-compose.yaml:2-190](file://ffmpeg_hpe/docker-compose.yaml#L2-L190)
+- [ffmpeg_hpe/run_experiment.sh:77-348](file://ffmpeg_hpe/run_experiment.sh#L77-L348)
+- [ffmpeg_hpe/docker-compose.yaml:2-194](file://ffmpeg_hpe/docker-compose.yaml#L2-L194)
 
 ## Timeline of Evolution
 
@@ -375,6 +380,7 @@ The earliest artifacts in the repository show extensive CPU profiling work on AM
 - Server reboot and Atuin reactivation
 - Complete migration from HTTP to RTSP streaming infrastructure
 - Final optimization round with comprehensive bug fixes
+- **Removed legacy rtsp-ipcam streaming server** - replaced with MediaMTX + FFmpeg NVENC
 
 **Section sources**
 - [docs/session-report-2026-05-06.md:47-135](file://docs/session-report-2026-05-06.md#L47-L135)
@@ -402,6 +408,7 @@ OPT --> MV
 EXP["ffmpeg_hpe/*"] --> DC["docker-compose.yaml"]
 EXP --> RE["run_experiment.sh"]
 RTSP["RTSP Infrastructure"] --> DC
+LEGACY["Legacy HTTP Server"] -.-> SV["stream_video_server.py"]
 ```
 
 **Diagram sources**
@@ -412,8 +419,9 @@ RTSP["RTSP Infrastructure"] --> DC
 - [movenet_hpe.py:12-27](file://movenet_hpe.py#L12-L27)
 - [alphapose_hpe.py:33-56](file://alphapose_hpe.py#L33-L56)
 - [optimizations/optimized_main.py:19-26](file://optimizations/optimized_main.py#L19-L26)
-- [ffmpeg_hpe/docker-compose.yaml:1-190](file://ffmpeg_hpe/docker-compose.yaml#L1-L190)
-- [ffmpeg_hpe/run_experiment.sh:1-283](file://ffmpeg_hpe/run_experiment.sh#L1-L283)
+- [ffmpeg_hpe/docker-compose.yaml:1-194](file://ffmpeg_hpe/docker-compose.yaml#L1-L194)
+- [ffmpeg_hpe/run_experiment.sh:1-348](file://ffmpeg_hpe/run_experiment.sh#L1-L348)
+- [dev_tools/stream_video_server.py:1-228](file://dev_tools/stream_video_server.py#L1-L228)
 
 **Section sources**
 - [main.py:10-14](file://main.py#L10-L14)
@@ -421,8 +429,8 @@ RTSP["RTSP Infrastructure"] --> DC
 - [movenet_hpe.py:12-27](file://movenet_hpe.py#L12-L27)
 - [alphapose_hpe.py:33-56](file://alphapose_hpe.py#L33-L56)
 - [optimizations/optimized_main.py:19-26](file://optimizations/optimized_main.py#L19-L26)
-- [ffmpeg_hpe/docker-compose.yaml:1-190](file://ffmpeg_hpe/docker-compose.yaml#L1-L190)
-- [ffmpeg_hpe/run_experiment.sh:1-283](file://ffmpeg_hpe/run_experiment.sh#L1-L283)
+- [ffmpeg_hpe/docker-compose.yaml:1-194](file://ffmpeg_hpe/docker-compose.yaml#L1-L194)
+- [ffmpeg_hpe/run_experiment.sh:1-348](file://ffmpeg_hpe/run_experiment.sh#L1-L348)
 
 ## Performance Considerations
 - CPU tuning for 4-vCPU EPYC: NUMA-aware thread allocation, streams, and performance hints; validated via benchmarking script.
@@ -438,6 +446,7 @@ RTSP["RTSP Infrastructure"] --> DC
 - **FFmpeg NVENC encoding failures**: Verify NVIDIA driver compatibility and CUDA runtime configuration.
 - **TCP transport issues**: Ensure both MediaMTX and HPE consumers use TCP transport (`OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp`).
 - **Stream quality problems**: Adjust FFmpeg NVENC preset and tune parameters for desired latency vs quality balance.
+- **Legacy HTTP server issues**: Development-only Flask server removed - use RTSP infrastructure instead.
 
 ### Network Monitoring Troubleshooting
 - **BCC RX filter disabled**: Re-enable IP/port filter to avoid counting all TCP traffic instead of video stream only.
@@ -452,13 +461,21 @@ RTSP["RTSP Infrastructure"] --> DC
 - **Memory management**: Set `PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32` to prevent fragmentation.
 - **Network optimization**: Use RTSP over TCP for reliable streaming; configure MediaMTX for optimal buffer management.
 
+### Legacy HTTP Server Migration
+- **Development-only Flask server**: `dev_tools/stream_video_server.py` is for local testing only and should not be used in production.
+- **Hardcoded volume mount path**: Legacy HTTP server had hardcoded paths that were removed during RTSP migration.
+- **Migration benefits**: RTSP provides better scalability, reliability, and standardized streaming protocols compared to HTTP MJPEG.
+
 **Section sources**
 - [docs/session-report-2026-05-06.md:101-181](file://docs/session-report-2026-05-06.md#L101-L181)
-- [ffmpeg_hpe/run_experiment.sh:125-283](file://ffmpeg_hpe/run_experiment.sh#L125-L283)
+- [ffmpeg_hpe/run_experiment.sh:125-348](file://ffmpeg_hpe/run_experiment.sh#L125-L348)
 - [ffmpeg_hpe/docker-compose.yaml:14-18](file://ffmpeg_hpe/docker-compose.yaml#L14-L18)
+- [dev_tools/stream_video_server.py:1-228](file://dev_tools/stream_video_server.py#L1-L228)
 
 ## Conclusion
-The benchmarking platform has successfully evolved from CPU profiling experiments to a comprehensive RTSP-based streaming infrastructure. The comprehensive timeline documented in this report shows the complete journey from early AMD EPYC profiling through complex NVIDIA driver upgrades to the final RTSP migration. The platform now provides accurate RX/TX measurements, improved orchestration reliability, and standardized monitoring outputs. The RTSP infrastructure using MediaMTX and FFmpeg NVENC provides scalable and reliable streaming for performance benchmarking, while CPU optimization modules continue to provide practical tuning for 4-vCPU EPYC environments.
+The benchmarking platform has successfully evolved from HTTP streaming experiments to a comprehensive RTSP-based streaming infrastructure. The comprehensive timeline documented in this report shows the complete journey from early AMD EPYC profiling through complex NVIDIA driver upgrades to the final RTSP migration. The platform now provides accurate RX/TX measurements, improved orchestration reliability, and standardized monitoring outputs. The RTSP infrastructure using MediaMTX and FFmpeg NVENC provides scalable and reliable streaming for performance benchmarking, while CPU optimization modules continue to provide practical tuning for 4-vCPU EPYC environments.
+
+The migration from HTTP to RTSP represents a significant architectural improvement, eliminating the need for custom HTTP streaming servers and providing industry-standard RTSP streaming with better performance characteristics. The legacy HTTP streaming server (`dev_tools/stream_video_server.py`) remains available only for development and testing purposes, while the production RTSP infrastructure provides robust, scalable streaming for performance benchmarking.
 
 ## Appendices
 
@@ -477,9 +494,15 @@ The benchmarking platform has successfully evolved from CPU profiling experiment
 - **Multi-stream Support**: Enable multiple concurrent RTSP streams for comprehensive testing scenarios.
 - **Network Simulation**: Add capability to simulate network conditions (latency, packet loss, jitter).
 
+### Legacy HTTP Server Notes
+- **Development-only Flask server**: `dev_tools/stream_video_server.py` provides HTTP MJPEG streaming for local testing but should not be used in production.
+- **Hardcoded volume mount path**: Legacy HTTP server had hardcoded paths that were removed during RTSP migration.
+- **Migration rationale**: RTSP provides better scalability, reliability, and standardized streaming protocols compared to HTTP MJPEG.
+
 **Section sources**
 - [docs/session-report-2026-05-06.md:77-86](file://docs/session-report-2026-05-06.md#L77-L86)
 - [openvino_base_hpe.py:262-276](file://openvino_base_hpe.py#L262-L276)
 - [utils/evaluator.py:77-84](file://utils/evaluator.py#L77-L84)
 - [utils/visualizer.py:26-35](file://utils/visualizer.py#L26-L35)
 - [ffmpeg_hpe/review.md:28-72](file://ffmpeg_hpe/review.md#L28-L72)
+- [dev_tools/stream_video_server.py:1-228](file://dev_tools/stream_video_server.py#L1-L228)
