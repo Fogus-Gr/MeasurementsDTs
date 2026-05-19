@@ -85,6 +85,11 @@ def extract_x_metadata(header_region):
 
     return frame_number
 
+def _is_stream_url(url: str) -> bool:
+    """Return True for any URL-based video stream (HTTP or RTSP)."""
+    return url.startswith("http") or url.startswith("rtsp://")
+
+
 class BaseHPE(ABC):
     input_type = None
     output_dir = ""
@@ -144,32 +149,9 @@ class BaseHPE(ABC):
             self.img_dir = input_src
             self.video_fps = 25
         elif input_src:
-            if input_src.startswith("http"): # Check for HTTP first
-                self.input_type = "video" # Treat HTTP as video stream
-                if nvc is None:
-                    print("[ERROR] PyNvCodec not available. Falling back to OpenCV for video decoding.")
-                    if hasattr(self, '_init_opencv_video_capture'):
-                        self._init_opencv_video_capture(input_src)
-                    else:
-                        raise NotImplementedError(f"Video input ({input_src}) is not supported by this HPE implementation.")
-                else:
-                    if hasattr(self, '_init_pynvcodec_video_capture'):
-                        self._init_pynvcodec_video_capture(input_src)
-                    else:
-                        raise NotImplementedError(f"Video input ({input_src}) is not supported by this HPE implementation.")
-            elif input_src.endswith('.mp4') or input_src.endswith('.avi') or input_src.endswith('.mov'): # Check for video files
-                self.input_type = "video"
-                if nvc is None:
-                    print("[ERROR] PyNvCodec not available. Falling back to OpenCV for video decoding.")
-                    if hasattr(self, '_init_opencv_video_capture'):
-                        self._init_opencv_video_capture(input_src)
-                    else:
-                        raise NotImplementedError(f"Video input ({input_src}) is not supported by this HPE implementation.")
-                else:
-                    if hasattr(self, '_init_pynvcodec_video_capture'):
-                        self._init_pynvcodec_video_capture(input_src)
-                    else:
-                        raise NotImplementedError(f"Video input ({input_src}) is not supported by this HPE implementation.")
+            if _is_stream_url(input_src) or input_src.endswith(('.mp4', '.avi', '.mov')):
+                self.input_type = "video"  # URL-based stream or local video file
+                self._init_video_capture(input_src)
             elif input_src.endswith('.jpg') or input_src.endswith('.png'):
                 self.input_type = "image"
                 self.img = cv2.imread(input_src)
@@ -211,13 +193,35 @@ class BaseHPE(ABC):
     def load_model(self):
         pass
     
+    def _init_video_capture(self, input_src):
+        """Pick the best available video capture path for video files / URL streams.
+
+        PyNvCodec is only used when (a) the module is importable AND (b) the
+        concrete subclass implements `_init_pynvcodec_video_capture`. Otherwise
+        we fall back to OpenCV's FFmpeg backend, which handles both HTTP and
+        RTSP (`OPENCV_FFMPEG_CAPTURE_OPTIONS` is honoured for RTSP transport).
+        """
+        if nvc is not None and hasattr(self, '_init_pynvcodec_video_capture'):
+            self._init_pynvcodec_video_capture(input_src)
+            return
+        if nvc is None:
+            print("[INFO] PyNvCodec not available — using OpenCV/FFmpeg for video decoding.")
+        else:
+            print("[INFO] PyNvCodec available but not implemented by this backend — using OpenCV/FFmpeg.")
+        if hasattr(self, '_init_opencv_video_capture'):
+            self._init_opencv_video_capture(input_src)
+        else:
+            raise NotImplementedError(
+                f"Video input ({input_src}) is not supported by this HPE implementation."
+            )
+
     def _init_opencv_video_capture(self, input_src):
         """Initialize OpenCV video capture for video files and streams"""
         print(f"Initializing OpenCV video capture for: {input_src}")
         
-        # Use FFmpeg backend for HTTP streams for better reliability
-        if isinstance(input_src, str) and input_src.startswith("http"):
-            print(f"Using FFmpeg backend for HTTP stream: {input_src}")
+        # Use FFmpeg backend for HTTP and RTSP streams for better reliability and low latency
+        if isinstance(input_src, str) and _is_stream_url(input_src):
+            print(f"Using FFmpeg backend for stream: {input_src}")
             self.cap = cv2.VideoCapture(input_src, cv2.CAP_FFMPEG)
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency for real-time streams
         else:
@@ -238,6 +242,8 @@ class BaseHPE(ABC):
         return True
     
     def main_loop(self):
+        from utils.evaluator import reset_results
+        reset_results()
         # Load model if not already loaded
         if not hasattr(self, 'model') or self.model is None:
             print("Loading model...")
@@ -315,7 +321,9 @@ class BaseHPE(ABC):
             save_Tx_csv_data(os.path.join(self.output_dir, f"{self.start_time_of_experiment}_{self.model_type}_{self.input_file}_Tx.csv"))
 
     def main_loop_with_timeout(self, timeout_seconds=0, max_frames=0):
-        """Enhanced main loop with timeout and frame count detection for HTTP streams"""
+        """Enhanced main loop with timeout and frame count detection for HTTP/RTSP streams"""
+        from utils.evaluator import reset_results
+        reset_results()
         # Load model if not already loaded
         if not hasattr(self, 'model') or self.model is None:
             print("Loading model...")
@@ -386,8 +394,21 @@ class BaseHPE(ABC):
                         print(f"[ERROR] PyNvCodec decoding error: {e}")
                         break # Exit loop on error
 
-            else:   # video/webcam/stream fallback   
+            else:
+                # Fallback path: MJPEG-over-HTTP socket reader.
+                # RTSP streams must NEVER reach this branch — they should be handled
+                # by either PyNvCodec (_init_pynvcodec_video_capture) or OpenCV
+                # (_init_opencv_video_capture with CAP_FFMPEG), both of which set
+                # self.is_pynvcodec_enabled or self.cap before reaching main_loop_with_timeout.
                 url = self.input_src
+                if url.startswith("rtsp://"):
+                    raise RuntimeError(
+                        f"[base_hpe] RTSP stream '{url}' reached the HTTP/MJPEG fallback loop. "
+                        "This means _init_pynvcodec_video_capture or _init_opencv_video_capture "
+                        "did not initialise correctly. Check PyNvCodec availability and OpenCV "
+                        "FFmpeg backend support."
+                    )
+
                 r = requests.get(url, stream=True, timeout=30)
                 buffer = b""
 
@@ -402,7 +423,6 @@ class BaseHPE(ABC):
                         new_data = get_available_data(r)
                         if new_data:
                             buffer += new_data
-                            #print(f"Read {len(new_data)} bytes, total buffer: {len(buffer)} bytes")
                         
                         # Find ALL complete frames in the buffer
                         frames = []
@@ -442,10 +462,9 @@ class BaseHPE(ABC):
                                 frame_idx += 1
                                 consecutive_failures = 0
                                 
-                                if frame_idx % 10 == 0:  # More frequent updates
+                                if frame_idx % 10 == 0:
                                     elapsed = time.time() - start_time
                                     fps = frame_idx / elapsed if elapsed > 0 else 0
-                                    #print(f"Processed {frame_idx} frames in {elapsed:.1f}s (avg {fps:.1f} FPS)")
                             else:
                                 consecutive_failures += 1
                                 print(f"Frame decode failed ({consecutive_failures}/{max_consecutive_failures})")
@@ -525,7 +544,6 @@ class BaseHPE(ABC):
                     frame_np = self.draw_poses(frame_np, poses, 0.1)
         else:
             # For models that handle pose processing internally
-            # The predictions are processed in postprocess method
             pass
 
         # --- Timing Calculation and Console Output ---
@@ -563,30 +581,18 @@ class BaseHPE(ABC):
             except Exception as e:
                 print(f"[WARNING] Could not draw FPS on frame: {e}")
 
-        # --- Postprocessing and Saving ---
-        # The original postprocess call might need to be adjusted if it uses the 'predictions' directly
-        # or if it needs the 'bodies' derived from poses.
-        # For now, I'll assume 'bodies' are derived from 'poses' and 'scores'
-        # If 'predictions' is not directly used by postprocess, this might need adjustment.
-        # Let's assume postprocess uses the output of run_model, which is 'predictions'
-        bodies = self.postprocess(predictions) # Keep original postprocess call
+        bodies = self.postprocess(predictions)
 
         if self.json:
             append_COCO_format_json(bodies, self.score_thresh, frame_number)
         if self.csv:
-            # The original code used 'timestamp' here, which was defined at the start of the function.
-            # Now, we have start_time and stop_time. Let's use the end of inference for timestamp.
             append_COCO_format_csv(bodies, self.score_thresh, frame_number, stop_time, self.measurement_interval_ms)
 
 
         if self.save_image or self.save_video:
-            # Ensure that LINES_BODY is defined in the child class
             if not hasattr(self, 'LINES_BODY'):
                 print("[WARNING] LINES_BODY is not defined in the child class. Cannot render.")
             else:
-                # The render function might need to be adjusted if it expects poses directly
-                # or if it uses the 'bodies' variable.
-                # For now, I'll keep the original render call, assuming it works with 'bodies'.
                 render(frame_np, bodies, self.LINES_BODY, self.score_thresh, self.show_scores, self.show_bounding_box)
 
             if self.save_video:
@@ -598,9 +604,6 @@ class BaseHPE(ABC):
                 filename = os.path.join(self.output_dir, f"frame_{frame_number:04d}.jpg")
                 cv2.imwrite(filename, frame_np)
     
-    
-    
-    
     @abstractmethod
     def run_model(self, padded):
         pass
@@ -609,10 +612,6 @@ class BaseHPE(ABC):
     def postprocess(self, predictions):
         pass
 
-    # Define the padding
-    # Note we don't center the source image. The padding is applied
-    # on the bottom or right side. That simplifies a bit the calculation
-    # when depadding
     def set_padding(self):
         if self.img_w / self.img_h > self.pd_w / self.pd_h:
             pad_h = int(self.img_w * self.pd_h / self.pd_w - self.img_h)
@@ -621,7 +620,6 @@ class BaseHPE(ABC):
             pad_w = int(self.img_h * self.pd_w / self.pd_h - self.img_w)
             self.padding = Padding(pad_w, 0, self.img_w + pad_w, self.img_h)
 
-    # Pad and resize the image to prepare for the model input.
     def pad_and_resize(self, frame):
         padded = cv2.copyMakeBorder(frame, 0, self.padding.h, 0, self.padding.w, cv2.BORDER_CONSTANT)
         padded = cv2.resize(padded, (self.pd_w, self.pd_h), interpolation=cv2.INTER_AREA)

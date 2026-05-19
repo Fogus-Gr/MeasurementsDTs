@@ -17,21 +17,29 @@
 - [docker-compose.yml](file://docker-compose.yml)
 - [monitor_hpe/run_experiment.sh](file://monitor_hpe/run_experiment.sh)
 - [ffmpeg_hpe/run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
+- [ffmpeg_hpe/run_experiment_bcc.sh](file://ffmpeg_hpe/run_experiment_bcc.sh)
 - [recent-dash/run_experiment.sh](file://recent-dash/run_experiment.sh)
 - [monitor_hpe/docker-compose.yaml](file://monitor_hpe/docker-compose.yaml)
 - [ffmpeg_hpe/docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [rtsp-ipcam/Dockerfile](file://rtsp-ipcam/Dockerfile)
 - [optimizations/optimized_main.py](file://optimizations/optimized_main.py)
 - [dev_tools/README.md](file://dev_tools/README.md)
+- [docs/experiment-scripts.md](file://docs/experiment-scripts.md)
+- [docs/docker-services.md](file://docs/docker-services.md)
+- [ffmpeg_hpe/bpftrace-tracer/Dockerfile.bcc](file://ffmpeg_hpe/bpftrace-tracer/Dockerfile.bcc)
+- [ffmpeg_hpe/bpftrace-tracer/entrypoint.sh](file://ffmpeg_hpe/bpftrace-tracer/entrypoint.sh)
+- [ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py)
+- [Measure_gpu_dcgm/Dockerfile.gpu_metrics](file://Measure_gpu_dcgm/Dockerfile.gpu_metrics)
+- [Measure_gpu_dcgm/run_nvidia_dcgm.sh](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Enhanced Docker and experiment rig infrastructure documentation
-- Added detailed branch-specific guidance for performance measurement workflows
-- Expanded Docker image usage and container orchestration procedures
-- Updated experiment rig conventions and standardized execution patterns
-- Integrated new performance monitoring and measurement tooling
+- Enhanced experiment rig documentation with corrected run_experiment_bcc.sh synchronization
+- Updated GPU metrics collection improvements with DCGM integration
+- Added comprehensive documentation of Docker compose configuration updates
+- Expanded BCC tracer documentation with kernel-level network tracing capabilities
+- Improved monitoring system documentation with enhanced port detection and synchronization
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -57,12 +65,12 @@
 21. [Conclusion](#conclusion)
 
 ## Introduction
-This document provides comprehensive contributing guidelines for the Human Pose Estimation (HPE) framework. It covers the development workflow, code contribution processes, community standards, coding standards, testing requirements, documentation expectations, pull request procedures, quality assurance practices, and guidance for adding new HPE methods or extending existing functionality. The framework now includes advanced Docker-based experiment rigs for performance measurement and containerized monitoring infrastructure.
+This document provides comprehensive contributing guidelines for the Human Pose Estimation (HPE) framework. It covers the development workflow, code contribution processes, community standards, coding standards, testing requirements, documentation expectations, pull request procedures, quality assurance practices, and guidance for adding new HPE methods or extending existing functionality. The framework now includes advanced Docker-based experiment rigs for performance measurement and containerized monitoring infrastructure with enhanced BCC (BPF Compiler Collection) kernel-level network tracing capabilities.
 
-**Updated** Enhanced from generic boilerplate to branch-specific guidance with detailed conventions for new experiment rigs and Docker image usage.
+**Updated** Enhanced from generic boilerplate to branch-specific guidance with detailed conventions for new experiment rigs, Docker image usage, and comprehensive BCC tracer synchronization improvements.
 
 ## Project Structure
-The HPE framework is organized around a shared base abstraction and multiple concrete HPE implementations, augmented with comprehensive Docker infrastructure for performance measurement. The main entry point orchestrates method selection and execution, while specialized HPE classes encapsulate model loading, preprocessing, inference, and postprocessing logic. Development tools and scripts support environment setup, smoke testing, and continuous integration readiness, with dedicated experiment rigs for performance benchmarking.
+The HPE framework is organized around a shared base abstraction and multiple concrete HPE implementations, augmented with comprehensive Docker infrastructure for performance measurement. The main entry point orchestrates method selection and execution, while specialized HPE classes encapsulate model loading, preprocessing, inference, and postprocessing logic. Development tools and scripts support environment setup, smoke testing, and continuous integration readiness, with dedicated experiment rigs for performance benchmarking including enhanced BCC network tracing and GPU metrics collection.
 
 ```mermaid
 graph TB
@@ -77,6 +85,8 @@ A --> I["requirements.txt<br/>Dependencies"]
 A --> J["Dockerfile_base<br/>Active HPE container image"]
 A --> K["docker-compose.yml<br/>GPU observability stack"]
 A --> L["Experiment Rigs<br/>monitor_hpe/, ffmpeg_hpe/, recent-dash/"]
+A --> M["BCC Tracer<br/>kernel-level network tracing"]
+A --> N["GPU Metrics<br/>DCGM integration"]
 ```
 
 **Diagram sources**
@@ -102,7 +112,8 @@ A --> L["Experiment Rigs<br/>monitor_hpe/, ffmpeg_hpe/, recent-dash/"]
 - OpenVINO-based HPE: Implements OpenVINO model loading, configuration, preprocessing, inference, and postprocessing for multiple architectures (OpenPose, HigherHRNet, EfficientHRNet variants). Includes CPU performance tuning and async processing capabilities.
 - AlphaPose HPE: Integrates AlphaPose models with configurable detector and pose estimation pipelines, GPU/CPU device selection, and multiprocessing support.
 - MoveNet HPE: Uses OpenVINO runtime to load and run MoveNet models, with CPU-only support and standardized postprocessing.
-- **Updated** Experiment Rigs: Three specialized Docker-based experiment rigs (monitor_hpe, ffmpeg_hpe, recent-dash) for comprehensive performance measurement and monitoring.
+- **Updated** Experiment Rigs: Three specialized Docker-based experiment rigs (monitor_hpe, ffmpeg_hpe, recent-dash) for comprehensive performance measurement with enhanced BCC network tracing and GPU metrics collection.
+- **Updated** BCC Tracer: Kernel-level network traffic monitoring using BPF Compiler Collection for precise RX/TX byte counting and port detection synchronization.
 
 **Section sources**
 - [base_hpe.py:36-546](file://base_hpe.py#L36-L546)
@@ -112,12 +123,13 @@ A --> L["Experiment Rigs<br/>monitor_hpe/, ffmpeg_hpe/, recent-dash/"]
 - [AGENTS.md:74-95](file://AGENTS.md#L74-L95)
 
 ## Architecture Overview
-The framework follows a layered architecture with enhanced Docker infrastructure for performance measurement:
+The framework follows a layered architecture with enhanced Docker infrastructure for performance measurement and kernel-level network tracing:
 - Entry point: Parses CLI arguments and selects the appropriate HPE implementation.
 - Abstraction layer: BaseHPE defines common behavior for input handling, timing, rendering, and output.
 - Implementation layer: Concrete HPE classes implement model-specific loading, preprocessing, inference, and postprocessing.
 - Utility layer: Shared visualization, evaluation, and video handling utilities.
-- **Updated** Container layer: Docker-based experiment rigs with standardized orchestration and monitoring.
+- **Updated** Container layer: Docker-based experiment rigs with standardized orchestration, monitoring, and BCC kernel-level network tracing.
+- **Updated** Monitoring layer: Enhanced GPU metrics collection via DCGM and comprehensive performance monitoring.
 
 ```mermaid
 classDiagram
@@ -159,9 +171,22 @@ class MoveNetHPE {
 }
 class ExperimentRig {
 +run_experiment.sh
++run_experiment_bcc.sh
 +docke-compose.yaml
 +standardized_orchestration()
 +performance_monitoring()
++BCC_network_tracing()
+}
+class BCCTracer {
++bcc_rx_bytes.py
++entrypoint.sh
++kernel_level_monitoring()
++port_detection_sync()
+}
+class GPUMetrics {
++nvidia-smi_polling()
++dcgm_integration()
++performance_telemetry()
 }
 BaseHPE <|-- OpenVINOBaseHPE
 OpenVINOBaseHPE <|-- AsyncOpenVINOBaseHPE
@@ -170,6 +195,8 @@ BaseHPE <|-- MoveNetHPE
 ExperimentRig <|-- MonitorHPE
 ExperimentRig <|-- FFMPEGHPE
 ExperimentRig <|-- RecentDash
+BCCTracer <|-- FFMPEGHPE
+GPUMetrics <|-- FFMPEGHPE
 ```
 
 **Diagram sources**
@@ -179,13 +206,17 @@ ExperimentRig <|-- RecentDash
 - [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
 - [monitor_hpe/run_experiment.sh:1-138](file://monitor_hpe/run_experiment.sh#L1-L138)
 - [ffmpeg_hpe/run_experiment.sh:1-251](file://ffmpeg_hpe/run_experiment.sh#L1-L251)
+- [ffmpeg_hpe/run_experiment_bcc.sh:1-316](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L316)
 - [recent-dash/run_experiment.sh:1-286](file://recent-dash/run_experiment.sh#L1-L286)
+- [ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py:1-120](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py#L1-L120)
+- [Measure_gpu_dcgm/run_nvidia_dcgm.sh:1-29](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh#L1-L29)
 
 ## Development Workflow
 - Environment setup: Use the provided installer script to recreate the documented environment, ensuring Python 3.8.10, PyTorch 2.4.1, and required dependencies are installed.
 - Local testing: Run smoke tests to validate basic functionality across methods and devices.
 - Experimentation: Use the development utilities to stream video feeds and test end-to-end pipelines.
-- **Updated** Docker-based testing: Leverage experiment rigs for comprehensive performance measurement and monitoring.
+- **Updated** Docker-based testing: Leverage experiment rigs for comprehensive performance measurement and monitoring with enhanced BCC network tracing.
+- **Updated** BCC synchronization: Test kernel-level network tracing with proper port detection and synchronization mechanisms.
 
 ```mermaid
 flowchart TD
@@ -194,7 +225,8 @@ Setup --> Test["Run smoke tests<br/>using smoke_test.sh"]
 Test --> Dev["Develop changes<br/>in BaseHPE or concrete HPE classes"]
 Dev --> Verify["Verify with CLI<br/>and unit tests"]
 Verify --> Docker["Build and test with Docker<br/>using experiment rigs"]
-Docker --> PR["Open Pull Request<br/>with template"]
+Docker --> BCC["Test BCC tracer synchronization<br/>and port detection"]
+BCC --> PR["Open Pull Request<br/>with template"]
 PR --> Review["Code Review and QA"]
 Review --> Merge(["Merge"])
 ```
@@ -215,7 +247,7 @@ Review --> Merge(["Merge"])
 - Fork and branch: Create a feature branch from the latest main branch.
 - Implement changes: Follow coding standards and ensure backward compatibility where applicable.
 - Test locally: Run smoke tests and validate with various inputs (image, directory, video, stream, webcam).
-- **Updated** Docker validation: Test changes within the experiment rig infrastructure.
+- **Updated** Docker validation: Test changes within the experiment rig infrastructure with enhanced BCC tracer support.
 - Commit messages: Use clear, descriptive messages explaining the change and its motivation.
 - Submit PR: Fill out the pull request template with summary, changes, test steps, and evidence.
 
@@ -231,7 +263,8 @@ Review --> Merge(["Merge"])
 - Imports: Group standard library, third-party, and local imports; avoid wildcard imports.
 - Error handling: Handle exceptions gracefully, provide meaningful error messages, and avoid silent failures.
 - Performance: Minimize redundant computations; leverage GPU acceleration where available; avoid unnecessary conversions.
-- **Updated** Docker compatibility: Ensure code changes are compatible with containerized execution environments.
+- **Updated** Docker compatibility: Ensure code changes are compatible with containerized execution environments and BCC kernel-level tracing.
+- **Updated** BCC integration: Support kernel-level network tracing with proper synchronization and port detection mechanisms.
 
 [No sources needed since this section provides general guidance]
 
@@ -241,7 +274,8 @@ Review --> Merge(["Merge"])
 - Integration tests: Test full pipelines for image, directory, video, HTTP stream, and webcam inputs.
 - Performance tests: Measure inference time, FPS, and throughput; document any regressions.
 - Environment verification: Confirm compatibility with documented dependencies and versions.
-- **Updated** Docker testing: Validate containerized execution and experiment rig functionality.
+- **Updated** Docker testing: Validate containerized execution and experiment rig functionality with BCC tracer support.
+- **Updated** BCC validation: Test kernel-level network tracing synchronization, port detection, and data collection accuracy.
 
 **Section sources**
 - [dev_tools/smoke_test.sh:1-42](file://dev_tools/smoke_test.sh#L1-L42)
@@ -253,7 +287,8 @@ Review --> Merge(["Merge"])
 - README updates: Update installation, usage, and environment sections when dependencies or workflows change.
 - Examples: Provide runnable examples demonstrating new features or method additions.
 - Diagrams: Include architecture and flow diagrams for significant changes to aid understanding.
-- **Updated** Docker documentation: Document container configurations, experiment rig usage, and performance measurement procedures.
+- **Updated** Docker documentation: Document container configurations, experiment rig usage, performance measurement procedures, and BCC tracer integration.
+- **Updated** BCC documentation: Provide detailed guidance on kernel-level network tracing setup, port detection synchronization, and troubleshooting.
 
 **Section sources**
 - [README.md:1-125](file://README.md#L1-L125)
@@ -264,7 +299,7 @@ Review --> Merge(["Merge"])
 - Self-review: Ensure code adheres to standards, is well-tested, and maintains backward compatibility.
 - CI checks: Address any failing checks or linting issues.
 - Review: Engage constructively during code review; address feedback promptly.
-- **Updated** Docker validation: Include experiment rig testing results and performance measurements.
+- **Updated** Docker validation: Include experiment rig testing results, BCC tracer functionality validation, and performance measurements.
 
 **Section sources**
 - [.github/pull_request_template.md:1-30](file://.github/pull_request_template.md#L1-L30)
@@ -273,7 +308,7 @@ Review --> Merge(["Merge"])
 - Scope: Reviewer focuses on correctness, performance, maintainability, and adherence to standards.
 - Feedback: Provide actionable, respectful feedback; request changes where necessary.
 - Approval: Changes require approval before merging; critical changes may require multiple reviewers.
-- **Updated** Infrastructure review: Reviewers should validate Docker configurations and experiment rig functionality.
+- **Updated** Infrastructure review: Reviewers should validate Docker configurations, BCC tracer functionality, experiment rig synchronization, and GPU metrics collection.
 
 [No sources needed since this section provides general guidance]
 
@@ -282,7 +317,8 @@ Review --> Merge(["Merge"])
 - Profiling: Profile inference loops to identify bottlenecks; optimize hot paths.
 - Compatibility: Verify GPU/CPU behavior and ensure graceful fallbacks when hardware accelerators are unavailable.
 - Metrics: Track and report performance metrics (FPS, latency, throughput) alongside functional correctness.
-- **Updated** Container validation: Ensure Docker images build correctly and experiment rigs execute as expected.
+- **Updated** Container validation: Ensure Docker images build correctly, experiment rigs execute as expected, and BCC tracer synchronizes properly.
+- **Updated** BCC validation: Verify kernel-level network tracing accuracy, port detection reliability, and data collection integrity.
 
 [No sources needed since this section provides general guidance]
 
@@ -294,7 +330,8 @@ To add a new HPE method:
 4. Integrate with the method selection map in the entry point.
 5. Add smoke tests and update documentation.
 6. Ensure environment setup and dependencies are documented.
-7. **Updated** Docker compatibility: Test method within experiment rig infrastructure.
+7. **Updated** Docker compatibility: Test method within experiment rig infrastructure with BCC tracer support.
+8. **Updated** BCC integration: Ensure proper synchronization with kernel-level network tracing if applicable.
 
 ```mermaid
 sequenceDiagram
@@ -303,11 +340,13 @@ participant Main as "main.py"
 participant HPE as "NewHPE(BaseHPE)"
 participant Utils as "BaseHPE helpers"
 participant Docker as "Docker Container"
+participant BCC as "BCC Tracer"
 User->>Main : "--method newmethod ..."
 Main->>Main : "get_hpe_method(args)"
 Main->>HPE : "constructor(...)"
 HPE->>HPE : "load_model()"
 HPE->>Docker : "run within container"
+HPE->>BCC : "synchronize with kernel tracing"
 User->>HPE : "input (image/video/stream/webcam)"
 HPE->>Utils : "process_frame(frame, n)"
 Utils->>HPE : "run_model(padded)"
@@ -331,7 +370,8 @@ Utils-->>User : "rendered output and metrics"
 - Improve OpenVINO integration: Add new model configurations, tune performance settings, or introduce async pipelines.
 - Extend AlphaPose: Support additional detectors or pose estimation backends; improve multiprocessing and memory management.
 - MoveNet enhancements: Add support for additional models or refine postprocessing logic.
-- **Updated** Experiment rig extensions: Add new monitoring capabilities or performance measurement tools.
+- **Updated** Experiment rig extensions: Add new monitoring capabilities, performance measurement tools, and BCC tracer integration.
+- **Updated** BCC tracer enhancements: Improve kernel-level network tracing accuracy, port detection synchronization, and data collection reliability.
 
 **Section sources**
 - [openvino_base_hpe.py:22-53](file://openvino_base_hpe.py#L22-L53)
@@ -340,7 +380,7 @@ Utils-->>User : "rendered output and metrics"
 - [AGENTS.md:113-118](file://AGENTS.md#L113-L118)
 
 ## Experiment Rigs and Performance Measurement
-The framework includes three specialized Docker-based experiment rigs for comprehensive performance measurement:
+The framework includes three specialized Docker-based experiment rigs for comprehensive performance measurement with enhanced BCC kernel-level network tracing:
 
 ### Monitor HPE Rig
 - Purpose: Baseline CPU monitoring without streaming server
@@ -349,22 +389,25 @@ The framework includes three specialized Docker-based experiment rigs for compre
 
 ### FFMPEG HPE Rig  
 - Purpose: Full monitoring stack with H.264 streaming and performance measurement
-- Features: GPU metrics, network tracing, performance monitoring, container orchestration
-- Output: Comprehensive performance metrics, GPU utilization, network bandwidth analysis
+- Features: GPU metrics, network tracing, performance monitoring, container orchestration, BCC kernel-level network tracing
+- Output: Comprehensive performance metrics, GPU utilization, network bandwidth analysis, kernel-level RX/TX byte counting
 
 ### Recent-DASH Rig
 - Purpose: DASH/HTTP caching experiment infrastructure
 - Features: HTTP proxy caching, client-server architecture, performance analysis
 - Output: Cache effectiveness metrics and streaming performance data
 
+**Updated** Enhanced BCC tracer integration: The FFMPEG HPE rig now includes sophisticated BCC (BPF Compiler Collection) kernel-level network tracing with automatic port detection, synchronization mechanisms, and precise RX/TX byte counting.
+
 **Section sources**
 - [AGENTS.md:42-95](file://AGENTS.md#L42-L95)
 - [monitor_hpe/run_experiment.sh:1-138](file://monitor_hpe/run_experiment.sh#L1-L138)
 - [ffmpeg_hpe/run_experiment.sh:1-251](file://ffmpeg_hpe/run_experiment.sh#L1-L251)
+- [ffmpeg_hpe/run_experiment_bcc.sh:1-316](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L316)
 - [recent-dash/run_experiment.sh:1-286](file://recent-dash/run_experiment.sh#L1-L286)
 
 ## Docker Infrastructure and Container Management
-The framework utilizes a sophisticated Docker-based infrastructure for performance measurement:
+The framework utilizes a sophisticated Docker-based infrastructure for performance measurement with enhanced BCC kernel-level network tracing:
 
 ### Active Container Image
 - Dockerfile_base: Primary HPE container image with PyTorch, OpenVINO, and all dependencies
@@ -376,52 +419,67 @@ The framework utilizes a sophisticated Docker-based infrastructure for performan
 - Prometheus for time-series metric storage
 - Grafana for dashboard visualization
 - Automated container orchestration and monitoring
+- **Updated** Enhanced GPU metrics: Improved DCGM integration with comprehensive telemetry collection
 
 ### Container Orchestration Patterns
 - Standardized experiment lifecycle across all rigs
 - Health checks and dependency management
 - Resource limits and isolation
 - Volume mounting for data persistence
+- **Updated** BCC synchronization: Enhanced container orchestration with proper BCC tracer initialization and port detection synchronization.
+
+### BCC Tracer Infrastructure
+- **Updated** Dockerfile.bcc: Custom BCC installation with kernel header support and Python dependencies
+- **Updated** entrypoint.sh: Sophisticated port detection and synchronization mechanism
+- **Updated** bcc_rx_bytes.py: Kernel-level RX byte counting with automatic port filtering and timestamp alignment
 
 **Section sources**
 - [Dockerfile_base:1-84](file://Dockerfile_base#L1-L84)
 - [docker-compose.yml:1-30](file://docker-compose.yml#L1-L30)
 - [monitor_hpe/docker-compose.yaml:1-52](file://monitor_hpe/docker-compose.yaml#L1-L52)
-- [ffmpeg_hpe/docker-compose.yaml:1-204](file://ffmpeg_hpe/docker-compose.yaml#L1-L204)
+- [ffmpeg_hpe/docker-compose.yaml:1-205](file://ffmpeg_hpe/docker-compose.yaml#L1-L205)
+- [ffmpeg_hpe/bpftrace-tracer/Dockerfile.bcc:1-49](file://ffmpeg_hpe/bpftrace-tracer/Dockerfile.bcc#L1-L49)
+- [ffmpeg_hpe/bpftrace-tracer/entrypoint.sh:1-48](file://ffmpeg_hpe/bpftrace-tracer/entrypoint.sh#L1-L48)
+- [ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py:1-120](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py#L1-L120)
 
 ## Performance Monitoring and Data Collection
-Comprehensive performance measurement infrastructure enables detailed analysis of HPE execution:
+Comprehensive performance measurement infrastructure enables detailed analysis of HPE execution with enhanced BCC kernel-level network tracing:
 
 ### Monitoring Capabilities
 - CPU utilization tracking with PID-based monitoring
-- GPU metrics via NVIDIA DCGM integration
-- Network bandwidth measurement and analysis
+- GPU metrics via NVIDIA DCGM integration with comprehensive telemetry
+- Network bandwidth measurement and analysis with kernel-level precision
 - Memory usage and resource consumption tracking
 - Frame rate and throughput monitoring
+- **Updated** BCC network tracing: Precise RX/TX byte counting at kernel level with automatic port detection and synchronization
 
 ### Data Collection Process
 - Automated timestamped result directories
-- Structured CSV output for analysis
-- Log aggregation and debugging information
-- Visualization generation for performance trends
+- Structured CSV output for analysis with enhanced BCC data formats
+- Log aggregation and debugging information with BCC tracer logs
+- Visualization generation for performance trends and network traffic analysis
+- **Updated** BCC data collection: Kernel-level network traffic statistics with RX byte deltas and port-specific filtering
 
 ### Experiment Standardization
-- Consistent experiment lifecycle across all rigs
+- Consistent experiment lifecycle across all rigs with BCC synchronization
 - Automated cleanup and resource management
 - Standardized output formats and naming conventions
 - Performance regression detection and reporting
+- **Updated** BCC validation: Automated port detection verification and tracer synchronization testing
 
 **Section sources**
 - [AGENTS.md:129-149](file://AGENTS.md#L129-L149)
 - [monitor_hpe/run_experiment.sh:80-137](file://monitor_hpe/run_experiment.sh#L80-L137)
 - [ffmpeg_hpe/run_experiment.sh:184-251](file://ffmpeg_hpe/run_experiment.sh#L184-L251)
+- [ffmpeg_hpe/run_experiment_bcc.sh:254-316](file://ffmpeg_hpe/run_experiment_bcc.sh#L254-L316)
 - [recent-dash/run_experiment.sh:155-200](file://recent-dash/run_experiment.sh#L155-L200)
 
 ## Issue Reporting and Feature Requests
 - Issues: Provide clear problem statements, reproduction steps, expected vs. actual behavior, and environment details.
 - Feature requests: Describe the use case, proposed solution, and potential impact on the ecosystem.
 - Discussions: Use GitHub Discussions for design proposals, architecture questions, and community feedback.
-- **Updated** Docker-related issues: Include container logs, experiment rig outputs, and performance metrics when reporting containerization problems.
+- **Updated** Docker-related issues: Include container logs, experiment rig outputs, performance metrics, and BCC tracer synchronization details when reporting containerization problems.
+- **Updated** BCC tracer issues: Provide kernel-level tracing logs, port detection results, and synchronization timing information for BCC-related problems.
 
 [No sources needed since this section provides general guidance]
 
@@ -430,7 +488,8 @@ Comprehensive performance measurement infrastructure enables detailed analysis o
 - Participate in code reviews and discussions constructively.
 - Help onboard new contributors by answering questions and sharing knowledge.
 - Follow project policies and adhere to community guidelines.
-- **Updated** Infrastructure contributions: Help improve Docker configurations, experiment rigs, and performance measurement tools.
+- **Updated** Infrastructure contributions: Help improve Docker configurations, experiment rigs, BCC tracer functionality, and performance measurement tools.
+- **Updated** Kernel-level tracing: Contribute to BCC tracer development, port detection algorithms, and network traffic analysis tools.
 
 [No sources needed since this section provides general guidance]
 
@@ -440,8 +499,9 @@ Common issues and resolutions:
 - Missing models: Download required pretrained models and place them in the correct locations as described in the README.
 - Video decoding failures: Ensure FFmpeg backend is available for HTTP streams; verify device drivers and GPU support.
 - Performance regressions: Profile inference loops, adjust OpenVINO settings, and validate with smoke tests.
-- **Updated** Docker issues: Check container health, verify GPU driver installation, and validate experiment rig configurations.
-- **Updated** Performance measurement failures: Review monitoring container logs, verify DCGM exporter connectivity, and check Prometheus data collection.
+- **Updated** Docker issues: Check container health, verify GPU driver installation, validate experiment rig configurations, and ensure BCC tracer synchronization.
+- **Updated** Performance measurement failures: Review monitoring container logs, verify DCGM exporter connectivity, check Prometheus data collection, and validate BCC tracer port detection.
+- **Updated** BCC tracer issues: Verify kernel module availability, check BCC installation, validate port detection synchronization, and ensure proper container networking configuration.
 
 **Section sources**
 - [README.md:21-94](file://README.md#L21-L94)
@@ -450,4 +510,4 @@ Common issues and resolutions:
 - [AGENTS.md:189-204](file://AGENTS.md#L189-L204)
 
 ## Conclusion
-These contributing guidelines aim to streamline collaboration, ensure code quality, and accelerate innovation in the Human Pose Estimation framework. The enhanced Docker infrastructure and experiment rigs provide comprehensive performance measurement capabilities, enabling detailed analysis of HPE execution across different hardware configurations. By following the development workflow, coding standards, testing requirements, and contribution processes outlined above, contributors can effectively add new methods, extend functionality, and maintain a robust, performant, and user-friendly codebase with advanced containerized experimentation capabilities.
+These contributing guidelines aim to streamline collaboration, ensure code quality, and accelerate innovation in the Human Pose Estimation framework. The enhanced Docker infrastructure and experiment rigs provide comprehensive performance measurement capabilities with advanced BCC kernel-level network tracing, enabling detailed analysis of HPE execution across different hardware configurations. The improved BCC tracer synchronization, GPU metrics collection, and Docker compose configuration updates ensure reliable and accurate performance measurement. By following the development workflow, coding standards, testing requirements, and contribution processes outlined above, contributors can effectively add new methods, extend functionality, integrate BCC network tracing, and maintain a robust, performant, and user-friendly codebase with advanced containerized experimentation capabilities and precise kernel-level monitoring.

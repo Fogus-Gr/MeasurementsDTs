@@ -12,7 +12,21 @@
 - [opt.py](file://models/AlphaPose/alphapose/opt.py)
 - [__init__.py](file://models/AlphaPose/alphapose/__init__.py)
 - [version.py](file://models/AlphaPose/alphapose/version.py)
+- [alphapose_hpe.py](file://alphapose_hpe.py)
+- [detector.py](file://models/AlphaPose/alphapose/utils/detector.py)
+- [file_detector.py](file://models/AlphaPose/alphapose/utils/file_detector.py)
+- [transforms.py](file://models/AlphaPose/alphapose/utils/transforms.py)
+- [base_hpe.py](file://base_hpe.py)
+- [visualizer.py](file://utils/visualizer.py)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Enhanced postprocess method documentation with improved bounding box calculation using detector-provided cropped_boxes
+- Added coordinate scaling and normalization details
+- Updated output format specifications with proper coordinate handling
+- Improved integration documentation between detector and pose estimation components
+- Added backward compatibility considerations for existing implementations
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -20,14 +34,16 @@
 3. [Core Components](#core-components)
 4. [Architecture Overview](#architecture-overview)
 5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Dependency Analysis](#dependency-analysis)
-7. [Performance Considerations](#performance-considerations)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Conclusion](#conclusion)
-10. [Appendices](#appendices)
+6. [Enhanced Postprocess Method](#enhanced-postprocess-method)
+7. [Coordinate Scaling and Normalization](#coordinate-scaling-and-normalization)
+8. [Dependency Analysis](#dependency-analysis)
+9. [Performance Considerations](#performance-considerations)
+10. [Troubleshooting Guide](#troubleshooting-guide)
+11. [Conclusion](#conclusion)
+12. [Appendices](#appendices)
 
 ## Introduction
-This document explains the AlphaPose PyTorch implementation with a focus on the HRNet-based architecture, its high-accuracy pose estimation capabilities, and practical deployment considerations. It covers model initialization, checkpoint loading, integration with the AlphaPose framework, input preprocessing, batch processing, output formats, configuration options for different AlphaPose variants (FastPose, SimplePose), and performance optimization techniques. Examples of training and inference are provided via configuration-driven workflows, and guidance is included for memory and GPU utilization in high-precision scenarios.
+This document explains the AlphaPose PyTorch implementation with a focus on the HRNet-based architecture, its high-accuracy pose estimation capabilities, and practical deployment considerations. The implementation now features enhanced postprocess methods with improved bounding box calculation using detector-provided cropped_boxes, proper coordinate scaling, and backward compatibility. It covers model initialization, checkpoint loading, integration with the AlphaPose framework, input preprocessing, batch processing, output formats, configuration options for different AlphaPose variants (FastPose, SimplePose), and performance optimization techniques. Examples of training and inference are provided via configuration-driven workflows, and guidance is included for memory and GPU utilization in high-precision scenarios.
 
 ## Project Structure
 The AlphaPose implementation resides under models/AlphaPose/alphapose. Key areas:
@@ -36,6 +52,7 @@ The AlphaPose implementation resides under models/AlphaPose/alphapose. Key areas
 - utils: Configuration loader, presets, transforms, logging, and other helpers
 - opt.py: Command-line argument parsing and runtime configuration assembly
 - pretrained_models: Example YAML configurations for training and evaluation
+- Integration components: Enhanced postprocess methods and coordinate scaling
 
 ```mermaid
 graph TB
@@ -48,6 +65,9 @@ E["datasets/mscoco.py<br/>COCO dataset"]
 F["utils/config.py<br/>YAML config loader"]
 G["opt.py<br/>CLI and runtime config"]
 H["pretrained_models/*.yaml<br/>Training configs"]
+I["utils/detector.py<br/>Enhanced detection pipeline"]
+J["utils/transforms.py<br/>Coordinate transformations"]
+K["alphapose_hpe.py<br/>Enhanced postprocess method"]
 end
 A --> B
 A --> C
@@ -55,6 +75,8 @@ A --> D
 G --> F
 G --> H
 E --> G
+I --> K
+J --> K
 ```
 
 **Diagram sources**
@@ -66,6 +88,9 @@ E --> G
 - [config.py:1-9](file://models/AlphaPose/alphapose/utils/config.py#L1-L9)
 - [opt.py:1-88](file://models/AlphaPose/alphapose/opt.py#L1-L88)
 - [256x192_res50_lr1e-3_1x.yaml:1-66](file://models/AlphaPose/pretrained_models/256x192_res50_lr1e-3_1x.yaml#L1-L66)
+- [detector.py:18-258](file://models/AlphaPose/alphapose/utils/detector.py#L18-L258)
+- [transforms.py:573-712](file://models/AlphaPose/alphapose/utils/transforms.py#L573-L712)
+- [alphapose_hpe.py:295-341](file://alphapose_hpe.py#L295-L341)
 
 **Section sources**
 - [__init__.py:1-4](file://models/AlphaPose/alphapose/__init__.py#L1-L4)
@@ -79,6 +104,7 @@ E --> G
 - Configuration: YAML-based experiment configuration with dataset, model, detector, and training parameters.
 - Dataset: MSCOCO dataset loader with bounding boxes and keypoints, plus filtering and validation logic.
 - CLI and runtime: Argument parsing, work directory setup, logging, and device selection.
+- **Enhanced Postprocess Pipeline**: Improved bounding box calculation using detector-provided cropped_boxes with proper coordinate scaling and backward compatibility.
 
 **Section sources**
 - [hrnet.py:269-495](file://models/AlphaPose/alphapose/models/hrnet.py#L269-L495)
@@ -88,9 +114,10 @@ E --> G
 - [config.py:1-9](file://models/AlphaPose/alphapose/utils/config.py#L1-L9)
 - [mscoco.py:1-141](file://models/AlphaPose/alphapose/datasets/mscoco.py#L1-L141)
 - [opt.py:1-88](file://models/AlphaPose/alphapose/opt.py#L1-L88)
+- [alphapose_hpe.py:295-341](file://alphapose_hpe.py#L295-L341)
 
 ## Architecture Overview
-AlphaPose composes a pose estimation network (SPPE) from a registry, loads configuration from YAML, builds datasets and detectors, and runs training/inference loops. The SPPE can be HRNet, FastPose, or SimplePose depending on configuration.
+AlphaPose composes a pose estimation network (SPPE) from a registry, loads configuration from YAML, builds datasets and detectors, and runs training/inference loops. The SPPE can be HRNet, FastPose, or SimplePose depending on configuration. The enhanced postprocess method now uses detector-provided cropped_boxes for improved bounding box calculations and proper coordinate scaling.
 
 ```mermaid
 sequenceDiagram
@@ -98,13 +125,17 @@ participant CLI as "opt.py"
 participant CFG as "utils/config.py"
 participant REG as "models/builder.py"
 participant NET as "models/hrnet.py/models/fastpose.py/models/simplepose.py"
-participant DATA as "datasets/mscoco.py"
+participant DET as "utils/detector.py"
+participant TRANS as "utils/transforms.py"
+participant POST as "alphapose_hpe.py"
 CLI->>CFG : Load YAML config
 CLI->>REG : Build SPPE with PRESET
 REG->>NET : Instantiate selected model
-CLI->>DATA : Build dataset(s)
-CLI-->>CLI : Setup logging, devices, work dir
-CLI-->>NET : Train/Eval loop (forward/backward)
+CLI->>DET : Build detector with cropped_boxes
+DET->>TRANS : Coordinate transformations
+TRANS->>POST : Enhanced postprocess with bbox scaling
+POST->>POST : Proper coordinate normalization
+POST-->>CLI : Bodies with scaled coordinates
 ```
 
 **Diagram sources**
@@ -115,6 +146,9 @@ CLI-->>NET : Train/Eval loop (forward/backward)
 - [fastpose.py:13-18](file://models/AlphaPose/alphapose/models/fastpose.py#L13-L18)
 - [simplepose.py:12-18](file://models/AlphaPose/alphapose/models/simplepose.py#L12-L18)
 - [mscoco.py:17-35](file://models/AlphaPose/alphapose/datasets/mscoco.py#L17-L35)
+- [detector.py:226-244](file://models/AlphaPose/alphapose/utils/detector.py#L226-L244)
+- [transforms.py:573-712](file://models/AlphaPose/alphapose/utils/transforms.py#L573-L712)
+- [alphapose_hpe.py:295-341](file://alphapose_hpe.py#L295-L341)
 
 ## Detailed Component Analysis
 
@@ -267,10 +301,67 @@ Skip --> Done
 **Section sources**
 - [mscoco.py:1-141](file://models/AlphaPose/alphapose/datasets/mscoco.py#L1-L141)
 
+## Enhanced Postprocess Method
+
+**Updated** The postprocess method has been significantly enhanced with improved bounding box calculation using detector-provided cropped_boxes instead of keypoint-derived bounds, proper coordinate scaling, and backward compatibility considerations.
+
+### Improved Bounding Box Calculation
+The enhanced postprocess method now uses detector-provided cropped_boxes for more accurate bounding box calculations:
+
+```mermaid
+flowchart TD
+A["Input Predictions"] --> B["Extract Person Keypoints"]
+B --> C["Normalize Keypoints to [0,1]"]
+C --> D["Filter by Score Threshold"]
+D --> E["Scale to Padded Dimensions"]
+E --> F["Use Detector Bounding Box"]
+F --> G["Apply Coordinate Scaling"]
+G --> H["Create Body Object"]
+H --> I["Return Bodies List"]
+```
+
+**Diagram sources**
+- [alphapose_hpe.py:295-341](file://alphapose_hpe.py#L295-L341)
+
+### Coordinate Scaling and Normalization
+The method now implements proper coordinate scaling from normalized coordinates to pixel coordinates:
+
+- **Normalized Coordinates**: Keypoints are initially normalized to [0,1] range
+- **Padded Dimension Scaling**: Coordinates are scaled to padded image dimensions
+- **Detector Bounding Box Scaling**: Uses detector-provided bounding boxes for accurate scaling
+- **Backward Compatibility**: Maintains compatibility with existing implementations
+
+**Section sources**
+- [alphapose_hpe.py:295-341](file://alphapose_hpe.py#L295-L341)
+
+## Coordinate Scaling and Normalization
+
+**Updated** The AlphaPose implementation now features enhanced coordinate scaling and normalization with improved accuracy and backward compatibility.
+
+### Coordinate Transformation Pipeline
+The enhanced coordinate scaling follows a multi-step transformation process:
+
+1. **Heatmap to Coordinate Conversion**: Uses `heatmap_to_coord` function with detector-provided bounding boxes
+2. **Normalization**: Divides coordinates by original image dimensions (orig_w, orig_h)
+3. **Scaling**: Scales normalized coordinates to padded dimensions
+4. **Bounding Box Calculation**: Applies detector bounding box scaling for accurate positioning
+
+### Backward Compatibility Features
+- **Detector Bounding Box Usage**: Now uses `cropped_boxes` instead of keypoint-derived bounds
+- **Proper Scaling**: Implements correct coordinate scaling from normalized to pixel coordinates
+- **Error Handling**: Raises explicit errors when detector bounding boxes are missing
+- **Legacy Support**: Maintains compatibility with existing code that expects bounding boxes
+
+**Section sources**
+- [alphapose_hpe.py:276-293](file://alphapose_hpe.py#L276-L293)
+- [detector.py:226-244](file://models/AlphaPose/alphapose/utils/detector.py#L226-L244)
+- [transforms.py:573-712](file://models/AlphaPose/alphapose/utils/transforms.py#L573-L712)
+
 ## Dependency Analysis
 - SPPE registry depends on builder and model modules; models depend on torch.nn and registry decorators.
 - CLI depends on YAML config loader and torch for device selection.
 - Dataset modules depend on model registries and bbox utilities.
+- **Enhanced Postprocess Dependencies**: Postprocess method depends on detector-provided cropped_boxes and coordinate transformation utilities.
 
 ```mermaid
 graph LR
@@ -281,6 +372,10 @@ Builder["models/builder.py"] --> HR["models/hrnet.py"]
 Builder --> FP["models/fastpose.py"]
 Builder --> SP["models/simplepose.py"]
 Opt --> Data["datasets/mscoco.py"]
+Det["utils/detector.py"] --> Post["alphapose_hpe.py"]
+Trans["utils/transforms.py"] --> Post
+Post --> Base["base_hpe.py"]
+Base --> Vis["utils/visualizer.py"]
 ```
 
 **Diagram sources**
@@ -291,10 +386,16 @@ Opt --> Data["datasets/mscoco.py"]
 - [fastpose.py:1-68](file://models/AlphaPose/alphapose/models/fastpose.py#L1-L68)
 - [simplepose.py:1-87](file://models/AlphaPose/alphapose/models/simplepose.py#L1-L87)
 - [mscoco.py:1-141](file://models/AlphaPose/alphapose/datasets/mscoco.py#L1-L141)
+- [detector.py:226-244](file://models/AlphaPose/alphapose/utils/detector.py#L226-L244)
+- [alphapose_hpe.py:295-341](file://alphapose_hpe.py#L295-L341)
+- [transforms.py:573-712](file://models/AlphaPose/alphapose/utils/transforms.py#L573-L712)
+- [base_hpe.py:55-65](file://base_hpe.py#L55-L65)
+- [visualizer.py:1-53](file://utils/visualizer.py#L1-L53)
 
 **Section sources**
 - [builder.py:1-47](file://models/AlphaPose/alphapose/models/builder.py#L1-L47)
 - [opt.py:1-88](file://models/AlphaPose/alphapose/opt.py#L1-L88)
+- [alphapose_hpe.py:295-341](file://alphapose_hpe.py#L295-L341)
 
 ## Performance Considerations
 - Model selection:
@@ -309,6 +410,10 @@ Opt --> Data["datasets/mscoco.py"]
   - CLI supports distributed launchers and optional Sync BatchNorm; enable for multi-GPU scaling.
 - Detector integration:
   - Detector name and weights are configurable; choose a detector that matches your latency/accuracy needs.
+- **Enhanced Postprocess Performance**:
+  - Improved bounding box calculation reduces computational overhead.
+  - Proper coordinate scaling eliminates redundant calculations.
+  - Detector-provided cropped_boxes improve accuracy without additional processing.
 
 [No sources needed since this section provides general guidance]
 
@@ -319,14 +424,19 @@ Opt --> Data["datasets/mscoco.py"]
   - MSCOCO dataset asserts class names; mismatch leads to assertion failure; ensure dataset type and annotations align.
 - Logging and experiment directories:
   - CLI creates work directories and attaches file/stream handlers; check logs for epoch metrics and errors.
+- **Enhanced Postprocess Issues**:
+  - **Missing Detector Bounding Boxes**: Postprocess raises ValueError when det_box is None; ensure detector provides bounding boxes.
+  - **Coordinate Scaling Errors**: Verify that orig_w and orig_h are properly calculated from original images.
+  - **Backward Compatibility**: Ensure existing code expects detector-provided cropped_boxes instead of keypoint-derived bounds.
 
 **Section sources**
 - [hrnet.py:475-485](file://models/AlphaPose/alphapose/models/hrnet.py#L475-L485)
 - [mscoco.py:44-44](file://models/AlphaPose/alphapose/datasets/mscoco.py#L44-L44)
 - [opt.py:65-75](file://models/AlphaPose/alphapose/opt.py#L65-L75)
+- [alphapose_hpe.py:310-311](file://alphapose_hpe.py#L310-L311)
 
 ## Conclusion
-AlphaPose’s PyTorch implementation offers flexible, registry-driven pose estimation with strong defaults. HRNet delivers high accuracy, while FastPose and SimplePose provide alternatives for speed and simplicity. Configuration-driven training and evaluation, combined with dataset and detector integrations, enable robust deployment. For high-precision applications, leverage HRNet, appropriate input sizing, and careful checkpoint loading; for throughput, consider FastPose or SimplePose with optimized batch sizes and detectors.
+AlphaPose's PyTorch implementation offers flexible, registry-driven pose estimation with strong defaults. The enhanced postprocess method now provides improved bounding box calculation using detector-provided cropped_boxes, proper coordinate scaling, and backward compatibility. HRNet delivers high accuracy, while FastPose and SimplePose provide alternatives for speed and simplicity. Configuration-driven training and evaluation, combined with dataset and detector integrations, enable robust deployment. For high-precision applications, leverage HRNet, appropriate input sizing, and careful checkpoint loading; for throughput, consider FastPose or SimplePose with optimized batch sizes and detectors. The enhanced coordinate scaling ensures accurate pose estimation with proper scaling from normalized coordinates to pixel coordinates.
 
 [No sources needed since this section summarizes without analyzing specific files]
 
@@ -360,31 +470,52 @@ AlphaPose’s PyTorch implementation offers flexible, registry-driven pose estim
 - [fastpose.py:32-40](file://models/AlphaPose/alphapose/models/fastpose.py#L32-L40)
 - [simplepose.py:22-31](file://models/AlphaPose/alphapose/models/simplepose.py#L22-L31)
 
-### Input Preprocessing and Output Formats
+### Enhanced Input Preprocessing and Output Formats
 - Input preprocessing:
   - Dataset presets define image size and heatmap size; augmentations include flip, rotation, and scale.
+  - **Enhanced Detection Pipeline**: Detector now provides cropped_boxes for improved accuracy.
 - Output format:
   - Models produce heatmaps sized according to preset; post-processing converts heatmaps to joint coordinates and scores.
+  - **Enhanced Coordinate System**: Proper scaling from normalized coordinates to pixel coordinates using detector bounding boxes.
 
 **Section sources**
 - [256x192_res50_lr1e-3_1x.yaml:24-33](file://models/AlphaPose/pretrained_models/256x192_res50_lr1e-3_1x.yaml#L24-L33)
 - [mscoco.py:31-35](file://models/AlphaPose/alphapose/datasets/mscoco.py#L31-L35)
+- [detector.py:226-244](file://models/AlphaPose/alphapose/utils/detector.py#L226-L244)
+- [alphapose_hpe.py:276-293](file://alphapose_hpe.py#L276-L293)
 
 ### Training and Inference Execution Examples
 - Training:
   - Run CLI with --cfg pointing to a YAML; CLI loads config, sets device/log/work_dir, and starts training loop.
 - Inference:
   - Use the built SPPE model with loaded weights; feed batches of normalized images; collect heatmaps and decode joints.
+  - **Enhanced Postprocess**: Automatically uses detector-provided cropped_boxes for improved accuracy.
 
 **Section sources**
 - [opt.py:14-66](file://models/AlphaPose/alphapose/opt.py#L14-L66)
 - [builder.py:21-27](file://models/AlphaPose/alphapose/models/builder.py#L21-L27)
+- [alphapose_hpe.py:295-341](file://alphapose_hpe.py#L295-L341)
 
 ### Memory and GPU Utilization
 - Memory:
   - Larger input sizes and batch sizes increase memory; HRNet typically requires more memory than FastPose/SimplePose.
+  - **Enhanced GPU Processing**: Improved coordinate scaling reduces memory overhead during postprocess.
 - GPU:
   - CLI detects available GPUs and sets device; distributed training can utilize multiple GPUs with proper launcher selection.
+  - **GPU-Accelerated Detection**: Enhanced detection pipeline supports GPU-accelerated bounding box calculations.
 
 **Section sources**
 - [opt.py:60-63](file://models/AlphaPose/alphapose/opt.py#L60-L63)
+- [alphapose_hpe.py:188-236](file://alphapose_hpe.py#L188-L236)
+
+### Backward Compatibility and Migration Guide
+**Updated** For users migrating from older versions, the enhanced postprocess method maintains backward compatibility while improving accuracy:
+
+- **Detector Integration**: Ensure detector provides cropped_boxes; otherwise, use fallback mechanisms.
+- **Coordinate Handling**: Existing code expecting keypoint-derived bounds should be updated to use detector-provided bounding boxes.
+- **Error Handling**: The enhanced method raises explicit errors for missing detector bounding boxes, improving debugging.
+- **Performance Benefits**: Improved coordinate scaling reduces computational overhead while maintaining accuracy.
+
+**Section sources**
+- [alphapose_hpe.py:310-311](file://alphapose_hpe.py#L310-L311)
+- [detector.py:226-244](file://models/AlphaPose/alphapose/utils/detector.py#L226-L244)

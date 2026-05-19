@@ -26,7 +26,7 @@ This document provides detailed reference for all Docker images, Compose service
 
 **Python frameworks:**
 - `PyNvCodec` — built from NVIDIA VideoProcessingFramework Git source
-- `OpenVINO 2024.2.0`
+- `OpenVINO 2024.4.0`
 - `gdown` — used for model downloads during build
 
 **Models downloaded via `gdown` at build time:**
@@ -108,20 +108,6 @@ No model files or Python stack — kept intentionally minimal.
 
 ---
 
-### `rtsp-ipcam/Dockerfile` (Streaming Server)
-
-| Property | Value |
-|----------|-------|
-| Base | `python:3.12-slim-bookworm` |
-| Packages | `ffmpeg`, `curl`, `netcat-openbsd` |
-| User | Non-root (`appuser`) |
-| Exposed port | `8089` |
-| Entrypoint | `python direct_stream_server.py --video "$VIDEO_FILE" --port "$SERVER_PORT"` |
-
-Serves a looping H.264 video stream over HTTP for HPE containers to consume.
-
----
-
 ## Docker Compose Services
 
 ### `ffmpeg_hpe/docker-compose.yaml` (Primary Experiment Compose)
@@ -130,45 +116,11 @@ This is the main compose file used for benchmarking experiments.
 
 ---
 
-#### `h264-streaming-server`
+#### `rtsp-broker` + `streamer` (replaced `h264-streaming-server`)
 
-Streams a pre-recorded video file over HTTP for the HPE service to consume.
-
-| Property | Value |
-|----------|-------|
-| Build context | `../rtsp-ipcam` |
-| Port | `8089:8089` |
-| Network | `streaming-network` (bridge) |
-
-**Volumes:**
-
-| Host | Container | Mode |
-|------|-----------|------|
-| `./results` | `/output` | `rw` |
-| `../rtsp-ipcam/config` | `/app/config` | `ro` |
-| `../videos` | `/app/videos` | `ro` |
-
-**Environment:**
-- `SERVER_PORT=8089`
-- `VIDEO_FILE` — sourced from `.env`
-
-**Healthcheck:**
-```
-test: TCP connect localhost:8089
-interval: 5s | timeout: 10s | retries: 6 | start_period: 10s
-```
-
-**Resource limits:**
-
-| Resource | Limit | Reservation |
-|----------|-------|-------------|
-| CPU | 2.0 | 1.0 |
-| Memory | 1G | 512M |
-
-**Security hardening:**
-- `no-new-privileges: true`
-- `read_only: true`
-- `tmpfs: /tmp`
+> The old `h264-streaming-server` built from `rtsp-ipcam/` has been removed. Streaming is now handled by two pre-built images in `ffmpeg_hpe/docker-compose.yaml`:
+> - **`rtsp-broker`** (`bluenviron/mediamtx:1-ffmpeg`) — RTSP broker on port `8554`
+> - **`streamer`** (`jrottenberg/ffmpeg:4.4-nvidia`) — FFmpeg/NVENC producer, mounts `../videos:/data:ro`
 
 ---
 
@@ -179,9 +131,9 @@ Runs the HPE inference pipeline against the video stream.
 | Property | Value |
 |----------|-------|
 | Build context | Project root (`Dockerfile_base`) |
-| Runtime | `nvidia` |
+| Runtime | `${HPE_RUNTIME:-runc}` (`nvidia` only for GPU methods) |
 | Shared memory | `8gb` |
-| Depends on | `h264-streaming-server` (`service_healthy`) |
+| Depends on | `rtsp-broker`, `streamer` (`service_started`) |
 
 **Volumes:**
 
@@ -194,14 +146,15 @@ Runs the HPE inference pipeline against the video stream.
 
 | Variable | Value |
 |----------|-------|
-| `NVIDIA_VISIBLE_DEVICES` | `all` |
+| `NVIDIA_VISIBLE_DEVICES` | `${NVIDIA_VISIBLE_DEVICES:-all}` for GPU methods, `none` for CPU-only methods |
 | `CUDA_VISIBLE_DEVICES` | `0` |
 | `PYTHONUNBUFFERED` | `1` |
-| `WAIT_HOSTS` | `h264-streaming-server:8089` |
+| `WAIT_HOSTS` | `rtsp-broker:8554` |
 | `WAIT_HOSTS_TIMEOUT` | `30` |
 | `PYTORCH_CUDA_ALLOC_CONF` | `max_split_size_mb:32` |
 | `OPENCV_FFMPEG_OPEN_TIMEOUT` | `300000` (5 min) |
 | `OPENCV_FFMPEG_READ_TIMEOUT` | `300000` (5 min) |
+| `OPENCV_FFMPEG_CAPTURE_OPTIONS` | `rtsp_transport;tcp` |
 
 **Command:**
 ```bash
@@ -238,7 +191,7 @@ Runs `nvidia-smi` polling in a sidecar container alongside the HPE workload.
 |----------|-------|
 | Build | `Dockerfile.gpu_metrics` |
 | Runtime | `nvidia` |
-| Depends on | `h264-streaming-server`, `hpe` |
+| Depends on | `rtsp-broker`, `hpe` |
 
 **Volumes:** `./results:/output`
 
@@ -258,7 +211,7 @@ Collects host-level performance metrics (CPU, memory, I/O) alongside the HPE run
 | PID namespace | `host` |
 | User | `root` |
 | Privileged | `true` |
-| Depends on | `h264-streaming-server`, `hpe` |
+| Depends on | `rtsp-broker`, `hpe` |
 
 **Capabilities:** `SYS_ADMIN`, `NET_ADMIN`, `NET_RAW`, `IPC_LOCK`
 
@@ -305,7 +258,7 @@ Attaches BCC/eBPF probes to the HPE container's network namespace to trace RX/TX
 | Variable | Value |
 |----------|-------|
 | `TARGET_CONTAINER` | `hpe` |
-| `STREAMER_IP` | `h264-streaming-server` |
+| `STREAMER_IP` | `rtsp-broker` |
 | `PORT_DETECTION_TIMEOUT` | `30` |
 
 > Note: Sharing the HPE network namespace (`network_mode: service:hpe`) allows the tracer to observe all packets entering and leaving the HPE container without any additional routing.
@@ -371,15 +324,6 @@ python3 main.py --method movenet --input /videos/${VIDEO_FILE:-ultimatum/hd_00_0
 
 ---
 
-### `rtsp-ipcam/docker-compose.yml` (Standalone Streaming)
-
-Standalone compose for running the streaming server in isolation.
-
-- Single `h264-streaming-server` service
-- Port: `${SERVER_PORT}:${SERVER_PORT}`
-- Hardcoded video: `hd_00_00.mp4`
-- Resource limits: CPU 1.0/0.5, Memory 500M/128M
-
 ---
 
 ## Container Mount Paths Reference
@@ -388,7 +332,7 @@ Standalone compose for running the streaming server in isolation.
 |-----------|---------------|---------|------|
 | `./results/` | `/output/` | `hpe`, `gpu-metrics`, `perf_monitor` | `rw` |
 | `../videos/` | `/videos/` | `hpe` | `ro` |
-| `../videos/` | `/app/videos/` | `h264-streaming-server` | `ro` |
+| `../videos/` | `/data/` | `streamer` | `ro` |
 | `./pids/` | `/pids/` | `hpe` (write), `perf_monitor` (read) | `rw` / `ro` |
 | `./tracer_output/` | `/opt/tracer/output/` | `bcc-tracer` | `rw` |
 | `/lib/modules` | `/lib/modules` | `bcc-tracer` | `ro` |
@@ -410,19 +354,21 @@ Standalone compose for running the streaming server in isolation.
 
 | Variable | Default | Used By | Description |
 |----------|---------|---------|-------------|
-| `VIDEO_FILE` | (from `.env`) | `h264-streaming-server` | Path to video file inside container |
-| `SERVER_PORT` | `8089` | `h264-streaming-server` | HTTP stream port |
+| `VIDEO_FILE_NAME` | (from `.env`) | `streamer` | Path to the local video file inside the producer container |
 | `HPE_METHOD` | (set by script) | `hpe` | Pose estimation method (`movenet`, `alphapose`, etc.) |
 | `HPE_INPUT` | (set by script) | `hpe` | Stream URL or file path |
 | `HPE_DEVICE` | `GPU` | `hpe` | Inference device (`CPU` or `GPU`) |
-| `NVIDIA_VISIBLE_DEVICES` | `all` | `hpe`, `gpu-metrics` | GPU visibility for container |
+| `HPE_RUNTIME` | `runc` / `nvidia` | `hpe` | Runtime selected by `run_experiment.sh`; `nvidia` only for GPU methods |
+| `NVIDIA_VISIBLE_DEVICES` | `all` / `none` | `hpe`, `gpu-metrics` | GPU visibility for container; CPU-only HPE methods use `none` |
 | `CUDA_VISIBLE_DEVICES` | `0` | `hpe` | GPU device index |
 | `PYTORCH_CUDA_ALLOC_CONF` | `max_split_size_mb:32` | `hpe` | PyTorch CUDA memory allocator config |
 | `OPENCV_FFMPEG_OPEN_TIMEOUT` | `300000` | `hpe` | Stream open timeout in milliseconds |
 | `OPENCV_FFMPEG_READ_TIMEOUT` | `300000` | `hpe` | Stream read timeout in milliseconds |
 | `PYTHONUNBUFFERED` | `1` | `hpe` | Disable Python stdout/stderr buffering |
 | `TARGET_CONTAINER` | `hpe` | `bcc-tracer` | Name of container to attach eBPF probes to |
-| `STREAMER_IP` | `h264-streaming-server` | `bcc-tracer` | Streaming server hostname |
+| `STREAMER_IP` | `rtsp-broker` | `bcc-tracer` | RTSP broker hostname |
+| `STREAMER_PORT` | `8554` | `bcc-tracer` | RTSP port used by the broker |
+| `BCC_INTERFACE` | auto-detected | `bcc-tracer` | Optional override for the raw socket interface |
 | `PORT_DETECTION_TIMEOUT` | `30` | `bcc-tracer` | Seconds to wait for port detection |
 | `OUTPUT_DIR` | `/output` | `perf_monitor` | Directory to write metrics output |
 | `EXPERIMENT_TYPE` | `ffmpeg_hpe` | `perf_monitor` | Experiment label for output files |
@@ -440,7 +386,7 @@ docker compose build
 
 # Rebuild specific service without cache
 docker compose build --no-cache bcc-tracer
-docker compose build --no-cache h264-streaming-server
+docker compose build --no-cache gpu-metrics bcc-tracer hpe
 docker compose build --no-cache hpe
 
 # View resolved compose config (with variable substitution)
@@ -454,9 +400,9 @@ docker images | grep -E "hpe|h264|tracer|gpu"
 
 ```bash
 # From ffmpeg_hpe/
-cp .env.example .env         # set VIDEO_FILE and HPE_METHOD
+cp .env.example .env         # set VIDEO_FILE_NAME and HPE_METHOD
 docker compose build
-docker compose up -d h264-streaming-server
+docker compose up -d rtsp-broker streamer
 docker compose up hpe gpu-metrics perf_monitor
 ```
 

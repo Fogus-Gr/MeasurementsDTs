@@ -4,6 +4,7 @@
 **Referenced Files in This Document**
 - [evaluator.py](file://utils/evaluator.py)
 - [visualizer.py](file://utils/visualizer.py)
+- [vis.py](file://models/AlphaPose/alphapose/utils/vis.py)
 - [metrics.py](file://models/AlphaPose/alphapose/utils/metrics.py)
 - [coco_metrics.py](file://open_model_zoo/tools/accuracy_checker/accuracy_checker/metrics/coco_metrics.py)
 - [pose_estimation_representation.py](file://open_model_zoo/tools/accuracy_checker/accuracy_checker/representation/pose_estimation_representation.py)
@@ -11,7 +12,16 @@
 - [pose_estimation_openpose.py](file://open_model_zoo/tools/accuracy_checker/accuracy_checker/adapters/pose_estimation_openpose.py)
 - [human_pose_estimation_demo.py](file://open_model_zoo/demos/human_pose_estimation_demo/python/human_pose_estimation_demo.py)
 - [render_human_pose.hpp](file://open_model_zoo/demos/multi_channel_human_pose_estimation_demo/cpp/render_human_pose.hpp)
+- [alphapose_hpe.py](file://alphapose_hpe.py)
+- [openvino_base_hpe.py](file://openvino_base_hpe.py)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Enhanced visualizer utilities documentation with improved COCO-17 keypoint color scheme verification
+- Added consistent coloring rules across pose estimation backends
+- Updated visualization section to reflect new color coding standards
+- Added COCO-17 keypoint order verification details
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -48,6 +58,7 @@ V["utils/visualizer.py"]
 end
 subgraph "AlphaPose Metrics"
 AM["models/AlphaPose/alphapose/utils/metrics.py"]
+VIS["models/AlphaPose/alphapose/utils/vis.py"]
 end
 subgraph "Accuracy Checker"
 CM["open_model_zoo/tools/accuracy_checker/.../metrics/coco_metrics.py"]
@@ -66,11 +77,13 @@ PA --> PR
 PO --> PR
 V --> HD
 RH --> HD
+VIS --> V
 ```
 
 **Diagram sources**
 - [evaluator.py:11-33](file://utils/evaluator.py#L11-L33)
 - [visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
+- [vis.py:58-92](file://models/AlphaPose/alphapose/utils/vis.py#L58-L92)
 - [metrics.py:65-121](file://models/AlphaPose/alphapose/utils/metrics.py#L65-L121)
 - [coco_metrics.py:46-91](file://open_model_zoo/tools/accuracy_checker/accuracy_checker/metrics/coco_metrics.py#L46-L91)
 - [pose_estimation_representation.py:31-70](file://open_model_zoo/tools/accuracy_checker/accuracy_checker/representation/pose_estimation_representation.py#L31-L70)
@@ -82,6 +95,7 @@ RH --> HD
 **Section sources**
 - [evaluator.py:11-114](file://utils/evaluator.py#L11-L114)
 - [visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
+- [vis.py:58-92](file://models/AlphaPose/alphapose/utils/vis.py#L58-L92)
 - [metrics.py:65-121](file://models/AlphaPose/alphapose/utils/metrics.py#L65-L121)
 - [coco_metrics.py:46-91](file://open_model_zoo/tools/accuracy_checker/accuracy_checker/metrics/coco_metrics.py#L46-L91)
 - [pose_estimation_representation.py:31-70](file://open_model_zoo/tools/accuracy_checker/accuracy_checker/representation/pose_estimation_representation.py#L31-L70)
@@ -95,7 +109,7 @@ RH --> HD
 - Pose accuracy calculator: Computes heatmap-based accuracy metrics for training/validation.
 - COCO metrics engine: Implements mAP/mAR computation for detection and keypoint tasks using IOU/OKS and configurable thresholds.
 - Pose data representation: Defines PoseEstimationAnnotation/Prediction structures with visibility and scores.
-- Visualization utilities: Render skeletons, bounding boxes, and optional confidence labels on frames.
+- Visualization utilities: Render skeletons, bounding boxes, and optional confidence labels on frames with enhanced COCO-17 keypoint color scheme verification.
 - Demo renderers: Provide ready-to-use drawing routines for pose overlays in Python and C++.
 
 **Section sources**
@@ -293,17 +307,22 @@ Pred-->>Adapter : Ready for evaluation
 - [pose_estimation_openpose.py:135-160](file://open_model_zoo/tools/accuracy_checker/accuracy_checker/adapters/pose_estimation_openpose.py#L135-L160)
 
 ### Visualization Utilities
-- Purpose: Render pose skeletons, bounding boxes, and optional confidence labels.
+- Purpose: Render pose skeletons, bounding boxes, and optional confidence labels with enhanced COCO-17 keypoint color scheme verification.
 - Key behaviors:
   - Draw skeleton lines and circles for keypoints above a threshold.
+  - **Enhanced**: Implements COCO-17 keypoint color scheme verification with consistent coloring rules.
+  - **Enhanced**: Preserves repository's COCO-17-style keypoint ordering: nose (cyan), odd indices (green), remaining indices (red).
   - Optionally overlay bounding boxes and per-keypoint scores.
+
+**Updated** Enhanced with improved COCO-17 keypoint color scheme verification and consistent coloring rules across pose estimation backends.
 
 ```mermaid
 flowchart TD
 VStart(["Start"]) --> LoopPoses["For each pose"]
 LoopPoses --> Filter["Filter keypoints by score threshold"]
 Filter --> Lines["Draw skeleton lines"]
-Lines --> Circles["Draw keypoints with color coding"]
+Lines --> ColorScheme["Apply COCO-17 color scheme verification"]
+ColorScheme --> Circles["Draw keypoints with color coding"]
 Circles --> Box{"Draw bounding box?"}
 Box --> |Yes| DrawBox["Render bbox"]
 Box --> |No| SkipBox["Skip bbox"]
@@ -313,11 +332,17 @@ SkipBox --> VEnd
 
 **Diagram sources**
 - [visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
+- [vis.py:58-92](file://models/AlphaPose/alphapose/utils/vis.py#L58-L92)
+- [alphapose_hpe.py:34-39](file://alphapose_hpe.py#L34-L39)
+- [openvino_base_hpe.py:56-62](file://openvino_base_hpe.py#L56-L62)
 - [human_pose_estimation_demo.py:123-152](file://open_model_zoo/demos/human_pose_estimation_demo/python/human_pose_estimation_demo.py#L123-L152)
 - [render_human_pose.hpp:1-25](file://open_model_zoo/demos/multi_channel_human_pose_estimation_demo/cpp/render_human_pose.hpp#L1-L25)
 
 **Section sources**
 - [visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
+- [vis.py:58-92](file://models/AlphaPose/alphapose/utils/vis.py#L58-L92)
+- [alphapose_hpe.py:34-39](file://alphapose_hpe.py#L34-L39)
+- [openvino_base_hpe.py:56-62](file://openvino_base_hpe.py#L56-L62)
 - [human_pose_estimation_demo.py:123-152](file://open_model_zoo/demos/human_pose_estimation_demo/python/human_pose_estimation_demo.py#L123-L152)
 - [render_human_pose.hpp:1-25](file://open_model_zoo/demos/multi_channel_human_pose_estimation_demo/cpp/render_human_pose.hpp#L1-L25)
 
@@ -328,6 +353,7 @@ SkipBox --> VEnd
   - Optional profiling hooks for detailed reporting
 - The AlphaPose metrics module depends on pycocotools for COCO evaluation and returns summarized statistics.
 - The evaluator utilities depend on JSON/CSV for persistence and optionally on time-series buffers for bandwidth measurements.
+- **Enhanced**: Visualization utilities now include COCO-17 keypoint color scheme verification across different pose estimation backends.
 
 ```mermaid
 graph LR
@@ -337,6 +363,8 @@ MET --> OUT["COCO Results"]
 EV["Evaluator Utils"] --> OUT
 AP["AlphaPose Metrics"] --> OUT
 VIS["Visualizer"] --> DEMO["Demo Renderers"]
+VIS --> COLOR["COCO-17 Color Scheme"]
+COLOR --> BACKENDS["Multiple Pose Backends"]
 ```
 
 **Diagram sources**
@@ -345,6 +373,9 @@ VIS["Visualizer"] --> DEMO["Demo Renderers"]
 - [evaluator.py:11-114](file://utils/evaluator.py#L11-L114)
 - [metrics.py:65-121](file://models/AlphaPose/alphapose/utils/metrics.py#L65-L121)
 - [visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
+- [vis.py:58-92](file://models/AlphaPose/alphapose/utils/vis.py#L58-L92)
+- [alphapose_hpe.py:34-39](file://alphapose_hpe.py#L34-L39)
+- [openvino_base_hpe.py:56-62](file://openvino_base_hpe.py#L56-L62)
 - [human_pose_estimation_demo.py:123-152](file://open_model_zoo/demos/human_pose_estimation_demo/python/human_pose_estimation_demo.py#L123-L152)
 
 **Section sources**
@@ -353,6 +384,9 @@ VIS["Visualizer"] --> DEMO["Demo Renderers"]
 - [evaluator.py:11-114](file://utils/evaluator.py#L11-L114)
 - [metrics.py:65-121](file://models/AlphaPose/alphapose/utils/metrics.py#L65-L121)
 - [visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
+- [vis.py:58-92](file://models/AlphaPose/alphapose/utils/vis.py#L58-L92)
+- [alphapose_hpe.py:34-39](file://alphapose_hpe.py#L34-L39)
+- [openvino_base_hpe.py:56-62](file://openvino_base_hpe.py#L56-L62)
 - [human_pose_estimation_demo.py:123-152](file://open_model_zoo/demos/human_pose_estimation_demo/python/human_pose_estimation_demo.py#L123-L152)
 
 ## Performance Considerations
@@ -360,19 +394,21 @@ VIS["Visualizer"] --> DEMO["Demo Renderers"]
 - Max detections: Limit per-image detections to reduce computational overhead during evaluation.
 - Profiling: Use built-in profiler hooks in the metrics engine to capture detailed precision/recall curves and AP breakdowns.
 - Visualization cost: Rendering on the fly can be expensive; consider disabling or reducing frequency for long sequences.
+- **Enhanced**: COCO-17 color scheme verification adds minimal overhead while ensuring consistent visualization across different pose estimation backends.
 
 ## Troubleshooting Guide
 - Missing dataset metadata: The COCO metrics require dataset metadata with label_map; ensure dataset_meta is configured.
 - Empty predictions/annotations: Verify adapters convert outputs to PoseEstimationPrediction and that visibility/scores are populated.
 - Visibility thresholds: Ensure visibility flags are computed consistently with the chosen score threshold.
 - CSV/JSON persistence: Confirm file paths and permissions; flush buffers before saving to avoid partial writes.
+- **Enhanced**: COCO-17 keypoint color scheme issues: Verify that keypoint indices follow the standard COCO-17 order (nose=0, eyes=1-2, ears=3-4, shoulders=5-6, elbows=7-8, wrists=9-10, spine=11-12, hips=13-14, knees=15-16) for consistent color coding.
 
 **Section sources**
 - [coco_metrics.py:74-87](file://open_model_zoo/tools/accuracy_checker/accuracy_checker/metrics/coco_metrics.py#L74-L87)
 - [evaluator.py:86-114](file://utils/evaluator.py#L86-L114)
 
 ## Conclusion
-The evaluation utilities provide a complete pipeline from model outputs to COCO-compliant metrics and visual feedback. By leveraging standardized representations, adapters, and metrics, teams can reliably compare models, track regressions, and benchmark performance against COCO baselines.
+The evaluation utilities provide a complete pipeline from model outputs to COCO-compliant metrics and visual feedback. By leveraging standardized representations, adapters, and metrics, teams can reliably compare models, track regressions, and benchmark performance against COCO baselines. The enhanced visualization utilities now feature improved COCO-17 keypoint color scheme verification and consistent coloring rules across pose estimation backends, ensuring reliable and standardized visual assessment.
 
 ## Appendices
 
@@ -418,9 +454,13 @@ The evaluation utilities provide a complete pipeline from model outputs to COCO-
 ### E. Visualization and Rendering
 - Use the provided renderers to overlay skeletons and optional bounding boxes.
 - Adjust score thresholds to filter noisy detections.
+- **Enhanced**: COCO-17 keypoint color scheme ensures consistent visualization: nose (cyan), odd indices (green), even indices (red).
 
 **Section sources**
 - [visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
+- [vis.py:58-92](file://models/AlphaPose/alphapose/utils/vis.py#L58-L92)
+- [alphapose_hpe.py:34-39](file://alphapose_hpe.py#L34-L39)
+- [openvino_base_hpe.py:56-62](file://openvino_base_hpe.py#L56-L62)
 - [human_pose_estimation_demo.py:123-152](file://open_model_zoo/demos/human_pose_estimation_demo/python/human_pose_estimation_demo.py#L123-L152)
 - [render_human_pose.hpp:1-25](file://open_model_zoo/demos/multi_channel_human_pose_estimation_demo/cpp/render_human_pose.hpp#L1-L25)
 
@@ -429,4 +469,12 @@ The evaluation utilities provide a complete pipeline from model outputs to COCO-
 - Persist COCO results and compare against baseline outputs to detect regressions.
 - Automate evaluation by invoking the COCO evaluation module programmatically.
 
-[No sources needed since this section provides general guidance]
+### G. COCO-17 Keypoint Order Verification
+- **Enhanced**: The visualization system now includes COCO-17 keypoint order verification to ensure consistent color coding across different pose estimation backends.
+- Keypoint indices follow the standard COCO-17 order: nose (0), eyes (1-2), ears (3-4), shoulders (5-6), elbows (7-8), wrists (9-10), spine (11-12), hips (13-14), knees (15-16).
+- Color coding rules: nose (cyan), odd indices (green), remaining indices (red).
+
+**Section sources**
+- [vis.py:58-92](file://models/AlphaPose/alphapose/utils/vis.py#L58-L92)
+- [alphapose_hpe.py:34-39](file://alphapose_hpe.py#L34-L39)
+- [openvino_base_hpe.py:56-62](file://openvino_base_hpe.py#L56-L62)

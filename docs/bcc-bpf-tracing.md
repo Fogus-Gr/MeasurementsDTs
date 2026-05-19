@@ -37,7 +37,7 @@ This document explains the kernel-level network traffic tracing system used to m
 │  └──────────────────────────────────────────┘        │
 │                                                        │
 └──────────────────────────────────────────────────────┘
-         ↑ attach_raw_socket(eth0)
+         ↑ attach_raw_socket(<detected interface>)
          │
 ┌────────┴─────────────────────────────────────────────┐
 │ User Space (bcc_rx_bytes.py)                          │
@@ -64,8 +64,8 @@ python3 bcc_rx_bytes.py <STREAMER_IP> <STREAMER_PORT> <HPE_PORT>
 
 | Argument | Example | Description |
 |----------|---------|-------------|
-| `STREAMER_IP` | `172.18.0.2` | IP of the h264-streaming-server container |
-| `STREAMER_PORT` | `8089` | Port the streamer listens on |
+| `STREAMER_IP` | `rtsp-broker` | IP/hostname of the RTSP broker container that HPE connects to |
+| `STREAMER_PORT` | `8554` | RTSP port used by MediaMTX |
 | `HPE_PORT` | _(auto-detected)_ | HPE's dynamic ephemeral source port |
 
 ---
@@ -106,8 +106,11 @@ int count_rx(struct __sk_buff *skb) {
 ```python
 b = BPF(text=bpf_program, cflags=["-Wno-macro-redefined", "-Wno-address-of-packed-member"])
 fn = b.load_func("count_rx", BPF.SOCKET_FILTER)
-b.attach_raw_socket(fn, "eth0")
+b.attach_raw_socket(fn, interface)
 ```
+
+`entrypoint.sh` selects `interface` from `BCC_INTERFACE`, then the default route,
+then the first non-loopback interface as a fallback.
 
 ---
 
@@ -146,7 +149,7 @@ while True:
 
 1. **Resolve streaming server hostname** to IP:
    ```bash
-   getent hosts h264-streaming-server
+   getent hosts rtsp-broker
    ```
 
 2. **Get network interface** from default route:
@@ -154,21 +157,21 @@ while True:
    ip route | awk '/default/ {print $5}'
    ```
 
-3. **Wait for HPE to establish TCP connection** to port 8089 (up to 10 attempts, 3 s apart):
+3. **Wait for HPE to establish TCP connection** to port 8554 (up to 10 attempts, 3 s apart):
    ```bash
-   ss -ntp | grep ":8089"
+   ss -ntp | grep ":8554"
    ```
 
 4. **Extract HPE's dynamic source port**:
    ```bash
-   ss -ntp | awk '/:8089/ {split($4, a, ":"); print a[length(a)]}' | head -1
+   ss -ntp | awk '/:8554/ {split($4, a, ":"); print a[length(a)]}' | head -1
    ```
 
 5. **Pass detected port** to `bcc_rx_bytes.py`.
 
 ### Why Port Detection?
 
-- HPE connects to the streamer on port `8089` but uses a random ephemeral source port.
+- HPE connects to `rtsp-broker` on port `8554` but uses a random ephemeral source port.
 - The BCC tracer shares HPE's network namespace (`network_mode: service:hpe`).
 - It needs the exact source port to filter traffic accurately.
 - Port detection runs **after** HPE starts and establishes the connection.
@@ -289,7 +292,7 @@ dmesg | grep -i bpf
 
 - Full packet capture:
   ```bash
-  tcpdump -i eth0 tcp port 8089 -nn -tt
+  tcpdump -i "${BCC_INTERFACE:-eth0}" tcp port 8554 -nn -tt
   ```
 - Higher overhead — writes full packet data to disk.
 - Useful for debugging: analyze packet contents, TCP flags, retransmissions.
@@ -316,20 +319,20 @@ ls /lib/modules/$(uname -r)/build/
 
 ```bash
 # Check HPE has established the connection
-docker exec bcc-tracer ss -ntp | grep 8089
+docker exec bcc-tracer ss -ntp | grep 8554
 
 # Inspect tracer logs
 docker logs bcc-tracer 2>&1 | grep -i "port\|detect\|monitor"
 
 # Manual port extraction
-docker exec bcc-tracer ss -ntp | awk '/:8089/ {split($4, a, ":"); print a[length(a)]}'
+docker exec bcc-tracer ss -ntp | awk '/:8554/ {split($4, a, ":"); print a[length(a)]}'
 ```
 
 ### Empty or Zero RX Data
 
 ```bash
-# Verify the stream is flowing
-curl -v http://172.18.0.2:8089/stream.h264 | head -c 100
+# Verify the RTSP stream is flowing
+ffprobe -v error rtsp://rtsp-broker:8554/stream
 
 # Check BCC attachment logs
 docker logs bcc-tracer 2>&1 | tail -20
@@ -359,5 +362,5 @@ The BCC/BPF tracing stack provides a low-overhead, kernel-level measurement of n
 
 - **In-kernel aggregation** eliminates per-packet userspace overhead.
 - **Shared network namespace** (`network_mode: service:hpe`) ensures the tracer sees exactly the same traffic as the HPE process.
-- **Dynamic port detection** handles the ephemeral source port assigned by the OS when HPE opens its TCP connection to the streamer.
+- **Dynamic interface and port detection** selects the tracer interface and handles the ephemeral source port assigned by the OS when HPE opens its TCP connection to the RTSP broker.
 - **Raw socket filter** (not XDP or tc) keeps the implementation portable across kernel versions ≥ 4.4.

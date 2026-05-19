@@ -4,7 +4,7 @@ from openvino.runtime import Core
 import numpy as np
 import cv2
 from pathlib import Path
-from base_hpe import BaseHPE, Body
+from base_hpe import BaseHPE, Body, _is_stream_url
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_MODEL = SCRIPT_DIR / "models/MoveNet/movenet_multipose_lightning_256x256_FP32.xml"
@@ -31,13 +31,13 @@ class MoveNetHPE(BaseHPE):
 
     def _init_opencv_video_capture(self, input_src):
         """Initialize OpenCV video capture for fallback when PyNvCodec is not available."""
-        if input_src.isdigit():
+        if isinstance(input_src, int) or (isinstance(input_src, str) and input_src.isdigit()):
             # Webcam input
             self.cap = cv2.VideoCapture(int(input_src))
         else:
-            # Video file or HTTP stream
-            if isinstance(input_src, str) and input_src.startswith("http"):
-                print(f"Using FFmpeg backend for HTTP stream: {input_src}")
+            # Video file or HTTP/RTSP stream
+            if isinstance(input_src, str) and _is_stream_url(input_src):
+                print(f"Using FFmpeg backend for stream: {input_src}")
                 self.cap = cv2.VideoCapture(input_src, cv2.CAP_FFMPEG)
                 self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency for real-time streams
             else:
@@ -93,7 +93,9 @@ class MoveNetHPE(BaseHPE):
             kps = result[i][:51].reshape(17,-1)
             bbox = result[i][51:55].reshape(2,2)          
             score = result[i][55]
-            if score > self.score_thresh:   # TODO - use seperate keypoint scores
+            kp_scores = kps[:, 2]
+            mean_kp_score = float(np.mean(kp_scores))
+            if mean_kp_score >= self.score_thresh:
                 ymin, xmin, ymax, xmax = (bbox * [self.padding.padded_h, self.padding.padded_w]).flatten().astype(int)
 
                 kp_xy =kps[:,[1,0]]

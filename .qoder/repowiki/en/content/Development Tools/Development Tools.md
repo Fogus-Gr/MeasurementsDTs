@@ -3,8 +3,11 @@
 <cite>
 **Referenced Files in This Document**
 - [README.md](file://dev_tools/README.md)
-- [smoke_test.sh](file://dev_tools/smoke_test.sh)
+- [requirements_dev.txt](file://requirements_dev.txt)
+- [requirements.txt](file://requirements.txt)
+- [requirements.txt.in](file://requirements.txt.in)
 - [install_from_readme.sh](file://dev_tools/install_from_readme.sh)
+- [smoke_test.sh](file://dev_tools/smoke_test.sh)
 - [app.py](file://dev_tools/app.py)
 - [app_ffmpeg.py](file://dev_tools/app_ffmpeg.py)
 - [app_optimized.py](file://dev_tools/app_optimized.py)
@@ -26,11 +29,11 @@
 
 ## Update Summary
 **Changes Made**
-- Enhanced HTTP streaming infrastructure with optimized queue management and metadata extraction system
-- Improved PyNvCodec integration for hardware-accelerated video decoding
-- Added frame number and timestamp metadata extraction for HTTP MJPEG streams
-- Updated development servers with enhanced buffering and frame skipping capabilities
-- Integrated optimized queue management for HTTP stream processing
+- Updated development environment setup to focus on essential tools, scientific computing libraries, and CPU-only PyTorch installation
+- Added requirements_dev.txt with 75 carefully curated packages for Windows-based development without GPU requirements
+- Removed references to legacy PowerShell build scripts and Windows-specific development tools
+- Enhanced development server implementations for testing video streaming, adaptive streaming capabilities, and optimization validation
+- Updated model validation tools and performance profiling applications to align with new requirements structure
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -52,7 +55,7 @@ This document describes the development and testing utilities for the Human Pose
 - Testing methodologies, validation scripts, and debugging tools
 - Guidance on extending the framework, adding new HPE methods, and maintaining code quality
 
-**Updated** Enhanced HTTP streaming infrastructure now includes optimized queue management, metadata extraction system for frame numbers and timestamps, and improved PyNvCodec integration for hardware-accelerated video processing.
+**Updated** Development environment setup now focuses on essential tools, scientific computing libraries, and CPU-only PyTorch installation for Windows-based development without GPU requirements. The requirements structure has been streamlined with requirements_dev.txt providing curated packages for development.
 
 ## Project Structure
 The development tools are organized under the dev_tools directory and integrate with the main HPE pipeline and optimization modules. Key areas:
@@ -88,10 +91,15 @@ N["run_nvidia_dcgm.sh"]
 O["run_perf_plot.sh"]
 P["measure_flops.sh"]
 end
+subgraph "Requirements Management"
+Q["requirements_dev.txt"]
+R["requirements.txt"]
+S["requirements.txt.in"]
+end
 subgraph "HTTP Streaming Infrastructure"
-Q["direct_stream_server.py"]
-R["nginx-entrypoint.sh"]
-S["changes_improvemnts.txt"]
+T["direct_stream_server.py"]
+U["nginx-entrypoint.sh"]
+V["changes_improvemnts.txt"]
 end
 A --> H
 B --> H
@@ -109,9 +117,12 @@ M --> K
 N --> H
 O --> H
 P --> H
-Q --> H
-R --> Q
-S --> Q
+Q --> G
+R --> G
+S --> R
+T --> H
+U --> T
+V --> T
 ```
 
 **Diagram sources**
@@ -131,6 +142,9 @@ S --> Q
 - [run_nvidia_dcgm.sh:1-29](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh#L1-L29)
 - [run_perf_plot.sh:1-25](file://Measure_plot_cpu_perf/run_perf_plot.sh#L1-L25)
 - [measure_flops.sh](file://Measure_Flops/measure_flops.sh)
+- [requirements_dev.txt:1-76](file://requirements_dev.txt#L1-L76)
+- [requirements.txt:1-100](file://requirements.txt#L1-L100)
+- [requirements.txt.in:1-78](file://requirements.txt.in#L1-L78)
 - [direct_stream_server.py:1-304](file://rtsp-ipcam/direct_stream_server.py#L1-L304)
 - [nginx-entrypoint.sh:1-11](file://rtsp-ipcam/nginx-entrypoint.sh#L1-L11)
 - [changes_improvemnts.txt](file://rtsp-ipcam/changes_improvemnts.txt)
@@ -152,7 +166,7 @@ S --> Q
   - changes_improvemnts.txt: HTTP streaming optimizations and client commands
 - Validation and smoke testing:
   - smoke_test.sh: Automated smoke tests across multiple HPE methods
-  - install_from_readme.sh: Environment setup aligned with README
+  - install_from_readme.sh: Environment setup aligned with README using conda and curated requirements
 - Performance profiling:
   - run_nvidia_dcgm.sh: GPU metrics logging via nvidia-smi
   - run_perf_plot.sh: CPU perf metrics collection and plotting
@@ -164,6 +178,10 @@ S --> Q
 - Enhanced HPE processing:
   - base_hpe.py: Base HPE class with PyNvCodec integration and metadata extraction
   - alphapose_hpe.py: AlphaPose implementation with GPU acceleration and queue management
+- Requirements management:
+  - requirements_dev.txt: 75 carefully curated packages for Windows-based development without GPU requirements
+  - requirements.txt: Complete dependency list with GPU support
+  - requirements.txt.in: Template with version constraints and platform-specific requirements
 
 **Section sources**
 - [app.py:1-140](file://dev_tools/app.py#L1-L140)
@@ -184,6 +202,9 @@ S --> Q
 - [optimized_main.py:1-257](file://optimizations/optimized_main.py#L1-L257)
 - [base_hpe.py:1-630](file://base_hpe.py#L1-L630)
 - [alphapose_hpe.py:1-334](file://alphapose_hpe.py#L1-L334)
+- [requirements_dev.txt:1-76](file://requirements_dev.txt#L1-L76)
+- [requirements.txt:1-100](file://requirements.txt#L1-L100)
+- [requirements.txt.in:1-78](file://requirements.txt.in#L1-L78)
 
 ## Architecture Overview
 The development tools integrate with the main HPE pipeline and provide:
@@ -192,6 +213,7 @@ The development tools integrate with the main HPE pipeline and provide:
 - CPU/GPU optimization modules for OpenVINO-based HPE
 - Profiling utilities for GPU and CPU performance
 - Enhanced HTTP streaming infrastructure with metadata extraction and queue management
+- Streamlined requirements management for development environments
 
 ```mermaid
 graph TB
@@ -204,6 +226,7 @@ PyNvCodec["PyNvCodec Integration"]
 Metadata["Metadata Extraction"]
 Optimizer["CPU Optimizer (EPICCPUOptimizer)"]
 Profilers["Profiling Scripts"]
+Requirements["Requirements Management"]
 Client --> HTTPStream
 HTTPStream --> DevServers
 DevServers --> Main
@@ -212,6 +235,8 @@ HPE --> PyNvCodec
 HPE --> Metadata
 HPE --> Optimizer
 Profilers --> Main
+Requirements --> Main
+Requirements --> DevServers
 ```
 
 **Diagram sources**
@@ -221,6 +246,7 @@ Profilers --> Main
 - [run_nvidia_dcgm.sh:1-29](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh#L1-L29)
 - [run_perf_plot.sh:1-25](file://Measure_plot_cpu_perf/run_perf_plot.sh#L1-L25)
 - [direct_stream_server.py:1-304](file://rtsp-ipcam/direct_stream_server.py#L1-L304)
+- [requirements_dev.txt:1-76](file://requirements_dev.txt#L1-L76)
 
 ## Detailed Component Analysis
 
@@ -322,7 +348,7 @@ AE1 --> Done(["Smoke tests completed"])
 - [smoke_test.sh:23-41](file://dev_tools/smoke_test.sh#L23-L41)
 
 Execution:
-- Ensure environment is prepared using install_from_readme.sh
+- Ensure environment is prepared using install_from_readme.sh with curated requirements
 - Run smoke_test.sh with optional device and environment name
 - Validate outputs (saved images/videos, JSON/CSV exports if enabled)
 
@@ -444,6 +470,39 @@ Key enhancements:
 - [base_hpe.py:351-387](file://base_hpe.py#L351-L387)
 - [base_hpe.py:72-86](file://base_hpe.py#L72-L86)
 
+### Requirements Management System
+The development environment now uses a streamlined requirements management approach with separate files for different use cases.
+
+```mermaid
+flowchart TD
+DevEnv["Development Environment"] --> DevReqs["requirements_dev.txt<br/>75 curated packages<br/>Windows CPU-only"]
+ProdEnv["Production Environment"] --> ProdReqs["requirements.txt<br/>Complete dependency list<br/>GPU support included"]
+Template["Template System"] --> TemplateReqs["requirements.txt.in<br/>Version constraints<br/>Platform-specific"]
+DevReqs --> Install["install_from_readme.sh<br/>Conda environment setup"]
+ProdReqs --> Install
+TemplateReqs --> ProdReqs
+Install --> PyTorch["PyTorch 2.4.1 CPU<br/>or 2.2.1 Windows CPU"]
+PyTorch --> DevTools["Scientific Computing<br/>Libraries & Tools"]
+```
+
+**Diagram sources**
+- [requirements_dev.txt:1-76](file://requirements_dev.txt#L1-L76)
+- [requirements.txt:1-100](file://requirements.txt#L1-L100)
+- [requirements.txt.in:1-78](file://requirements.txt.in#L1-L78)
+- [install_from_readme.sh:1-39](file://dev_tools/install_from_readme.sh#L1-L39)
+
+Key features:
+- **requirements_dev.txt**: 75 carefully curated packages for Windows-based development without GPU requirements
+- **requirements.txt**: Complete dependency list with GPU support for production environments
+- **requirements.txt.in**: Template with version constraints and platform-specific requirements
+- **install_from_readme.sh**: Environment setup using conda with curated package selection
+
+**Section sources**
+- [requirements_dev.txt:1-76](file://requirements_dev.txt#L1-L76)
+- [requirements.txt:1-100](file://requirements.txt#L1-L100)
+- [requirements.txt.in:1-78](file://requirements.txt.in#L1-L78)
+- [install_from_readme.sh:1-39](file://dev_tools/install_from_readme.sh#L1-L39)
+
 ## Dependency Analysis
 The development tools depend on:
 - Flask and OpenCV for MJPEG streaming
@@ -452,6 +511,7 @@ The development tools depend on:
 - PyNvCodec for hardware-accelerated video decoding
 - psutil and platform for CPU capability detection
 - NVIDIA DCGM and perf for profiling
+- Curated development packages from requirements_dev.txt
 
 ```mermaid
 graph TB
@@ -463,6 +523,9 @@ PyNvCodec["PyNvCodec"]
 PSUtil["psutil/platform"]
 DCGM["nvidia-smi"]
 Perf["perf"]
+ReqsDev["requirements_dev.txt"]
+ReqsProd["requirements.txt"]
+ReqsTemplate["requirements.txt.in"]
 app_py["app.py"] --> Flask
 app_py --> OpenCV
 app_ffmpeg["app_ffmpeg.py"] --> Flask
@@ -479,6 +542,11 @@ alphapose_hpe["alphapose_hpe.py"] --> PyNvCodec
 cpu_opt["cpu_performance_optimizer.py"] --> PSUtil
 prof_gpu["run_nvidia_dcgm.sh"] --> DCGM
 prof_cpu["run_perf_plot.sh"] --> Perf
+ReqsDev --> app_py
+ReqsDev --> app_ffmpeg
+ReqsDev --> main_mod
+ReqsProd --> main_mod
+ReqsTemplate --> ReqsProd
 ```
 
 **Diagram sources**
@@ -493,12 +561,18 @@ prof_cpu["run_perf_plot.sh"] --> Perf
 - [cpu_performance_optimizer.py:1-539](file://optimizations/cpu_performance_optimizer.py#L1-L539)
 - [run_nvidia_dcgm.sh:1-29](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh#L1-L29)
 - [run_perf_plot.sh:1-25](file://Measure_plot_cpu_perf/run_perf_plot.sh#L1-L25)
+- [requirements_dev.txt:1-76](file://requirements_dev.txt#L1-L76)
+- [requirements.txt:1-100](file://requirements.txt#L1-L100)
+- [requirements.txt.in:1-78](file://requirements.txt.in#L1-L78)
 
 **Section sources**
 - [main.py:1-242](file://main.py#L1-L242)
 - [base_hpe.py:1-630](file://base_hpe.py#L1-L630)
 - [alphapose_hpe.py:1-334](file://alphapose_hpe.py#L1-L334)
 - [cpu_performance_optimizer.py:1-539](file://optimizations/cpu_performance_optimizer.py#L1-L539)
+- [requirements_dev.txt:1-76](file://requirements_dev.txt#L1-L76)
+- [requirements.txt:1-100](file://requirements.txt#L1-L100)
+- [requirements.txt.in:1-78](file://requirements.txt.in#L1-L78)
 
 ## Performance Considerations
 - Streaming servers:
@@ -513,12 +587,16 @@ prof_cpu["run_perf_plot.sh"] --> Perf
 - Profiling:
   - Use run_nvidia_dcgm.sh for GPU utilization and temperature metrics
   - Use run_perf_plot.sh for CPU perf metrics collection and visualization
+- Requirements management:
+  - requirements_dev.txt provides 75 carefully curated packages for Windows development without GPU requirements
+  - Streamlined package selection reduces installation complexity and improves development experience
 
 **Updated** The enhanced HTTP streaming infrastructure now provides:
 - Optimized queue management with proper frame boundary detection
 - Metadata extraction system for frame numbers and timestamps
 - Improved PyNvCodec integration for hardware-accelerated video processing
 - Enhanced buffering and frame skipping capabilities for HTTP MJPEG streams
+- Streamlined requirements management with curated development packages
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -539,6 +617,10 @@ Common issues and resolutions:
   - Check metadata extraction with X-Metadata headers in HTTP responses
   - Verify frame boundary detection and buffer management in HTTP MJPEG streams
   - Ensure proper frame skipping and timeout handling for interrupted streams
+- Requirements installation issues:
+  - Use install_from_readme.sh for conda-based environment setup with curated packages
+  - requirements_dev.txt provides pre-curated packages for Windows development
+  - requirements.txt.in contains version constraints for production builds
 
 **Section sources**
 - [stream_video_server.py:108-132](file://dev_tools/stream_video_server.py#L108-L132)
@@ -549,6 +631,8 @@ Common issues and resolutions:
 - [run_nvidia_dcgm.sh:1-29](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh#L1-L29)
 - [run_perf_plot.sh:1-25](file://Measure_plot_cpu_perf/run_perf_plot.sh#L1-L25)
 - [base_hpe.py:72-86](file://base_hpe.py#L72-L86)
+- [install_from_readme.sh:1-39](file://dev_tools/install_from_readme.sh#L1-L39)
+- [requirements_dev.txt:1-76](file://requirements_dev.txt#L1-L76)
 
 ## Conclusion
 The development tools provide a comprehensive toolkit for validating and optimizing HPE inference:
@@ -557,14 +641,17 @@ The development tools provide a comprehensive toolkit for validating and optimiz
 - CPU/GPU profiling utilities support performance analysis
 - Optimized OpenVINO HPE delivers significant performance gains on EPIC processors
 - Enhanced HTTP streaming infrastructure provides optimized queue management, metadata extraction, and PyNvCodec integration
+- Streamlined requirements management simplifies development environment setup
 
-**Updated** The enhanced HTTP streaming infrastructure significantly improves the reliability and performance of HTTP-based video streaming for HPE applications, with proper metadata handling and hardware acceleration support.
+**Updated** The development environment setup now focuses on essential tools, scientific computing libraries, and CPU-only PyTorch installation for Windows-based development without GPU requirements. The enhanced HTTP streaming infrastructure significantly improves the reliability and performance of HTTP-based video streaming for HPE applications, with proper metadata handling and hardware acceleration support.
 
 ## Appendices
 
 ### Development Workflow and Quality Assurance
 - Environment setup:
-  - Use install_from_readme.sh to create and populate the environment
+  - Use install_from_readme.sh to create and populate the environment with curated packages
+  - requirements_dev.txt provides 75 carefully curated packages for Windows development
+  - Streamlined package selection reduces installation complexity
 - Smoke testing:
   - Run smoke_test.sh to validate MoveNet, AlphaPose, and EfficientHRNet1
 - Streaming validation:
@@ -575,6 +662,9 @@ The development tools provide a comprehensive toolkit for validating and optimiz
   - Enable hardware acceleration with PyNvCodec when available
 - Profiling:
   - Collect GPU metrics with run_nvidia_dcgm.sh and CPU metrics with run_perf_plot.sh
+- Requirements management:
+  - Use requirements_dev.txt for development environments
+  - requirements.txt.in provides version constraints for production builds
 
 **Section sources**
 - [install_from_readme.sh:1-39](file://dev_tools/install_from_readme.sh#L1-L39)
@@ -582,6 +672,8 @@ The development tools provide a comprehensive toolkit for validating and optimiz
 - [optimized_main.py:1-257](file://optimizations/optimized_main.py#L1-L257)
 - [run_nvidia_dcgm.sh:1-29](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh#L1-L29)
 - [run_perf_plot.sh:1-25](file://Measure_plot_cpu_perf/run_perf_plot.sh#L1-L25)
+- [requirements_dev.txt:1-76](file://requirements_dev.txt#L1-L76)
+- [requirements.txt.in:1-78](file://requirements.txt.in#L1-L78)
 
 ### Extending the Framework and Adding New HPE Methods
 - Add new HPE method:
@@ -597,12 +689,17 @@ The development tools provide a comprehensive toolkit for validating and optimiz
 - Testing:
   - Extend smoke_test.sh to include the new method in automated validation
   - Test enhanced HTTP streaming infrastructure with the new HPE method
+- Requirements management:
+  - Add new dependencies to requirements_dev.txt for development
+  - Update requirements.txt.in with version constraints for production
 
 **Section sources**
 - [main.py:207-227](file://main.py#L207-L227)
 - [enhanced_openvino_hpe.py:25-66](file://optimizations/enhanced_openvino_hpe.py#L25-L66)
 - [base_hpe.py:147-185](file://base_hpe.py#L147-L185)
 - [alphapose_hpe.py:33-66](file://alphapose_hpe.py#L33-L66)
+- [requirements_dev.txt:1-76](file://requirements_dev.txt#L1-L76)
+- [requirements.txt.in:1-78](file://requirements.txt.in#L1-L78)
 
 ### HTTP Streaming Infrastructure Configuration
 The HTTP streaming infrastructure provides flexible configuration options for different deployment scenarios:
@@ -616,3 +713,17 @@ The HTTP streaming infrastructure provides flexible configuration options for di
 - [direct_stream_server.py:74-133](file://rtsp-ipcam/direct_stream_server.py#L74-L133)
 - [nginx-entrypoint.sh:4-11](file://rtsp-ipcam/nginx-entrypoint.sh#L4-L11)
 - [changes_improvemnts.txt](file://rtsp-ipcam/changes_improvemnts.txt)
+
+### Requirements Management Best Practices
+The requirements management system provides a structured approach to dependency management:
+
+- **Development Dependencies**: requirements_dev.txt contains 75 carefully curated packages for Windows-based development without GPU requirements
+- **Production Dependencies**: requirements.txt includes complete dependency list with GPU support
+- **Template System**: requirements.txt.in provides version constraints and platform-specific requirements
+- **Installation Strategy**: install_from_readme.sh uses conda for environment management with curated package selection
+
+**Section sources**
+- [requirements_dev.txt:1-76](file://requirements_dev.txt#L1-L76)
+- [requirements.txt:1-100](file://requirements.txt#L1-L100)
+- [requirements.txt.in:1-78](file://requirements.txt.in#L1-L78)
+- [install_from_readme.sh:1-39](file://dev_tools/install_from_readme.sh#L1-L39)

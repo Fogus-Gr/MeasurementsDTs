@@ -9,7 +9,7 @@ import numpy as np
 import cv2
 import torch
 
-from base_hpe import BaseHPE
+from base_hpe import BaseHPE, _is_stream_url
 from base_hpe import Body
 
 from models.OpenVINO.model_api.models import ImageModel
@@ -27,7 +27,7 @@ MODEL_CONFIGS = {
         "gpu_supported": True,
     },
     "efficienthrnet1": {
-        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.xml",
+        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP32/human-pose-estimation-0005.xml",
         "input_size": (288, 288),
         "architecture": "HPE-associative-embedding",
         "gpu_supported": True,
@@ -101,9 +101,9 @@ class OpenVINOBaseHPE(BaseHPE):
         elif isinstance(input_src, int):
             self.cap = cv2.VideoCapture(input_src)
         else:
-            # Use FFmpeg backend for HTTP streams for better reliability
-            if isinstance(input_src, str) and input_src.startswith("http"):
-                print(f"Using FFmpeg backend for HTTP stream: {input_src}")
+            # Use FFmpeg backend for HTTP/RTSP streams for better reliability
+            if isinstance(input_src, str) and _is_stream_url(input_src):
+                print(f"Using FFmpeg backend for stream: {input_src}")
                 self.cap = cv2.VideoCapture(input_src, cv2.CAP_FFMPEG)
                 self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency for real-time streams
             else:
@@ -112,7 +112,7 @@ class OpenVINOBaseHPE(BaseHPE):
         if not self.cap.isOpened():
             print(f"[ERROR] Could not open video source: {input_src}")
             # For streaming URLs, set default dimensions and continue
-            if isinstance(input_src, str) and input_src.startswith("http"):
+            if isinstance(input_src, str) and _is_stream_url(input_src):
                 print("[INFO] Setting default dimensions for streaming URL")
                 self.img_w = 640
                 self.img_h = 480
@@ -132,9 +132,9 @@ class OpenVINOBaseHPE(BaseHPE):
 
     def _ensure_video_capture(self):
         """Ensure video capture is initialized for streaming URLs"""
-        if self.cap is None and hasattr(self, 'input_src') and isinstance(self.input_src, str) and self.input_src.startswith("http"):
+        if self.cap is None and hasattr(self, 'input_src') and isinstance(self.input_src, str) and _is_stream_url(self.input_src):
             print(f"Initializing video capture for streaming URL: {self.input_src}")
-            print(f"Using FFmpeg backend for HTTP stream: {self.input_src}")
+            print(f"Using FFmpeg backend for stream: {self.input_src}")
             self.cap = cv2.VideoCapture(self.input_src, cv2.CAP_FFMPEG)
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency for real-time streams
             if not self.cap.isOpened():
@@ -264,15 +264,10 @@ class OpenVINOBaseHPE(BaseHPE):
         inputs, preprocessing_meta = self.model.preprocess(padded)
         raw_result = self.model.infer_sync(inputs)
 
-        results = None
-        if raw_result:
-            results = self.model.postprocess(raw_result, preprocessing_meta)
-
-        poses = []
-        scores = []
-        if results:
-            poses, scores = results
-
+        if not raw_result:
+            return [], []
+        results = self.model.postprocess(raw_result, preprocessing_meta)
+        poses, scores = results if results else ([], [])
         return poses, scores
 
     def postprocess(self, predictions):
@@ -315,6 +310,8 @@ class OpenVINOBaseHPE(BaseHPE):
 
     def main_loop(self):
         """Override main_loop to handle streaming URLs properly"""
+        from utils.evaluator import reset_results
+        reset_results()
         # Load model if not already loaded
         if not hasattr(self, 'model') or self.model is None:
             print("Loading model...")

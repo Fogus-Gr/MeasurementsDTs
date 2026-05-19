@@ -46,7 +46,7 @@ RUN git clone https://github.com/NVIDIA/VideoProcessingFramework.git /tmp/VideoP
     rm -rf /tmp/VideoProcessingFramework
 
 # Install OpenVINO with GPU (NVIDIA) support
-RUN pip install --no-cache-dir openvino-dev[onnx,tensorflow2,pytorch,caffe]==2024.2.0
+RUN pip install --no-cache-dir openvino-dev[onnx,tensorflow2,pytorch,caffe]==2024.4.0
 
 ENV TORCH_CUDA_ARCH_LIST=8.6
 # (Optional) Set OpenVINO environment variables

@@ -25,7 +25,7 @@ If you are new to this repository, read this section before diving into the code
 
 Two things in one:
 
-1. **An HPE inference library** — a unified Python interface for running five pose estimation backends (AlphaPose, MoveNet, OpenPose, HigherHRNet, EfficientHRNet) against images, videos, webcam, or HTTP streams.
+1. **An HPE inference library** — a unified Python interface for running five pose estimation backends (AlphaPose, MoveNet, OpenPose, HigherHRNet, EfficientHRNet) against images, videos, webcam, or HTTP/RTSP streams.
 2. **A performance benchmarking platform** (`perf-tuning-base` branch) — a set of Docker-based experiment rigs for measuring inference throughput, CPU/GPU utilisation, memory, and network bandwidth under realistic streaming conditions.
 
 ### Key files to read first
@@ -64,7 +64,8 @@ main.py
 
 ```
 run_experiment.sh
-  ├── docker compose up h264-streaming-server   # serves video as H.264 HTTP stream
+  ├── docker compose up rtsp-broker             # starts MediaMTX as the RTSP broker
+  ├── docker compose up streamer                # serves video as an RTSP stream
   ├── docker compose up hpe                     # runs main.py against the stream
   ├── docker compose up perf_monitor            # samples CPU/memory every 500ms
   ├── docker compose up gpu-metrics             # polls nvidia-smi every 500ms
@@ -226,7 +227,7 @@ Each experiment rig lives in its own folder with a `run_experiment.sh` (the sing
 graph TD
     A[run_experiment.sh] --> B[docker-compose.yaml]
     B --> C[hpe\nruns main.py against a live stream]
-    B --> D[h264-streaming-server\nserves video over HTTP/H.264]
+    B --> D[rtsp-broker + streamer\nserves video over RTSP]
     B --> E[perf_monitor\nsamples CPU/memory/network]
     B --> F[gpu-metrics\npolls nvidia-smi]
     B --> G[bcc-tracer / bpftrace\neBPF network tracing - optional]
@@ -238,9 +239,9 @@ graph TD
 | Folder | Entry point | Input source | HPE runs? | Monitors | Purpose |
 |---|---|---|---|---|---|
 | `monitor_hpe/` | `run_experiment.sh` | Local video file (volume mount) | ✅ | CPU%, RSS memory | Baseline inference cost — no network |
-| `ffmpeg_hpe/` | `run_experiment.sh` `run_experiment_bcc.sh` | Live H.264 HTTP stream (port 8089) | ✅ | CPU%, RSS, GPU, BCC RX bytes | Full streaming benchmark — main rig |
+| `ffmpeg_hpe/` | `run_experiment.sh` `run_experiment_bcc.sh` | Live RTSP stream via MediaMTX (port 8554) | ✅ | CPU%, RSS, GPU, BCC RX bytes | Full streaming benchmark — main rig |
 | `recent-dash/` | `run_experiment.sh` | DASH segments via HTTP proxy | ❌ | CPU%, RSS, bpftrace RX/TX | HTTP caching proxy research — not HPE |
-| `rtsp-ipcam/` | `start_server.sh` | — (is the server) | ❌ | — | Shared H.264 streaming server used by `ffmpeg_hpe/` |
+| *(Streaming)* | — | — | — | — | RTSP streaming is handled by `jrottenberg/ffmpeg:4.4-nvidia` (streamer) + `bluenviron/mediamtx:1-ffmpeg` (broker) in `ffmpeg_hpe/docker-compose.yaml` |
 | `Measure_Flops/` | `measure_flops.sh` | Any HPE command | ✅ | GPU FLOPS, TOPS, memory BW | One-shot Nsight Compute profiling |
 | `Measure_gpu_dcgm/` | `run_nvidia_dcgm.sh` | — (sidecar) | ❌ | GPU util, temp, power | Standalone GPU telemetry collector |
 | `Measure_plot_cpu_perf/` | `run_perf_plot.sh` | PID file | ❌ | CPU cycles via `perf stat` | Standalone CPU cycle counter |
@@ -259,11 +260,12 @@ No streaming server. Video is mounted directly as a volume.
 cd monitor_hpe && ./run_experiment.sh
 ```
 
-#### `ffmpeg_hpe/` — H.264 stream + full monitoring stack
+#### `ffmpeg_hpe/` — RTSP stream + full monitoring stack
 
-The main experiment rig. Five containers:
-- `h264-streaming-server` (from `rtsp-ipcam/`) — Python + FFmpeg HTTP server serving a video file as a raw H.264 stream on port 8089
-- `hpe` — runs `main.py --method <X> --input http://<server-ip>:8089/stream.h264`
+The main experiment rig. Six containers total, with `bcc-tracer` optional:
+- `rtsp-broker` (MediaMTX) — RTSP broker on port 8554
+- `streamer` (`jrottenberg/ffmpeg:4.4-nvidia`) — FFmpeg/NVENC producer that loops a local video file and publishes it to the broker
+- `hpe` — runs `main.py --method <X> --input rtsp://<server-ip>:8554/stream`
 - `perf_monitor` (from `recent-dash/perf_monitor/`) — samples CPU/memory/network
 - `gpu-metrics` — polls `nvidia-smi` every 500ms
 - `bcc-tracer` (optional, commented out) — eBPF/BCC kernel tracing of network traffic
@@ -286,9 +288,7 @@ Uses the same monitoring sidecars (`perf_monitor`, `bpftrace`). The observabilit
 cd recent-dash && ./run_experiment.sh
 ```
 
-#### `rtsp-ipcam/` — H.264 streaming server (shared component)
-
-Not an experiment itself — the reusable streaming server consumed by `ffmpeg_hpe/`. A Python script (`direct_stream_server.py`) uses FFmpeg to transcode a video file and serve it over HTTP as a raw H.264 stream. Includes a `Makefile` and Windows PowerShell scripts (`build.ps1`, `validate.ps1`) for cross-platform use.
+> **Streaming architecture note:** The old `rtsp-ipcam/` streaming server has been removed. Streaming is now handled inside `ffmpeg_hpe/docker-compose.yaml` by `jrottenberg/ffmpeg:4.4-nvidia` (streamer) + `bluenviron/mediamtx:1-ffmpeg` (RTSP broker).
 
 ### Standalone Measurement Tools
 
@@ -314,16 +314,16 @@ See `optimizations/README.md` and `OPTIMIZATION_PLAN.md` for configuration detai
 
 ### Root-level Dockerfiles
 
-Six Dockerfiles at the repo root represent iteration history on the HPE container image. Only `Dockerfile_base` is actively used by the experiment rigs.
+Six Dockerfiles at the repo root represent iteration history on the HPE container image. `monitor_hpe/` and the active `ffmpeg_hpe/` RTSP rig use `Dockerfile_base`.
 
 | File | Purpose |
 |---|---|
-| `Dockerfile_base` | Current base image used by `monitor_hpe/` and `ffmpeg_hpe/` |
+| `Dockerfile_base` | Active HPE app image used by `monitor_hpe/` and `ffmpeg_hpe/` |
 | `Dockerfile.hpe` | Earlier variant |
 | `Dockerfile_with_opencv` | Adds a custom OpenCV build |
 | `Dockerfile_cuda_ffmpeg_hpe` | CUDA + FFmpeg + HPE combined |
 | `Dockerfile_combined_multistage_app` | Multi-stage build attempt |
-| `Dockerfile_optimized_multistage_v4` | Latest multi-stage optimised build |
+| `Dockerfile_optimized_multistage_v4` | FFmpeg-only multi-stage image; not suitable for the HPE service |
 
 ### Network Monitoring Architecture
 
@@ -333,7 +333,7 @@ each handling one direction. They are complementary, not redundant.
 | Tool | Container | Direction | Method | Works? |
 |---|---|---|---|---|
 | `bpftrace` in `monitor_pid.sh` | `perf_monitor` | **TX** (HPE → outside) | `sys_enter_sendto` tracepoint — fires in HPE process context, PID filter valid | ✅ |
-| `bcc_rx_bytes.py` | `bcc-tracer` | **RX** (stream → HPE) | BPF socket filter on `eth0` filtered by streamer IP + port | ✅ |
+| `bcc_rx_bytes.py` | `bcc-tracer` | **RX** (stream → HPE) | BPF socket filter on the detected tracer interface, filtered by RTSP broker IP + ports | ✅ |
 | `bpftrace netif_receive_skb` in `monitor_pid.sh` | `perf_monitor` | RX (attempted) | Fires in softirq/kernel context — PID filter never matches HPE process | ❌ always 0 |
 
 **Why the split?**
@@ -344,8 +344,8 @@ each handling one direction. They are complementary, not redundant.
   kernel's network stack in softirq context, before they are associated with
   any process. The only reliable way to filter is by IP address and port.
 
-`bcc-tracer` solves this by running a BPF socket filter attached directly to
-`eth0`, filtering packets from the streamer's IP and port. It runs in a
+`bcc-tracer` solves this by running a BPF socket filter attached to the
+detected tracer interface, filtering packets from the RTSP broker IP and ports. It runs in a
 separate container that shares HPE's network namespace
 (`network_mode: service:hpe`) so it sees exactly the same traffic HPE sees.
 
@@ -377,7 +377,6 @@ These are confirmed issues in the codebase. Fixes marked ✅ are already applied
 | 12 | `ffmpeg_hpe/monitor_pid.sh` | `netif_receive_skb` bpftrace PID filter fires in softirq context — PID never matches HPE process, RX bytes always ~0 | ⚠️ Known — use `bcc-tracer` for accurate RX measurement |
 | 13 | `monitor_hpe/plot_graph.py` | Calls `plt.show()` — blocks indefinitely in headless containers | ⚠️ Open |
 | 14 | `ffmpeg_hpe/plot_graph.py` | Empty file (0 bytes) | ⚠️ Open |
-| 15 | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | ⚠️ Open |
 
 #### HPE inference code
 

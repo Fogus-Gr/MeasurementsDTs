@@ -2,7 +2,7 @@
 models/MoveNet
 models/AlphaPose/pretrained_models/fast_res50_256x192.pth
 models/AlphaPose/detector/yolo/data/yolov3-spp.weights
-models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.bin
+models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.bin     
 models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP16/human-pose-estimation-0005.bin
 models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
 models/OpenVINO/pretrained_models/intel/human-pose-estimation-0006/FP16/human-pose-estimation-0006.bin
@@ -51,3 +51,13 @@ rtsp-ipcam/.DS_Store
 .DS_Store
 *aider*
 uv.lock
+
+# --- New Rules Added in this Session ---
+
+# Local development artifacts
+.kiro/
+kernel.errors.txt
+
+# Large model directories / submodules
+open_model_zoo/
+models/OpenVINO/pretrained_models/
