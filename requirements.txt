@@ -29,7 +29,10 @@ importlib-metadata==8.5.0
 importlib-resources==6.4.5
 itsdangerous==2.2.0
 Jinja2==3.1.6
-keras==2.13.1
+# keras / tensorboard / tensorflow stack removed: not imported by project code,
+# pulled transitively by openvino-dev[tensorflow2,...] in Dockerfile_base.
+# Hard pin tensorflow==2.13.1 caps typing-extensions <4.6.0 which is incompatible
+# with torch 2.4.1 (needs typing-extensions >=4.8.0). Letting openvino-dev resolve.
 kiwisolver==1.4.7
 libclang==18.1.1
 Markdown==3.7
@@ -37,7 +40,7 @@ MarkupSafe==2.1.5
 matplotlib==3.7.5
 mpmath==1.3.0
 networkx==3.1
-numpy==1.24.4
+numpy==1.24.3
 nvidia-cublas-cu12==12.1.3.1
 nvidia-cuda-cupti-cu12==12.1.105
 nvidia-cuda-nvrtc-cu12==12.1.105
@@ -55,7 +58,7 @@ oauthlib==3.3.1
 onnx==1.15.0
 opencv-python==4.10.0.84
 openvino==2024.4.0
-openvino-dev==2024.2.0
+openvino-dev==2024.4.0
 openvino-telemetry==2025.1.0
 opt-einsum==3.4.0
 packaging==25.0
@@ -76,16 +79,11 @@ requests-oauthlib==2.0.0
 rsa==4.9.1
 scipy==1.10.1
 seaborn==0.13.2
-setuptools==65.5.0
+setuptools>=65.5.0
 six==1.17.0
 soupsieve==2.7
 sympy==1.13.3
 tabulate==0.9.0
-tensorboard==2.13.0
-tensorboard-data-server==0.7.2
-tensorflow==2.13.1
-tensorflow-estimator==2.13.0
-tensorflow-io-gcs-filesystem==0.34.0
 termcolor==2.4.0
 torch==2.4.1
 torchvision==0.19.1

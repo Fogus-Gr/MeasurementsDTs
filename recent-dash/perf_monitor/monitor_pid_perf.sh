@@ -1,8 +1,10 @@
 #!/bin/bash
 # set -x # Commented out for production
 
-OUTPUT_DIR="/output"
-PID_FILE="/pids/dash.pid"
+OUTPUT_DIR="${OUTPUT_DIR:-/output}"
+# PID_FILE is overridable so the same image can be reused across projects.
+# recent-dash writes /pids/dash.pid; ffmpeg_hpe writes /pids/hpe.pid.
+PID_FILE="${PID_FILE:-/pids/dash.pid}"
 OUTPUT_FILE="${OUTPUT_DIR}/perf_metrics.csv"
 INTERVAL=1 # pidstat works best with intervals of 1 second or more
 
@@ -23,11 +25,12 @@ while true; do
     continue
   fi
 
-  # Read all PIDs into a comma-separated string for pidstat
-  PIDS=$(cat "$PID_FILE" | tr '\n' ',' | sed 's/,$//')
+  # Read all PIDs into a comma-separated string for pidstat.
+  # Defensive parsing: keep only lines that are pure positive integers, drop blanks/headers/whitespace.
+  PIDS=$(awk '/^[[:space:]]*[0-9]+[[:space:]]*$/ { gsub(/[[:space:]]/, ""); print }' "$PID_FILE" | paste -sd, -)
 
   if [ -z "$PIDS" ]; then
-    echo "[WARN] PID file is empty. Sleeping for ${INTERVAL}s."
+    echo "[WARN] PID file has no valid numeric PIDs (content: $(tr '\n' '|' < "$PID_FILE")). Sleeping for ${INTERVAL}s."
     sleep $INTERVAL
     continue
   fi
@@ -40,7 +43,7 @@ while true; do
   # We run pidstat in the background to capture its output without blocking the timestamp
   # Note: The actual metrics will correspond to the end of the interval.
   
-  metrics=$(pidstat -p $PIDS -u -r $INTERVAL 1 | tail -n +4)
+  metrics=$(pidstat -p "$PIDS" -u -r $INTERVAL 1 2>/dev/null | tail -n +4)
   
   # If pidstat returned no data (all pids died), then we record zeros
   if [ -z "$metrics" ]; then
