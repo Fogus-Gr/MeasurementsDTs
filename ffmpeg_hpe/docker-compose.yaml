@@ -53,20 +53,22 @@ services:
       - WAIT_HOSTS_TIMEOUT=30
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
-      # Add these lines for CPU optimization
-      # - OV_MODE="latency"
-      # - OV_STREAMS="1"
-      # - OV_THREADS="3"
-      # - OMP_NUM_THREADS="3"
-      # - MKL_NUM_THREADS="3"
-      # - OPENBLAS_NUM_THREADS="3"
-      # - PYTHONUNBUFFERED="1"
+      # CPU optimization for OpenVINO backends (openpose / efficienthrnet*).
+      # Sized for an 8-vCPU host with hpe cgroup cap of 6.0 (see deploy.resources.limits.cpus below).
+      # Leaves 2 vCPUs for streamer + aux services.
+      - OV_MODE=throughput
+      - OV_STREAMS=1
+      - OV_THREADS=6
+      - OMP_NUM_THREADS=6
+      - MKL_NUM_THREADS=6
+      - OPENBLAS_NUM_THREADS=6
       # - HPE_INPUT=http://h264-streaming-server:8089/stream.h264
       - OPENCV_FFMPEG_OPEN_TIMEOUT=300000 # Increase timeout for FFMPEG
       - OPENCV_FFMPEG_READ_TIMEOUT=300000  # Increase read timeout for FFMPEG
     volumes:
       - ./results:/output:rw
       - ../videos:/videos:ro
+    shm_size: 8gb  # Adjust based on your model requirements
     healthcheck:
       test: ["CMD", "pgrep", "-f", "python.*main.py"]
       interval: 30s
@@ -76,7 +78,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4.0'  # Adjust based on your needs
+          cpus: '6.0'  # 8-vCPU host: hpe gets 6, streamer 1, aux services share remainder
           memory: 16G    # Adjust based on your model requirements
         reservations:
           devices:
@@ -126,6 +128,7 @@ services:
       - ./pids:/pids:ro
     environment:
       - OUTPUT_DIR=/output
+      - PID_FILE=/pids/hpe.pid       # ffmpeg_hpe writes its target PID here (recent-dash uses /pids/dash.pid)
       - EXPERIMENT_TYPE=ffmpeg_hpe   # Optional, for script logic
     depends_on:
       - h264-streaming-server
