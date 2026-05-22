@@ -211,6 +211,23 @@ For more details, see the `OPTIMIZATION_PLAN.md` in the parent directory.
 **Hardware Target**: 4 vCPU Cloud Instance (AMD EPIC 7551P) + RTX A4000 + 16GB RAM  
 **Software**: OpenVINO 2022.3+, Python 3.8+, Ubuntu 18.04+
 
+---
+
+## Current Production Configuration (8-vCPU Host)
+
+The `ffmpeg_hpe` experiment rig uses these OpenVINO settings (set in `docker-compose.yaml`):
+
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| `OV_MODE` | `throughput` | Optimized for batch/streaming workloads |
+| `OV_STREAMS` | `1` | Single stream for consistent latency |
+| `OV_THREADS` | `6` | Matches hpe cgroup limit (6 vCPUs of 8-host) |
+| `OMP_NUM_THREADS` | `6` | Align with OV_THREADS |
+| `MKL_NUM_THREADS` | `6` | Align with OV_THREADS |
+| `OPENBLAS_NUM_THREADS` | `6` | Align with OV_THREADS |
+
+Auto-sizing fallback: `max(1, sched_getaffinity(cpus) - 2)` if OV_THREADS not set.
+
 <citations>
 <document>
 <document_type>RULE</document_type>

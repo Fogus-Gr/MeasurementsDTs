@@ -79,6 +79,28 @@ run_experiment.sh
   └── docker compose down
 ```
 
+### HPE Service Resource Configuration
+
+The `hpe` service in `ffmpeg_hpe/docker-compose.yaml` is configured with explicit resource limits:
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| `cpus` | `6.0` | 8-vCPU host: hpe gets 6, streamer 1, aux services share remainder |
+| `shm_size` | `8gb` | Required for large model inference |
+
+**OpenVINO Threading Configuration:**
+
+| Env Variable | Default | Tuned Value | Notes |
+|-------------|---------|------------|-------|
+| `OV_MODE` | `latency` | `throughput` | Optimized for batch/streaming workloads |
+| `OV_STREAMS` | OpenVINO default | `1` | Single stream for consistent latency |
+| `OV_THREADS` | `auto (cpus-2)` | `6` | Explicit override; auto-fallback uses `sched_getaffinity` |
+| `OMP_NUM_THREADS` | OpenMP default | `6` | Matches OV_THREADS |
+| `MKL_NUM_THREADS` | MKL default | `6` | Matches OV_THREADS |
+| `OPENBLAS_NUM_THREADS` | OpenBLAS default | `6` | Matches OV_THREADS |
+
+**Auto-sizing fallback:** If `OV_THREADS` is not set, the code auto-calculates using `os.sched_getaffinity(0)` (cgroup-aware) minus 2 for headroom, defaulting to 1 minimum. Explicit env var always takes priority.
+
 ### Branch structure
 
 | Branch | Purpose |
