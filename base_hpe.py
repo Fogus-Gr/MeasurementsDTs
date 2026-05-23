@@ -21,19 +21,24 @@ except ImportError:
 
 from utils.visualizer import render
 from utils.evaluator import append_COCO_format_json, append_COCO_format_csv, save_COCO_format_json, save_COCO_format_csv, save_Tx_csv_data
-import json
 from datetime import datetime
 
 def get_available_data(r, max_read=10*1024*1024):  # 10MB max
     """Read all available data from the socket without blocking"""
     data = b""
     try:
-        # Get the underlying socket
-        sock = r.raw._fp.fp.raw._sock if hasattr(r.raw._fp.fp, 'raw') else r.raw._fp.fp._sock
-        
+        # Get the underlying socket via attribute chain; fall back gracefully
+        try:
+            sock = r.raw._fp.fp.raw._sock
+        except AttributeError:
+            try:
+                sock = r.raw._fp.fp._sock
+            except AttributeError:
+                raise AttributeError("No socket attribute found on response raw object")
+
         # Set non-blocking
         sock.setblocking(False)
-        
+
         while len(data) < max_read:
             # Check if data is ready
             ready = select.select([sock], [], [], 0.01)  # 10ms timeout
@@ -257,7 +262,9 @@ class BaseHPE(ABC):
 
         elif self.input_type == "directory":
             # Get all image files from the directory
-            image_files = glob.glob(os.path.join(self.img_dir, '*.[pjg][np][ge]*'))
+            image_files = []
+            for ext in ("*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.tiff", "*.webp"):
+                image_files.extend(glob.glob(os.path.join(self.img_dir, ext)))
             print(f"Found {len(image_files)} images in {self.img_dir}")
 
             # Sort files to ensure they are in alphanumeric order
@@ -341,7 +348,9 @@ class BaseHPE(ABC):
 
             elif self.input_type == "directory":
                 # Get all image files from the directory
-                image_files = glob.glob(os.path.join(self.img_dir, '*.[pjg][np][ge]*'))
+                image_files = []
+                for ext in ("*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.tiff", "*.webp"):
+                    image_files.extend(glob.glob(os.path.join(self.img_dir, ext)))
                 print(f"Found {len(image_files)} images in {self.img_dir}")
 
                 # Sort files to ensure they are in alphanumeric order

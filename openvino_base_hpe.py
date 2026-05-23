@@ -169,16 +169,23 @@ class OpenVINOBaseHPE(BaseHPE):
         if self.ov_streams is not None:
             cpu_props[props.num_streams] = int(self.ov_streams)
 
+        def _safe_get(core, device, prop, fallback):
+            try:
+                return core.get_property(device, prop)
+            except Exception:
+                logging.warning("Could not read property %s on device %s; using fallback.", prop, device)
+                return fallback
+
         core.set_property("CPU", cpu_props)
 
         print("\n[OpenVINO Configuration]")
         print(f"  Requested settings: threads={self.ov_threads}, mode={self.ov_mode}, streams={self.ov_streams}")
         print("  Effective settings:")
-        print(f"    Performance mode: {core.get_property('CPU', props.hint.performance_mode)}")
-        print(f"    CPU threads: {core.get_property('CPU', props.inference_num_threads)}")
-        print(f"    CPU streams: {core.get_property('CPU', props.num_streams)}")
-        print(f"    CPU pinning: {core.get_property('CPU', props.hint.enable_cpu_pinning)}")
-        print(f"    Hyper-threading: {core.get_property('CPU', props.hint.enable_hyper_threading)}\n")
+        print(f"    Performance mode: {_safe_get(core, 'CPU', props.hint.performance_mode, 'unknown')}")
+        print(f"    CPU threads: {_safe_get(core, 'CPU', props.inference_num_threads, self.ov_threads)}")
+        print(f"    CPU streams: {_safe_get(core, 'CPU', props.num_streams, self.ov_streams)}")
+        print(f"    CPU pinning: {_safe_get(core, 'CPU', props.hint.enable_cpu_pinning, self.ov_cpu_pinning)}")
+        print(f"    Hyper-threading: {_safe_get(core, 'CPU', props.hint.enable_hyper_threading, self.ov_hyper_threading)}\n")
 
     def load_model(self):
         """Load OpenVINO model"""
