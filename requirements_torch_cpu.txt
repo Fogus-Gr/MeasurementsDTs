@@ -1,0 +1,12 @@
+# CPU-only PyTorch wheels.
+# These packages are not on PyPI; they live on the PyTorch index.
+# Install with:
+#
+#   pip install -r requirements_torch_cpu.txt
+#
+# pip resolves the --index-url directive below automatically.
+
+--index-url https://download.pytorch.org/whl/cpu
+
+torch==2.2.1+cpu
+torchvision==0.17.1+cpu
