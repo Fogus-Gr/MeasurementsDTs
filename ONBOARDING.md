@@ -24,6 +24,9 @@ Welcome! This guide is written for someone who is new to this project. By the en
 16. [Tips for New Contributors](#16-tips-for-new-contributors)
 17. [Quick Start (TL;DR)](#17-quick-start-tldr)
 
+**Appendix:**
+- [A. Glossary](#appendix-a-glossary)
+
 ---
 
 ## 1. What Is This Project?
@@ -35,10 +38,26 @@ This is an **end-to-end 2D Human Pose Estimation (HPE) benchmarking system**. Th
 - Collects performance metrics in parallel: CPU usage, GPU statistics (temperature, power, utilization), memory consumption, and network RX bytes at kernel level.
 - The **goal** is systematic, reproducible performance evaluation and comparison of pose estimation methods on both CPU and GPU hardware.
 
+### Pose Estimation 101 (newcomer primer)
+
+If you have never worked with HPE before, here is the one-paragraph version:
+
+**2D Human Pose Estimation** takes an image or video frame and outputs the pixel coordinates of human body joints — typically 17 keypoints in the COCO format (nose, eyes, ears, shoulders, elbows, wrists, hips, knees, ankles). Each detected person becomes a list of `(x, y, visibility)` triplets, optionally rendered as a stick-figure skeleton overlaid on the frame. The five backends in this repo (`alphapose`, `movenet`, `openpose`, `hrnet`, `ae1/2/3`) all solve the same problem with different speed/accuracy trade-offs:
+
+| Backend | Approach | Strength | Trade-off |
+|---|---|---|---|
+| **MoveNet** | Single-stage, lightweight | Fastest on CPU; runs on edge devices | Lower accuracy on small/occluded people |
+| **OpenPose** | Bottom-up, Part Affinity Fields | Robust on crowded scenes | Heavier compute |
+| **HigherHRNet** (`hrnet`) | High-resolution backbone | Highest accuracy at the top end | Slow; memory-intensive |
+| **EfficientHRNet** (`ae1/2/3`) | Three scaled HRNet variants | Tunable accuracy/speed | All CPU-friendly via OpenVINO |
+| **AlphaPose** | Top-down (YOLO detector → pose net) | Best for clean, well-lit scenes | GPU strongly preferred |
+
+The benchmarking platform exists to measure each backend's resource cost (CPU%, GPU%, RAM, network bandwidth, FPS) under a *realistic* video-streaming scenario — not just on a static image.
+
 ### What "benchmarking" means here
 
 Each experiment run:
-1. Starts a **video streaming server** (H.264 over HTTP) inside Docker.
+1. Starts a **video streaming server** (RTSP via MediaMTX, H.264 encoded by FFmpeg/NVENC) inside Docker.
 2. Starts an **HPE inference container** that reads the stream and runs pose estimation.
 3. Simultaneously starts **monitoring sidecars** that collect CPU, GPU, and network metrics.
 4. Collects all outputs into a timestamped results directory.
@@ -179,18 +198,44 @@ MeasurementsDTs/
 |---|---|
 | Linux host | Ubuntu 20.04 tested and recommended |
 | Docker + Docker Compose | v20+ recommended; Compose v2 (`docker compose`) |
-| NVIDIA GPU + drivers | Required for GPU experiments; CPU-only also supported |
+| NVIDIA GPU + drivers | Verified: NVIDIA RTX A4000 (16 GB VRAM), driver **570.181** (CUDA 12.8 runtime). Project ships CUDA 12.1 toolkit; any driver supporting CUDA 12.1+ works. CPU-only methods (`movenet`, `hrnet`, `ae1/2/3`) need no GPU. |
 | nvidia-container-toolkit | Enables `runtime: nvidia` in Docker Compose |
 | Python 3.8.10 | For local runs; use conda or virtualenv |
 | Conda (recommended) | For managing the Python environment |
 | `bc` package | For floating-point math in shell scripts; auto-installed by experiment scripts |
 | Sufficient disk space | Docker images can be 10–20 GB combined; run `df -h` before starting |
 
+### Hardware floor & expected runtime
+
+A single benchmark run takes roughly **3–7 minutes** on a short VGA clip (e.g. `vga_01_01.mp4`) once the Docker images are already built; the very first `docker compose build` adds ~10–20 minutes on top. The currently deployed handoff target is an **8 vCPU / 16 GB cloud GPU VM on AMD EPYC 7551P + RTX A4000** — the same instance used to validate every fix in `AGENTS.md`. The [optimizations/](file:///c:/Users/bigbu/Downloads/MeasurementsDTs/optimizations) scripts were originally calibrated for a 4 vCPU SKU; their runtime auto-detector adapts to whatever core count is present (see the Hardware Applicability table in [optimizations/README.md](file:///c:/Users/bigbu/Downloads/MeasurementsDTs/optimizations/README.md) for what transfers to other VM CPUs vs. bare metal). As a **practical floor** for new deployments, allocate at least **4 vCPU / 16 GB RAM** — this matches the per-service caps in [ffmpeg_hpe/docker-compose.yaml](file:///c:/Users/bigbu/Downloads/MeasurementsDTs/ffmpeg_hpe/docker-compose.yaml) (`hpe`: 2.5 CPU / 8 GB, `streamer`: 0.75 CPU, `rtsp-broker`: 0.5 CPU, sidecars: ~0.85 CPU combined). Plan for **≥30 GB free disk** for image layers, model weights, and result CSVs. GPU runs additionally need an NVIDIA card with up-to-date drivers and `nvidia-container-toolkit`; CPU-only methods (`movenet`, `hrnet`, `ae1/2/3`) work fine without a GPU.
+
+### Verified working hardware stack
+
+Last end-to-end verified configuration (May 2026):
+
+| Component | Value |
+|---|---|
+| Host VM | 8 vCPU / 16 GB RAM cloud GPU VM |
+| Host CPU (underlying) | AMD EPYC 7551P (Zen 1, AVX2, 64 MB L3) |
+| GPU | NVIDIA RTX A4000, 16 GB VRAM |
+| Driver | 570.181 |
+| CUDA runtime (driver-supported) | 12.8 |
+| CUDA toolkit (project-pinned) | 12.1 (PyTorch `cu121` wheels; `Dockerfile_base` is `pytorch/pytorch:2.4.1-cuda12.1-cudnn9-devel`) |
+| Driver Persistence Mode | recommended **Enabled** — see the persistence step under "Verify your GPU setup" |
+
 ### Verify your GPU setup
 
 ```bash
 nvidia-smi                          # Should show GPU info
 docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu20.04 nvidia-smi
+
+# Recommended: enable persistent driver state for stable benchmark timings.
+# Without it, the NVIDIA driver tears down its state every time the last
+# CUDA process exits, adding ~1–3 s of GPU cold-start plus a power-state
+# ramp from P8 to every run — both corrupt container_timing.txt and the
+# first samples of gpu_metrics.csv.
+sudo systemctl enable --now nvidia-persistenced
+nvidia-smi -q | grep Persistence    # should now report: Enabled
 ```
 
 ---
@@ -388,38 +433,33 @@ python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'
 
 ### Architecture Overview
 
+```mermaid
+flowchart TB
+    subgraph DockerBridge["Docker Bridge Network\n(streaming-network)"]
+
+        RTSP["rtsp-broker<br/>(MediaMTX, :8554)<br/>2 CPU cores, 1 GB"]
+
+        Streamer["streamer<br/>FFmpeg/NVENC<br/>loops local video<br/>and publishes RTSP"]
+
+        HPE["hpe container<br/>Python + OpenCV<br/>Pose Estimation<br/>2.5 CPU, 8 GB<br/>NVIDIA GPU (optional)"]
+
+        Perf["perf_monitor<br/>(bpftrace)<br/>CPU% + mem RSS<br/>→ pid_metrics.csv"]
+
+        BCC["bcc-tracer<br/>(BPF/BCC)<br/>RX bytes per 10ms<br/>→ video_rx.csv"]
+
+        GPU["gpu-metrics<br/>(nvidia-smi)<br/>temp, power<br/>utilization<br/>→ gpu_metrics.csv"]
+
+        Streamer -->|"Publishes RTSP"| RTSP
+        RTSP -->|"RTSP Stream"| HPE
+        HPE -->|"Consumes stream"| RTSP
+
+        HPE --> Perf
+        HPE --> BCC
+        HPE --> GPU
+
+    end
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                  Docker Bridge Network                        │
-│                   (streaming-network)                         │
-│                                                               │
-│  ┌──────────────────────┐    RTSP Stream                  │
-│  │      rtsp-broker     │ <──────────────────────────┐    │
-│  │   (MediaMTX, :8554)  │                            │    │
-│  │  2 CPU cores, 1 GB   │                            │    │
-│  └──────────┬───────────┘                            │    │
-│             ▲                                         │    │
-│             │                                         ▼    │
-│  ┌──────────────────────┐       ┌──────────────────────┐   │
-│  │       streamer       │       │      hpe container    │   │
-│  │   FFmpeg/NVENC       │       │  Python + OpenCV      │   │
-│  │  loops local video   │       │  Pose Estimation      │   │
-│  │  and publishes RTSP  │       │  4 CPU cores, 16 GB   │   │
-│  └──────────────────────┘       │  NVIDIA GPU (optional)│   │
-│                                  └─────────┬────────────┘    │
-│                                            │                  │
-│              ┌─────────────────────────────┼──────────┐      │
-│              ▼                             ▼          ▼      │
-│  ┌─────────────────┐  ┌──────────────┐  ┌──────────────┐   │
-│  │  perf_monitor    │  │  bcc-tracer  │  │  gpu-metrics │   │
-│  │  (bpftrace)      │  │  (BPF/BCC)   │  │  (nvidia-smi)│   │
-│  │  CPU% + mem RSS  │  │  RX bytes    │  │  temp, power │   │
-│  │  → aggregated_   │  │  per 10ms    │  │  utilization │   │
-│  │    metrics.csv   │  │  → video_    │  │  → gpu_      │   │
-│  └─────────────────┘  │    rx.csv    │  │    metrics.csv│   │
-│                        └──────────────┘  └──────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-```
+
 
 ### Docker Services (defined in `ffmpeg_hpe/docker-compose.yaml`)
 
@@ -441,7 +481,7 @@ python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'
 - **What it does:** The main inference container. Reads from the RTSP stream, runs pose estimation, writes keypoint CSVs.
 - **Built from:** `Dockerfile_base` at the repo root
 - **Command:** `python3 main.py --method <METHOD> --input rtsp://rtsp-broker:8554/stream --csv --output_dir /output/ --device <DEVICE> --measurement_interval_ms 10`
-- **Resources:** 4 CPU cores (limit), 16 GB RAM, GPU runtime only for GPU methods (`alphapose`, `openpose`)
+- **Resources:** 2.5 CPU (limit) / 2.0 CPU (reservation), 8 GB RAM (rationale documented inline in `docker-compose.yaml`), GPU runtime only for GPU methods (`alphapose`, `openpose`)
 - **Environment:** `HPE_METHOD`, `HPE_INPUT`, `HPE_DEVICE` are injected by experiment scripts.
 - **Shared memory:** 8 GB (`shm_size`) — needed for large batch PyTorch operations.
 
@@ -452,7 +492,7 @@ python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'
 
 #### 5. `perf_monitor`
 - **What it does:** Uses bpftrace to monitor the HPE process's CPU usage and memory RSS. Runs in host PID namespace.
-- **Output:** `results/perf/aggregated_metrics.csv`
+- **Output:** `results/perf/pid_metrics.csv` (also `perf_metrics.csv`, `network_stats.csv`)
 - **Privileges:** `privileged: true`, `SYS_ADMIN`, `NET_ADMIN` — needed for kernel tracing.
 
 #### 6. `bcc-tracer`
@@ -480,6 +520,48 @@ When you run `./run_experiment_bcc.sh alphapose`, the script:
 ---
 
 ## 9. Running Experiments
+
+### First Successful Run — CPU-only Quick Start
+
+> *If you do not have an NVIDIA GPU, or you just want to confirm everything works before configuring CUDA, do this first. The whole path takes ~5 minutes after Docker images are built.*
+
+```bash
+# 1. Configure the smallest video for fastest feedback
+echo "VIDEO_FILE_NAME=vga_01_01.mp4" > ffmpeg_hpe/.env
+
+# 2. Build images (one-time, ~10-20 minutes)
+cd ffmpeg_hpe/
+docker compose build
+
+# 3. Run MoveNet on CPU — the lightest backend
+HPE_DEVICE=CPU ./run_experiment_bcc.sh movenet
+```
+
+**What you should see while it runs:**
+- `mediamtx` and `video-producer` (streamer) start within 5 seconds.
+- `hpe` container logs `Starting inference loop` and begins printing per-frame messages.
+- `bcc-tracer` logs `Successfully attached BPF socket filter` (if you see `Permission denied` instead, your kernel headers are missing — see Section 13).
+- The whole run completes in roughly the duration of the looped video (~30s) plus startup overhead.
+
+**Verifying success:**
+
+```bash
+# 1. Latest results directory exists and contains data
+ls -lt results_movenet_*/ | head
+
+# 2. HPE exited cleanly
+cat results_movenet_*/logs/hpe_exit.log   # should print: 0
+
+# 3. Keypoint output exists
+wc -l results_movenet_*/hpe_output/*.csv   # should be > 100 rows for a 30s VGA clip
+
+# 4. Network RX captured something
+awk -F, 'NR>1 {sum += $2} END {printf "RX total: %.2f MB\n", sum/1024/1024}' \
+  results_movenet_*/traces/bcc/hpe_video_rx.csv
+# Expected: a few MB for a 30s VGA clip; 0 means the BCC filter didn't attach
+```
+
+If all four checks pass, you have a working pipeline. Move on to GPU methods (`alphapose`, `openpose`) once you have CUDA installed.
 
 ### Two Experiment Scripts
 
@@ -599,6 +681,48 @@ Network measurement requires two different tools because TX and RX operate in di
 
 **Rule:** for RX data use `traces/bcc/hpe_video_rx.csv`. For TX data use `perf/network_stats.csv`. Never use the RX column from `pid_metrics.csv` — it is always `0` by design.
 
+### Healthy Run Signals (what "good" looks like)
+
+Before plotting anything, sanity-check the run with these four signals. If any one is wrong, plotting is wasted effort.
+
+| Signal | Where to check | Expected for a 30s VGA `movenet` run | Red flag |
+|---|---|---|---|
+| **Clean exit** | `logs/hpe_exit.log` | `0` | Non-zero → HPE crashed; check `logs/hpe_startup_full.log` |
+| **Frames processed** | `wc -l hpe_output/*.csv` | A few hundred to a few thousand rows | `0` rows → stream never connected; check `logs/hpe_startup_full.log` for `OpenCV: cap.open() failed` |
+| **RX bytes captured** | `traces/bcc/hpe_video_rx.csv` | A few MB total over the run | `0` total → BCC filter didn't attach; check `logs/bcc-tracer.log` for `Permission denied` (kernel headers missing) or filter-mismatch messages |
+| **CPU% non-zero** | `perf/pid_metrics.csv` column 3 | 30–80% during inference | All zeros → monitor sampled the wrong PID; check `logs/perf_monitor.log` |
+
+### Reading the CSVs (column reference)
+
+The four most important CSVs and what each column means:
+
+```
+perf/pid_metrics.csv
+  timestamp        — unix epoch seconds (float)
+  pid              — host-namespace PID of the python3 main.py process
+  cpu_percent      — instantaneous CPU% from /proc/$PID/stat delta over 500ms
+                     (NOT pidstat-style lifetime average — see fix #8 in AGENTS.md)
+  mem_rss_kb       — resident set size from /proc/$PID/status
+  tx_bytes         — ALWAYS 0 — see network_stats.csv instead
+  rx_bytes         — ALWAYS 0 — see traces/bcc/hpe_video_rx.csv instead
+
+perf/network_stats.csv         (TX only — use rows where sent=1)
+  timestamp, pid, interface, bytes, sent
+
+traces/bcc/hpe_video_rx.csv    (RX only)
+  timestamp_ms     — millisecond unix epoch
+  rx_bytes         — bytes received in the last 10ms BCC sampling window
+
+gpu/gpu_metrics.csv
+  timestamp, gpu_id, gpu_utilization (%), mem_utilization (%),
+  temperature (°C), power_usage (W)
+
+hpe_output/<timestamp>_<method>_*.csv
+  frame, person_id, then 17 × (x, y, visibility) keypoint columns in COCO order
+```
+
+**Reading tip:** `pid_metrics.csv` and `gpu_metrics.csv` are sampled at 500 ms intervals; `hpe_video_rx.csv` is sampled at 10 ms. When correlating CPU/GPU/RX on the same plot, resample one of them or use `pandas.merge_asof` rather than naive joins.
+
 ### Quick Data Inspection
 
 ```bash
@@ -611,7 +735,7 @@ awk -F, 'NR>1 {sum += $2} END {printf "%.2f MB\n", sum/1024/1024}' traces/bcc/hp
 awk -F, 'NR>1 {sum += $2; n++} END {printf "%.1f%%\n", sum/n}' gpu/gpu_metrics.csv
 
 # Peak memory usage (MB)
-awk -F, 'NR>1 {if ($3 > max) max=$3} END {print max " MB"}' perf/aggregated_metrics.csv
+awk -F, 'NR>1 {if ($3 > max) max=$3} END {print max " MB"}' perf/pid_metrics.csv
 
 # Number of frames processed
 wc -l hpe_output/*.csv
@@ -631,7 +755,7 @@ head -2 traces/bcc/hpe_video_rx.csv && echo "..." && tail -1 traces/bcc/hpe_vide
 | `ffmpeg_hpe/plot_smi_output.py` | `gpu/gpu_metrics.csv` | GPU utilization, temperature, memory, power PNGs |
 | `ffmpeg_hpe/plot_rx_bytes_trimmed_reset.py` | `traces/bcc/hpe_video_rx.csv` | Network RX bytes timeline plot |
 | `ffmpeg_hpe/plot_rx_bytes.py` | `traces/bcc/hpe_video_rx.csv` | Raw RX bytes plot |
-| `monitor_hpe/plot_graph.py` | `perf/aggregated_metrics.csv` | CPU% + memory usage over time |
+| `monitor_hpe/plot_graph.py` | `perf/pid_metrics.csv` | CPU% + memory usage over time |
 | `Measure_plot_cpu_perf/plot_perf_metrics.py` | perf stat CSV | CPU cycles + utilization bar chart |
 | `Measure_gpu_dcgm/plot_smi_output.py` | gpu_metrics.csv | DCGM GPU metrics (alternative) |
 
@@ -647,7 +771,7 @@ python3 plot_smi_output.py results_*/gpu/gpu_metrics.csv
 python3 plot_rx_bytes_trimmed_reset.py results_*/traces/bcc/hpe_video_rx.csv
 
 # CPU and memory plot
-python3 ../monitor_hpe/plot_graph.py results_*/perf/aggregated_metrics.csv
+python3 ../monitor_hpe/plot_graph.py results_*/perf/pid_metrics.csv
 ```
 
 ---
@@ -918,8 +1042,43 @@ docker compose build
 # 7. Plot the results
 python3 plot_smi_output.py results_*/gpu/gpu_metrics.csv
 python3 plot_rx_bytes_trimmed_reset.py results_*/traces/bcc/hpe_video_rx.csv
-python3 ../monitor_hpe/plot_graph.py results_*/perf/aggregated_metrics.csv
+python3 ../monitor_hpe/plot_graph.py results_*/perf/pid_metrics.csv
 ```
+
+---
+
+## Appendix A: Glossary
+
+Unfamiliar term? Look it up here. Listed in the order a newcomer is most likely to encounter them.
+
+| Term | Meaning in this project |
+|---|---|
+| **HPE** | Human Pose Estimation — the task of locating body keypoints (joints) in an image. This repo does **2D** HPE (pixel coordinates), not 3D. |
+| **Keypoint** | A single body landmark (e.g. left elbow). Each one has `(x, y, visibility)`. |
+| **COCO format** | The de-facto JSON schema for keypoint datasets. Uses 17 keypoints per person in a fixed joint order. All backends here output COCO-compatible data. |
+| **Backend / Method** | One of the five HPE implementations: `alphapose`, `movenet`, `openpose`, `hrnet`, `ae1/2/3`. They all conform to the [BaseHPE](file:///c:/Users/bigbu/Downloads/MeasurementsDTs/base_hpe.py) abstract class. |
+| **OpenVINO** | Intel's inference runtime. Used by every backend except AlphaPose. Loads `.xml` + `.bin` IR model files and runs them efficiently on CPU/iGPU. |
+| **PyTorch** | The other inference runtime, used only by AlphaPose. Loads `.pth` weight files; needs CUDA for GPU acceleration. |
+| **AlphaPose** | A top-down HPE backend: a YOLOv3 detector finds people, then a ResNet-50 pose network locates keypoints inside each box. GPU strongly preferred. |
+| **MoveNet** | A lightweight single-stage HPE model from Google, run here via OpenVINO on CPU. |
+| **RTSP** | Real-Time Streaming Protocol — the streaming protocol used between the producer and the HPE consumer in this benchmarking platform. |
+| **MediaMTX** | The RTSP broker (`bluenviron/mediamtx:1-ffmpeg` image) that mediates between the FFmpeg producer and HPE consumer. Listens on port 8554. |
+| **NVENC** | NVIDIA's hardware H.264 encoder, used by FFmpeg in the `streamer` container to produce the video stream without burning CPU. |
+| **Streamer / Producer** | The `video-producer` container running FFmpeg/NVENC; reads a local video file and publishes it as an RTSP stream. |
+| **HPE container** | The main inference container running `python3 main.py`. Reads from RTSP, writes keypoint CSVs. |
+| **Sidecar** | A monitoring container that runs alongside the HPE container without affecting its work. Examples: `perf_monitor`, `bcc-tracer`, `gpu-metrics`. |
+| **bpftrace** | A high-level eBPF tracing language. Used in `perf_monitor` to count `sendto()` syscalls (TX bytes) per HPE PID. |
+| **BCC** | BPF Compiler Collection — a Python toolkit for writing eBPF programs. Used by `bcc-tracer` to count incoming TCP bytes via a socket filter. |
+| **eBPF / BPF** | Kernel sandbox that runs small verified programs at hook points (syscalls, network events). Both bpftrace and BCC compile down to BPF. |
+| **PID filter** | Filtering events by process ID. Works for `sendto()` (syscall context) but **not** for incoming packets (softirq context) — see the TX vs RX section. |
+| **Network namespace** | Linux feature that gives a container its own network stack. `bcc-tracer` uses `network_mode: service:hpe` so it sees the same eth0 as HPE. |
+| **DCGM** | NVIDIA Data Center GPU Manager — used in some standalone tools (`Measure_gpu_dcgm/`) for GPU power/temp/util data. The main rig uses plain `nvidia-smi`. |
+| **FFmpeg** | The Swiss-army-knife multimedia tool. Used by the streamer container to produce video. Optional GPU build via `build_ffmpeg_cuda.sh`. |
+| **`pid_metrics.csv`** | Output of `perf_monitor`: per-PID CPU% / RAM. Old name (`aggregated_metrics.csv`) appears in older docs — those are stale. |
+| **`hpe_video_rx.csv`** | Output of `bcc-tracer`: incoming bytes from the RTSP stream, per 10ms window. |
+| **Padding / Pad-and-resize** | Letterbox preprocessing inside `BaseHPE` so that any input resolution becomes the model's expected size without distorting aspect ratio. |
+| **Experiment rig** | A self-contained subdirectory (`monitor_hpe/`, `ffmpeg_hpe/`, `recent-dash/`) with its own `run_experiment.sh` and `docker-compose.yaml`. |
+| **Cloud GPU VM** | The canonical deployment target documented in this repo: **8 vCPU + 16 GB RAM + RTX A4000, EPYC 7551P host**. The [optimizations/](file:///c:/Users/bigbu/Downloads/MeasurementsDTs/optimizations) scripts were originally calibrated for a 4 vCPU SKU; their runtime auto-detector adapts to the actual core count present on the host. |
 
 ---
 

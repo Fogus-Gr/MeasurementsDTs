@@ -1,5 +1,7 @@
 # Docker Services & Infrastructure — Deep Dive
 
+> **Newcomer?** Unfamiliar with terms like *RTSP*, *MediaMTX*, *NVENC*, *sidecar*, or *network namespace*? Check the [Glossary in ONBOARDING.md](../ONBOARDING.md#appendix-a-glossary) before reading further.
+
 ## Overview
 
 This document provides detailed reference for all Docker images, Compose services, and container configurations used in the HPE benchmarking pipeline.

@@ -1,5 +1,7 @@
 # Plotting & Data Analysis — Deep Dive
 
+> **Newcomer?** Unfamiliar with the CSV files mentioned below (`pid_metrics.csv`, `gpu_metrics.csv`, `hpe_video_rx.csv`)? See the [Reading the CSVs](../ONBOARDING.md#reading-the-csvs-column-reference) section and the [Glossary](../ONBOARDING.md#appendix-a-glossary) in ONBOARDING.md.
+
 ## Overview
 Reference for all plotting scripts, their input formats, output files, and usage.
 

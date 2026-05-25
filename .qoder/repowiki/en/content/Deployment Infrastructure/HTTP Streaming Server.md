@@ -65,7 +65,7 @@ Streamer --> Broker
 - [docker-compose.rtsp.yml:2-36](file://docker-compose.rtsp.yml#L2-L36)
 
 **Section sources**
-- [ffmpeg_hpe/docker-compose.yaml:1-190](file://ffmpeg_hpe/docker-compose.yaml#L1-L190)
+- [ffmpeg_hpe/docker-compose.yaml:1-194](file://ffmpeg_hpe/docker-compose.yaml#L1-L194)
 - [docker-compose.rtsp.yml:1-37](file://docker-compose.rtsp.yml#L1-L37)
 - [docker-compose.yml:1-30](file://docker-compose.yml#L1-L30)
 
@@ -187,7 +187,7 @@ Monitor --> FFNVENC
 - [docker-compose.yml:4-29](file://docker-compose.yml#L4-L29)
 
 **Section sources**
-- [ffmpeg_hpe/docker-compose.yaml:1-190](file://ffmpeg_hpe/docker-compose.yaml#L1-L190)
+- [ffmpeg_hpe/docker-compose.yaml:1-194](file://ffmpeg_hpe/docker-compose.yaml#L1-L194)
 - [docker-compose.yml:1-30](file://docker-compose.yml#L1-L30)
 
 ## Performance Considerations
@@ -271,7 +271,7 @@ Connection URL format: `rtsp://host:8554/stream`
 
 **Section sources**
 - [ffmpeg_hpe/docker-compose.yaml:52-58](file://ffmpeg_hpe/docker-compose.yaml#L52-L58)
-- [ffmpeg_hpe/docker-compose.yaml:187-190](file://ffmpeg_hpe/docker-compose.yaml#L187-L190)
+- [ffmpeg_hpe/docker-compose.yaml:187-194](file://ffmpeg_hpe/docker-compose.yaml#L187-L194)
 
 ### Adaptive Streaming Server (JPEG)
 **Preserved**: Development-only JPEG streaming for testing:

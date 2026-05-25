@@ -215,10 +215,10 @@ Mon-->>FS : Final CSV and plots
 - [plot_graph.py:1-59](file://monitor_hpe/plot_graph.py#L1-L59)
 
 ### CPU Optimization Utilities for OpenVINO HPE
-These modules detect CPU capabilities and apply OpenVINO-specific tuning:
-- Detects physical/logical cores, frequency, AVX support, and NUMA topology
+These modules detect CPU capabilities and apply OpenVINO-specific tuning. **Calibrated target: 4 vCPU AMD EPYC 7551P cloud VM** — not bare metal. See the Hardware Applicability table in [optimizations/README.md](file://optimizations/README.md) for what transfers to other CPUs / bare metal.
+- Detects physical/logical cores, base/max frequency, AVX2/AVX-512 support, L3 cache size, and NUMA topology
 - Calculates optimal thread counts, streams, and performance hints
-- Applies system-level optimizations (CPU governor, power settings)
+- Applies system-level hints (CPU governor, NUMA balancing) — **CPU pinning is intentionally disabled** because vCPU↔pCore mapping is unstable in cloud VMs
 - Integrates with OpenVINO core configuration
 
 ```mermaid
@@ -323,7 +323,7 @@ EXP --> MON
 - System-level tuning:
   - CPU governor and power management toggles can reduce latency spikes
 - NUMA awareness:
-  - Optimizer can set affinity and increase num_requests for multi-socket systems
+  - Optimizer **detects** NUMA topology but **does not pin** vCPUs to NUMA nodes by default — the calibrated target is a single-vNUMA cloud VM. On multi-socket bare metal, override `enable_cpu_pinning=True` to take advantage of NUMA affinity
 
 [No sources needed since this section provides general guidance]
 
@@ -391,7 +391,7 @@ This toolkit provides a repeatable, Dockerized workflow for CPU performance anal
 ### System Tuning Recommendations
 - Set CPU governor to performance mode when latency is critical
 - Disable NUMA balancing and turbo boost toggles if they cause jitter
-- Pin threads and disable hyper-threading for compute-bound inference on systems without HT
+- **On bare metal only:** pin threads (set `enable_cpu_pinning=True`) and disable hyper-threading for compute-bound inference on systems without HT. The `optimizations/` scripts default to **pinning disabled** because the calibrated target is a virtualised cloud VM (vCPU↔pCore mapping is unstable under hypervisor scheduling)
 - Increase num_requests proportionally to streams for memory-bound models
 
 **Section sources**

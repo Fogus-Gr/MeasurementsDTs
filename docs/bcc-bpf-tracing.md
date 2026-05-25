@@ -1,5 +1,7 @@
 # BCC/BPF Network Tracing — Deep Dive
 
+> **Newcomer?** Unfamiliar with terms like *eBPF*, *BCC*, *socket filter*, *softirq*, or *PID namespace*? Check the [Glossary in ONBOARDING.md](../ONBOARDING.md#appendix-a-glossary) before reading further.
+
 ## Overview
 
 This document explains the kernel-level network traffic tracing system used to measure RX (received) bytes during HPE experiments. The system uses eBPF (Extended Berkeley Packet Filter) via the BCC (BPF Compiler Collection) Python library.

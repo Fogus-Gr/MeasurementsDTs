@@ -30,12 +30,12 @@
 
 ## Update Summary
 **Changes Made**
-- Enhanced documentation with comprehensive experiment rig tables showing folder roles classification
-- Added detailed flow diagrams for experiment orchestration and network data collection
-- Updated results directory structure with corrected file naming conventions
-- Improved TX/RX network data collection explanations with detailed methodology
-- Enhanced experiment pipeline documentation with monitoring capabilities
-- Added troubleshooting guidance for network measurement discrepancies
+- Replaced legacy `h264-streaming-server` (HTTP/8089) references with the current `rtsp-broker` (MediaMTX, RTSP/8554) + `streamer` (FFmpeg/NVENC) pipeline
+- Updated mermaid diagrams, service tables, and command examples to use `rtsp://rtsp-broker:8554/stream`
+- Corrected output filenames: `aggregated_metrics.csv` → `pid_metrics.csv`, `video_rx.csv` → `hpe_video_rx.csv`
+- Updated BCC tracer description to use the auto-detected interface and broker IP/port filter
+- Refreshed troubleshooting commands (`ffprobe rtsp://...`) to match the current stack
+- Aligned content with `ONBOARDING.md` and `ffmpeg_hpe/docker-compose.yaml`
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -69,7 +69,8 @@ B["monitor_hpe/<br/>run_experiment.sh"]
 C["recent-dash/<br/>HTTP caching research"]
 end
 subgraph "Service Implementations"
-D["rtsp-ipcam/<br/>h264-streaming-server"]
+D["bluenviron/mediamtx:1-ffmpeg<br/>RTSP broker (pulled image)"]
+D2["jrottenberg/ffmpeg:4.4-nvidia<br/>NVENC streamer (pulled image)"]
 E["recent-dash/perf_monitor/<br/>CPU monitoring"]
 F["ffmpeg_hpe/bpftrace-tracer/<br/>BCC network tracing"]
 G["ffmpeg_hpe/Dockerfile.gpu_metrics/<br/>GPU metrics collector"]
@@ -83,6 +84,7 @@ L["optimizations/<br/>OpenVINO tuning"]
 M["dev_tools/<br/>Local streaming server"]
 end
 A --> D
+A --> D2
 A --> E
 A --> F
 A --> G
@@ -120,21 +122,24 @@ sequenceDiagram
 participant U as "User"
 participant S as "run_experiment_bcc.sh"
 participant C as "Docker Compose"
-participant H as "h264-streaming-server"
+participant B as "rtsp-broker (MediaMTX)"
+participant ST as "streamer (FFmpeg/NVENC)"
 participant P as "HPE Container"
 participant M as "Monitoring Sidecars"
 participant T as "BCC Tracer"
 U->>S : "Execute experiment script"
-S->>C : "Start streaming server"
-C->>H : "Launch HTTP H.264 server"
+S->>C : "Start rtsp-broker"
+C->>B : "Launch MediaMTX on :8554"
+S->>C : "Start streamer"
+C->>ST : "Publish rtsp://rtsp-broker:8554/stream"
 S->>C : "Start HPE container"
 C->>P : "Launch inference engine"
 S->>C : "Start monitoring services"
 C->>M : "Launch perf_monitor + gpu-metrics"
 S->>C : "Start BCC tracer"
 C->>T : "Launch kernel-level network tracer"
-T->>T : "Detect HPE port dynamically"
-P->>H : "Connect to HTTP stream"
+T->>T : "Resolve broker IP + auto-detect HPE source port"
+P->>B : "Pull RTSP stream over TCP"
 P->>P : "Process frames and collect metrics"
 M->>M : "Monitor CPU/Memory usage"
 T->>T : "Trace RX bytes at 10ms intervals"
@@ -272,9 +277,13 @@ python3 main.py --method alphapose --input unit_tests/images/ --json
 python3 main.py --method ae1 --input unit_tests/video/giphy.gif --save_video
 ```
 
-#### HTTP Stream Processing
+#### HTTP / RTSP Stream Processing
 ```bash
-python3 main.py --method movenet --input http://192.168.1.10:8089/stream.h264 --device CPU
+# HTTP stream (dev server)
+python3 main.py --method movenet --input http://192.168.1.10:8080/video_feed --device CPU
+
+# RTSP stream (matches the experiment-rig pipeline)
+python3 main.py --method movenet --input rtsp://rtsp-broker:8554/stream --device CPU
 ```
 
 #### AlphaPose with Custom Settings
@@ -310,13 +319,15 @@ The framework provides comprehensive containerized benchmarking with multi-servi
 
 ```mermaid
 graph TD
-A["h264-streaming-server<br/>FFmpeg/NGINX, :8089"] --> B["H.264 HTTP Stream"]
+A0["streamer<br/>jrottenberg/ffmpeg:4.4-nvidia<br/>NVENC + RTSP/TCP"] --> A["rtsp-broker<br/>bluenviron/mediamtx:1-ffmpeg, :8554"]
+A --> B["RTSP Stream (TCP)"]
 B --> C["HPE Container<br/>Python + OpenCV + Pose Estimation"]
-C --> D["perf_monitor<br/>bpftrace CPU/memory"]
-C --> E["bcc-tracer<br/>BPF network tracing"]
+C --> D["perf_monitor<br/>bpftrace CPU/memory + sendto TX"]
+C --> E["bcc-tracer<br/>BPF socket filter (broker IP/port)"]
 C --> F["gpu-metrics<br/>nvidia-smi polling"]
-D --> G["results/perf/aggregated_metrics.csv"]
-E --> H["results/traces/bcc/video_rx.csv"]
+D --> G["results/perf/pid_metrics.csv"]
+D --> G2["results/perf/network_stats.csv (TX)"]
+E --> H["results/traces/bcc/hpe_video_rx.csv (RX)"]
 F --> I["results/gpu/gpu_metrics.csv"]
 C --> J["results/hpe_output/*.csv"]
 ```
@@ -334,9 +345,10 @@ C --> J["results/hpe_output/*.csv"]
 | `recent-dash/` | `run_experiment.sh` | DASH/HTTP caching research — separate thread | HTTP caching analysis, Prometheus integration |
 
 #### Service Implementations
-| Folder | Used by | Role in `docker-compose.yaml` | Key Characteristics |
+| Folder / Image | Used by | Role in `docker-compose.yaml` | Key Characteristics |
 |---|---|---|---|
-| `rtsp-ipcam/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `h264-streaming-server` container | H.264 HTTP streaming server |
+| `bluenviron/mediamtx:1-ffmpeg` (pulled image) | `ffmpeg_hpe/docker-compose.yaml` | Provides the `rtsp-broker` container | MediaMTX RTSP broker on :8554 |
+| `jrottenberg/ffmpeg:4.4-nvidia` (pulled image) | `ffmpeg_hpe/docker-compose.yaml` | Provides the `streamer` container | FFmpeg/NVENC publisher to the RTSP broker |
 | `recent-dash/perf_monitor/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `perf_monitor` container | CPU/memory monitoring via bpftrace |
 | `ffmpeg_hpe/bpftrace-tracer/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `bcc-tracer` container | BCC/BPF-based network tracing |
 | `ffmpeg_hpe/Dockerfile.gpu_metrics` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `gpu-metrics` container | GPU metrics via nvidia-smi polling |
@@ -347,34 +359,41 @@ C --> J["results/hpe_output/*.csv"]
 - [ONBOARDING.md:77-86](file://ONBOARDING.md#L77-L86)
 
 ### Docker Services Configuration
-The experiment pipeline consists of five coordinated services:
+The experiment pipeline consists of six coordinated services:
 
-#### 1. h264-streaming-server
-- **Purpose**: Serves benchmark video as H.264 HTTP stream on port 8089
+#### 1. rtsp-broker
+- **Purpose**: Runs MediaMTX and exposes the RTSP endpoint on port 8554
+- **Image**: `bluenviron/mediamtx:1-ffmpeg`
 - **Resource Limits**: 2 CPU cores, 1 GB RAM
-- **Configuration**: `VIDEO_FILE` from `.env`, `SERVER_PORT=8089`
-- **Healthcheck**: TCP connection to port 8089
+- **Healthcheck**: Enforced externally — `run_experiment.sh` probes `127.0.0.1:8554` before starting dependents (the MediaMTX image is distroless, so in-container probes are not viable)
 
-#### 2. hpe Container
+#### 2. streamer
+- **Purpose**: Loops the local benchmark video with FFmpeg/NVENC and publishes it to `rtsp://rtsp-broker:8554/stream`
+- **Image**: `jrottenberg/ffmpeg:4.4-nvidia`
+- **Configuration**: `VIDEO_FILE_NAME` from `.env` selects the file under `../videos`
+- **Notes**: `-rtsp_transport tcp` is forced so the BCC TCP socket filter can see the traffic
+
+#### 3. hpe Container
 - **Purpose**: Main inference container running pose estimation
-- **Resource Limits**: 4 CPU cores, 16 GB RAM, NVIDIA GPU (via `runtime: nvidia`)
+- **Resource Limits**: hpe `2.5 CPU` (limit) / `2.0 CPU` (reservation), `8 GB` RAM (rationale documented inline in `docker-compose.yaml`); NVIDIA GPU runtime only for GPU methods (alphapose, openpose). Sized for the 8 vCPU / 16 GB EPYC 7551P cloud GPU VM.
 - **Shared Memory**: 8 GB (`shm_size`) for large batch operations
-- **Command**: `python3 main.py --method <METHOD> --input http://h264-streaming-server:8089/stream.h264`
+- **Command**: `python3 main.py --method <METHOD> --input rtsp://rtsp-broker:8554/stream --csv --output_dir /output/ --device <DEVICE> --measurement_interval_ms 10`
+- **Notes**: `OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp` pins OpenCV's FFmpeg backend to TCP
 
-#### 3. gpu-metrics Sidecar
+#### 4. gpu-metrics Sidecar
 - **Purpose**: Polls `nvidia-smi` every 500ms for GPU statistics
 - **Output**: `results/gpu/gpu_metrics.csv`
 - **Requirements**: NVIDIA GPU and `nvidia-container-toolkit`
 
-#### 4. perf_monitor Sidecar
-- **Purpose**: Monitors CPU usage and memory RSS via bpftrace
-- **Output**: `results/perf/aggregated_metrics.csv`
-- **Privileges**: `privileged: true`, `SYS_ADMIN`, `NET_ADMIN`
+#### 5. perf_monitor Sidecar
+- **Purpose**: Monitors CPU usage, memory RSS, and TX bytes (via `sys_enter_sendto` bpftrace) of the HPE PID
+- **Output**: `results/perf/pid_metrics.csv`, `results/perf/network_stats.csv` (TX)
+- **Privileges**: `privileged: true`, `SYS_ADMIN`, `NET_ADMIN`, host PID namespace
 
-#### 5. bcc-tracer Sidecar
-- **Purpose**: Kernel-level network RX byte tracing using BCC/BPF
-- **Output**: `results/traces/bcc/video_rx.csv`
-- **Network Mode**: Shares HPE container's network namespace
+#### 6. bcc-tracer Sidecar
+- **Purpose**: Kernel-level RX byte tracing using a BCC/BPF socket filter on the auto-detected interface, filtered by the RTSP broker IP/port and the HPE ephemeral source port
+- **Output**: `results/traces/bcc/hpe_video_rx.csv`
+- **Network Mode**: `network_mode: "service:hpe"` — shares the HPE container's network namespace
 
 ### Experiment Execution Flow
 The `run_experiment_bcc.sh` script orchestrates the complete benchmarking process:
@@ -403,10 +422,11 @@ python3 optimizations/optimized_main.py --method openpose --input video.mp4 --de
 ```
 
 Key optimizations include:
-- Automatic CPU topology detection
-- Optimal thread/stream configuration calculation
+- Automatic CPU topology detection (cores, AVX2/AVX-512, L3 cache, NUMA topology)
+- Optimal thread/stream configuration calculation per model
 - Performance mode selection (latency vs throughput)
-- CPU pinning and hyper-threading control
+- Hyper-threading control and system-level hints (CPU governor, NUMA balancing)
+- **Note:** CPU pinning is intentionally disabled by default — these scripts are calibrated for a 4 vCPU AMD EPYC 7551P **cloud VM** where vCPU↔pCore mapping is unstable. For bare-metal deployments, set `enable_cpu_pinning=True`. See the Hardware Applicability table in [optimizations/README.md](file://optimizations/README.md) for the full cloud VM vs. bare metal breakdown.
 
 ### GPU Acceleration Setup
 For GPU-enabled environments:
@@ -478,12 +498,12 @@ Network measurement requires two different tools because TX and RX operate in di
 | Direction | Tool | Container | Mechanism | Output file |
 |---|---|---|---|---|
 | **TX** (HPE → outside) | `bpftrace sys_enter_sendto` in `monitor_pid.sh` | `perf_monitor` | Syscall tracepoint — fires in HPE process context, PID filter valid | `results/perf/network_stats.csv` (rows where `sent=1`) |
-| **RX** (stream → HPE) | `bcc_rx_bytes.py` | `bcc-tracer` | BPF socket filter on `eth0`, filtered by streamer IP + port | `results/traces/bcc/video_rx.csv` |
+| **RX** (stream → HPE) | `bcc_rx_bytes.py` | `bcc-tracer` | BPF socket filter on auto-detected interface (`BCC_INTERFACE`/default route), filtered by RTSP broker IP + ports + HPE ephemeral port | `results/traces/bcc/hpe_video_rx.csv` |
 | ~~RX (attempted)~~ | ~~`bpftrace netif_receive_skb`~~ | ~~`perf_monitor`~~ | ~~Fires in softirq/kernel context — PID never matches HPE~~ | ~~Always ~0, ignore~~ |
 
 **Why the split is necessary:** `sendto()` is a syscall made by the HPE process — the kernel knows the PID. Incoming packets are processed by the kernel network stack in softirq context *before* being associated with any process — PID filtering is impossible at that point. `bcc-tracer` works around this by filtering by IP+port instead, running in a container that shares HPE's network namespace (`network_mode: service:hpe`).
 
-**Rule:** for RX data use `results/traces/bcc/video_rx.csv`. For TX data use `results/perf/network_stats.csv`. Never use the RX column from `results/perf/aggregated_metrics.csv` — it is always `0` by design.
+**Rule:** for RX data use `results/traces/bcc/hpe_video_rx.csv`. For TX data use `results/perf/network_stats.csv`. Never use the RX column from `results/perf/pid_metrics.csv` — it is always `0` by design.
 
 ### BCC Tracer Architecture
 The BCC tracer uses kernel-level eBPF programs to capture network traffic with high precision:
@@ -495,12 +515,12 @@ B --> C["count_rx() Function"]
 C --> D["rx_bytes Hash Map"]
 D --> E["User Space"]
 E --> F["bcc_rx_bytes.py"]
-F --> G["video_rx.csv Output"]
+F --> G["hpe_video_rx.csv Output"]
 subgraph "Filter Logic"
 H["Parse Ethernet Header"]
 I["Filter IPv4 Only"]
 J["Filter TCP Only"]
-K["Match Streamer IP:Port"]
+K["Match RTSP Broker IP:Port + HPE Ephemeral Port"]
 H --> I --> J --> K
 end
 B --> H
@@ -513,11 +533,11 @@ B --> H
 ### Port Detection Mechanism
 The BCC tracer automatically detects the HPE container's dynamic source port:
 
-1. **Resolve streaming server hostname** to IP address
-2. **Get network interface** from default route
-3. **Wait for HPE to establish TCP connection** to port 8089 (up to 10 attempts)
-4. **Extract HPE's dynamic source port** from established connections
-5. **Pass detected port** to BCC program for filtering
+1. **Resolve RTSP broker hostname** (`STREAMER_IP=rtsp-broker`) to IP address
+2. **Detect the tracer interface** — `BCC_INTERFACE` if set, otherwise the default-route interface, falling back to the first non-loopback interface
+3. **Wait for HPE to establish a TCP connection** to the broker port 8554 (with `PORT_DETECTION_TIMEOUT=30`)
+4. **Extract HPE's ephemeral source port** from `ss -ntp` output
+5. **Pass detected ports** (broker + ephemeral) to the BCC program for filtering
 
 **Section sources**
 - [docs/bcc-bpf-tracing.md:143-175](file://docs/bcc-bpf-tracing.md#L143-L175)
@@ -539,22 +559,22 @@ results_{method}_{cpu_threads}cores_{device}_{video_file}_{timestamp}/
 │   ├── bcc-tracer.log           # BCC tracer log (port detection, tracing events)
 │   └── gpu-metrics.log          # GPU metrics collector log
 ├── perf/
-│   ├── aggregated_metrics.csv   # Columns: timestamp, pid, cpu_percent, mem_rss_kb, tx_bytes*, rx_bytes*
+│   ├── pid_metrics.csv          # Columns: timestamp, pid, cpu_percent, mem_rss_kb, tx_bytes*, rx_bytes*
 │   ├── network_stats.csv        # Columns: timestamp, pid, interface, bytes, sent  ← TX data lives here
 │   └── perf_metrics.csv         # Additional perf_monitor metrics
 ├── gpu/
 │   └── gpu_metrics.csv          # Columns: timestamp, gpu_id, gpu_utilization, mem_utilization, temperature, power_usage
 ├── traces/bcc/
-│   └── video_rx.csv             # Columns: timestamp_ms, rx_bytes (per 10ms interval)  ← RX data lives here
+│   └── hpe_video_rx.csv         # Columns: timestamp_ms, rx_bytes (per 10ms interval)  ← RX data lives here
 └── hpe_output/
     ├── *.csv                    # Keypoint data: frame, person_id, joint coordinates
     └── *.json                   # COCO-format keypoint export (if --json flag used)
 ```
 
 **Important Notes:**
-- `*` The `tx_bytes` and `rx_bytes` columns in `aggregated_metrics.csv` are always `0` — this is intentional
+- `*` The `tx_bytes` and `rx_bytes` columns in `pid_metrics.csv` are always `0` — this is intentional
 - Network data is collected separately by two different tools as described above
-- The `video_rx.csv` file contains RX bytes measured at 10ms intervals
+- The `hpe_video_rx.csv` file contains RX bytes measured at 10ms intervals
 - TX data is captured separately in `network_stats.csv` with proper PID filtering
 
 ### Data Validation Commands
@@ -562,19 +582,19 @@ results_{method}_{cpu_threads}cores_{device}_{video_file}_{timestamp}/
 cd results_*/  # Navigate to your results directory
 
 # Total video data received (MB)
-awk -F, 'NR>1 {sum += $2} END {printf "%.2f MB\n", sum/1024/1024}' traces/bcc/video_rx.csv
+awk -F, 'NR>1 {sum += $2} END {printf "%.2f MB\n", sum/1024/1024}' traces/bcc/hpe_video_rx.csv
 
 # Average GPU utilization
 awk -F, 'NR>1 {sum += $2; n++} END {printf "%.1f%%\n", sum/n}' gpu/gpu_metrics.csv
 
 # Peak memory usage (MB)
-awk -F, 'NR>1 {if ($3 > max) max=$3} END {print max/1024 " MB"}' perf/aggregated_metrics.csv
+awk -F, 'NR>1 {if ($3 > max) max=$3} END {print max/1024 " MB"}' perf/pid_metrics.csv
 
 # Number of frames processed
 wc -l hpe_output/*.csv
 
 # Experiment duration (from RX trace)
-head -2 traces/bcc/video_rx.csv && echo "..." && tail -1 traces/bcc/video_rx.csv
+head -2 traces/bcc/hpe_video_rx.csv && echo "..." && tail -1 traces/bcc/hpe_video_rx.csv
 ```
 
 **Section sources**
@@ -619,12 +639,14 @@ docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu20.04 nvidia-smi
 
 ### Stream Connection Issues
 ```bash
-# Get streaming server IP address
-docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' h264-streaming-server
+# Get RTSP broker IP address
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' rtsp-broker
 
 # Test stream accessibility
-curl -I http://172.18.0.2:8089/stream.h264
-ffprobe http://172.18.0.2:8089/stream.h264
+ffprobe rtsp://rtsp-broker:8554/stream
+
+# Verify stream from within the HPE container
+docker exec hpe ffprobe rtsp://rtsp-broker:8554/stream
 ```
 
 ### Container Lifecycle Issues
@@ -649,15 +671,16 @@ docker rm -f hpe bcc-tracer gpu-metrics perf_monitor 2>/dev/null || true
 
 **Diagnosis Steps:**
 ```bash
-# Check streaming server logs for complete file transmission
-docker logs h264-streaming-server | tail -20
+# Check broker / streamer logs for complete file transmission
+docker logs rtsp-broker | tail -20
+docker logs streamer  | tail -20
 
 # Verify HPE container processed all frames
 docker logs hpe | grep -E "(frame|processed|exit)"
 
 # Compare durations
 echo "Stream duration (RX trace):"
-head -2 traces/bcc/video_rx.csv && echo "..." && tail -1 traces/bcc/video_rx.csv
+head -2 traces/bcc/hpe_video_rx.csv && echo "..." && tail -1 traces/bcc/hpe_video_rx.csv
 
 # Validate file sizes
 echo "Original file size:"

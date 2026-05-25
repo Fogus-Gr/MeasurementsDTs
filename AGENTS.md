@@ -220,8 +220,15 @@ python3 main.py --method movenet --input http://<your-ip>:8080/video_feed --save
 
 ### Experiment rigs
 ```bash
-cd monitor_hpe  && ./run_experiment.sh
+# monitor_hpe — baseline CPU monitoring with auto-scaling
+cd monitor_hpe  && ./run_experiment.sh [METHOD] [VIDEO_FILE]
+# See monitor_hpe/USAGE.md for complete usage guide
+# See monitor_hpe/SCALING_GUIDE.md for auto-scaling behavior (4-32 vCPU VMs)
+
+# ffmpeg_hpe — RTSP stream + full monitoring stack
 cd ffmpeg_hpe   && ./run_experiment.sh movenet
+
+# recent-dash — DASH/HTTP caching experiment (not HPE)
 cd recent-dash  && ./run_experiment.sh
 ```
 

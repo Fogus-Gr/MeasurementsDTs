@@ -371,10 +371,3 @@ python -c "from utils.gpu_memory_pool import get_memory_pool; print(pool.get_sta
 ---
 
 This optimization plan provides a systematic approach to dramatically improve performance across all components of your 2D Human Pose Estimation system. Each phase builds on the previous one, ensuring stable and measurable improvements throughout the implementation process.
-
-<citations>
-<document>
-<document_type>RULE</document_type>
-<document_id>/Users/georgek/MeasurementsDTs/WARP.md</document_id>
-</document>
-</citations>

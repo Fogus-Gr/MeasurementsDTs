@@ -1,5 +1,7 @@
 # HPE Methods — Deep Dive
 
+> **Newcomer?** Unfamiliar with terms like *HPE*, *keypoint*, *COCO format*, *OpenVINO*, *backend*, or *padding*? Check the [Glossary in ONBOARDING.md](../ONBOARDING.md#appendix-a-glossary) before reading further.
+
 ## Overview
 Detailed reference for all Human Pose Estimation methods, their architectures, model files, and configuration.
 

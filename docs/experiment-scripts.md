@@ -1,5 +1,7 @@
 # Experiment Scripts — Deep Dive
 
+> **Newcomer?** Unfamiliar with terms like *experiment rig*, *sidecar*, *bpftrace*, *BCC*, or *PID filter*? Check the [Glossary in ONBOARDING.md](../ONBOARDING.md#appendix-a-glossary) before reading further.
+
 ## Overview
 
 This document provides detailed reference for all experiment orchestration and monitoring scripts in the HPE benchmarking pipeline. Scripts are organized by location and purpose: full end-to-end experiment runners, local process monitors, and standalone metrics collectors.

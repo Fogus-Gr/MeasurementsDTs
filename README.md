@@ -256,9 +256,23 @@ The simplest rig. Two containers:
 
 No streaming server. Video is mounted directly as a volume.
 
+**Auto-Scaling:** The rig automatically detects available vCPUs and allocates resources accordingly. Works on any VM with 4+ vCPUs. See [`SCALING_GUIDE.md`](monitor_hpe/SCALING_GUIDE.md) for details.
+
 ```bash
-cd monitor_hpe && ./run_experiment.sh
+cd monitor_hpe && ./run_experiment.sh [METHOD] [VIDEO_FILE]
+# e.g. ./run_experiment.sh movenet
+# e.g. ./run_experiment.sh hrnet rangeOfMotion/vga_01_01.mp4
 ```
+
+**Resource Allocation:**
+- Monitor service: 2 vCPUs (fixed)
+- HPE service: Remaining vCPUs (minimum 2)
+- Memory: Method-dependent (1-1.5GB per vCPU for CPU models, 8GB fixed for GPU models)
+
+**Documentation:**
+- [`monitor_hpe/USAGE.md`](monitor_hpe/USAGE.md) — Complete usage guide with examples and command-line options
+- [`monitor_hpe/SCALING_GUIDE.md`](monitor_hpe/SCALING_GUIDE.md) — Auto-scaling behavior for 4-32 vCPU VMs with performance expectations
+- [`monitor_hpe/RESOURCE_ALLOCATION.md`](monitor_hpe/RESOURCE_ALLOCATION.md) — Technical resource allocation details and tuning guidelines
 
 #### `ffmpeg_hpe/` — RTSP stream + full monitoring stack
 

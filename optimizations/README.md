@@ -2,15 +2,37 @@
 
 This directory contains CPU performance optimizations specifically tuned for **4 vCPU cloud instances** running on AMD EPIC 7551P processors, optimized for maximizing performance with limited core count.
 
+> **Current handoff host (May 2026):** the platform is now deployed on an **8 vCPU EPYC 7551P** cloud GPU VM. The example settings below (`inference_threads: 4`) reflect the *original* 4-vCPU calibration. The runtime auto-detector in `cpu_performance_optimizer.py` adapts to whatever core count is present — on the 8-vCPU host it picks `inference_threads = 8` (Throughput) or `7` (Latency). Bump the manual-override examples accordingly if you want full host utilisation; keep them at 4 if you want continuity with historic `results_*_4cores_CPU_*` benchmark data.
+
+## ⚠️ Hardware Applicability
+
+**Calibrated target:** 4 vCPU cloud GPU VM running on AMD EPYC 7551P (Zen 1, AVX2, 64 MB L3 die) + RTX A4000 + 16 GB RAM. **This is a virtualised instance, not bare metal** — the author already accounts for hypervisor constraints (CPU pinning disabled, NUMA pinning disabled). Some assumptions remain CPU-model-specific.
+
+| Optimization knob | Source | Cloud VM (EPYC 7551P) | Cloud VM (other x86) | Bare metal |
+|---|---|---|---|---|
+| `inference_threads = 4` | matches 4 vCPU SKU | ✅ calibrated | ✅ transfers (any 4 vCPU) | ⚠️ re-derive for actual core count |
+| `streams = 1`, `LATENCY` hint | conservative for low core count | ✅ calibrated | ✅ transfers | ⚠️ re-tune; bare metal often benefits from more streams |
+| `enable_cpu_pinning = False` | virt-aware default | ✅ correct | ✅ correct | ❌ **flip to True on bare metal** — pinning is effective there |
+| AVX2 path | EPYC 7551P (Zen 1) supports AVX2 | ✅ | ✅ (every modern x86 cloud VM has AVX2; AVX-512 hosts could benefit further) | ✅ (or AVX-512 on Intel SP/Sapphire Rapids) |
+| 64 MB L3 batch sizing | EPYC 7551P die L3 | ✅ | ⚠️ hypervisor masks real L3; sub-optimal but not broken | ⚠️ override based on actual L3 |
+| NUMA balancing disabled | host-side hint | ✅ (single vNUMA) | ✅ | ✅ (multi-socket bare metal benefits) |
+| ARM / Graviton | n/a | ❌ not supported | ❌ AVX2 path breaks; would need port | ❌ |
+
+**Decision rule for new deployments:**
+- **Same VM class (4 vCPU + EPYC + 16 GB)** — use as-is.
+- **Different x86 cloud VM** — use as-is; auto-detection (`psutil` + OpenVINO `ie.available_devices`) adapts thread count; L3-cache batch sizing may pick a sub-optimal-but-safe value.
+- **Bare metal** — set `enable_cpu_pinning=True`, re-tune `streams` and `inference_threads` to actual core count; consider NUMA-aware `taskset` and SMT pinning that this script intentionally skips for VMs.
+- **ARM / non-x86** — not supported; AVX2 assumption breaks.
+
 ## 🎯 Expected Performance Improvements
 
-Based on your M1 benchmark data, here are the expected improvements on 4 vCPU EPIC 7551P cloud instance:
+Based on M1 benchmark data, expected improvements on the EPIC 7551P cloud GPU VM. The **4 vCPU** column is the original calibration; the **8 vCPU** column is a *projection* (~1.6× scaling on inference-thread-bound workloads, capped near 1.7× by memory-bandwidth saturation) — measure on the live host and replace the projection with actual numbers as part of handoff bring-up.
 
-| Model | Current FPS (M1) | Expected FPS (4 vCPU Optimized) | Improvement |
-|-------|------------------|----------------------------------|-------------|
-| OpenPose | 16.7 | **18-19** | 10-15% |
-| EfficientHRNet1 (ae1) | 12.5 | **14-15** | 12-20% |
-| HigherHRNet | 2.4 | **2.8-3.0** | 15-25% |
+| Model | Current FPS (M1) | Expected FPS (4 vCPU calibration) | Projected FPS (8 vCPU host) | Improvement vs M1 (4 vCPU / 8 vCPU) |
+|-------|------------------|------------------------------------|------------------------------|--------------------------------------|
+| OpenPose | 16.7 | **18-19** | **28-32** *(projected)* | 10-15% / ~70-90% |
+| EfficientHRNet1 (ae1) | 12.5 | **14-15** | **22-26** *(projected)* | 12-20% / ~75-105% |
+| HigherHRNet | 2.4 | **2.8-3.0** | **4.2-5.0** *(projected)* | 15-25% / ~75-110% |
 
 ## 🚀 Quick Start
 
@@ -44,14 +66,19 @@ hpe.main_loop()
 
 ## 🔧 Key Optimizations Applied
 
-### 1. 4 vCPU Cloud Optimizations
+### 1a. 4 vCPU calibration baseline (historic — matches `results_*_4cores_CPU_*` runs)
 - **OpenPose**: 4 threads, 1 stream (maximize single-stream performance)
 - **EfficientHRNet1**: 4 threads, 1 stream (balanced approach)
 - **HigherHRNet**: 4 threads, 1 stream (concentrate all power)
 
+### 1b. 8 vCPU current host (what the auto-detector picks on the live VM)
+- **OpenPose** (Throughput): 8 threads, 1 stream — full host inference
+- **EfficientHRNet1** (Latency): 7 threads, 1 stream — leaves 1 vCPU free for OS/sidecars to reduce jitter
+- **HigherHRNet** (Throughput): 8 threads, 1 stream — memory-bandwidth bound; more streams unhelpful
+
 ### 2. Cloud-Friendly Configuration  
-- CPU pinning disabled (less effective in virtualized environments)
-- Hyper-threading enabled (may help with 4 vCPU)
+- CPU pinning disabled (ineffective in virtualised environments — vCPU↔pCore mapping is unstable)
+- Hyper-threading: enabled on 4 vCPU (every thread helps); auto-detector disables it on 8 vCPU to reduce inference contention
 - Single stream focus for stability
 
 ### 3. Memory Bandwidth Optimization
@@ -66,7 +93,7 @@ hpe.main_loop()
 
 ## 📊 Configuration Details
 
-### 4 vCPU Cloud Instance Optimized Settings
+### 4 vCPU calibration baseline settings (historic)
 
 ```python
 # OpenPose (compute-intensive) - 4 vCPU
@@ -94,6 +121,37 @@ hpe.main_loop()
     'performance_hint': 'THROUGHPUT',
     'memory_pattern': 'bandwidth_optimized',
     'enable_hyper_threading': True
+}
+```
+
+### 8 vCPU current host settings (auto-detected on the live VM)
+
+```python
+# OpenPose (compute-intensive) - 8 vCPU
+{
+    'inference_threads': 8,     # All vCPUs
+    'streams': 1,              # Single stream — pose estimators are latency-sensitive
+    'performance_hint': 'THROUGHPUT',
+    'enable_cpu_pinning': False,  # Still ineffective in cloud
+    'enable_hyper_threading': False,  # Auto-detector turns SMT OFF on 8 vCPU
+}
+
+# EfficientHRNet1 (balanced) - 8 vCPU
+{
+    'inference_threads': 7,     # Leave 1 vCPU for OS / sidecars
+    'streams': 1,
+    'performance_hint': 'LATENCY',
+    'batch_size': 1,
+    'enable_hyper_threading': False,
+}
+
+# HigherHRNet (memory-intensive) - 8 vCPU
+{
+    'inference_threads': 8,     # Memory-bandwidth bound; more threads still help
+    'streams': 1,
+    'performance_hint': 'THROUGHPUT',
+    'memory_pattern': 'bandwidth_optimized',
+    'enable_hyper_threading': False,
 }
 ```
 
@@ -126,28 +184,42 @@ python optimizations/optimized_main.py --method openpose --input video.mp4 --ben
 
 ## 🎛️ Advanced Tuning
 
-### Manual Override for 4 vCPU
+### Manual Override
 ```bash
-# Force specific thread/stream configuration (4 vCPU limits)
+# 4 vCPU calibration baseline (matches historic `results_*_4cores_CPU_*`)
 python optimizations/optimized_main.py --method openpose --input video.mp4 --enable-cpu-opt \
   --force-threads 4 --force-streams 1
 
-# Try with 3 threads if experiencing contention
+# 8 vCPU current host — full utilization
+python optimizations/optimized_main.py --method openpose --input video.mp4 --enable-cpu-opt \
+  --force-threads 8 --force-streams 1
+
+# Conservative on 8 vCPU host (Latency hint, leaves 1 vCPU for OS/sidecars)
+python optimizations/optimized_main.py --method ae1 --input video.mp4 --enable-cpu-opt \
+  --force-threads 7 --force-streams 1
+
+# Try 3 threads if you suspect 4 vCPU contention (legacy debugging)
 python optimizations/optimized_main.py --method ae1 --input video.mp4 --enable-cpu-opt \
   --force-threads 3 --force-streams 1
 ```
 
-### Environment Variables for 4 vCPU
+### Environment Variables
 ```bash
-# Set optimization parameters via environment (4 vCPU optimized)
+# --- 4 vCPU calibration baseline ---
 export OV_THREADS=4
 export OV_MODE=latency     # Often better for low core count
 export OV_STREAMS=1        # Single stream for stability
 
+# --- 8 vCPU current host ---
+export OV_THREADS=8
+export OV_MODE=throughput  # Compute-heavy models on 8 vCPU benefit from throughput hint
+export OV_STREAMS=1
+
 python optimizations/optimized_main.py --method openpose --input video.mp4 --enable-cpu-opt
 
-# Alternative throughput mode for compute-heavy models
-export OV_MODE=throughput
+# Alternative on 8 vCPU: Latency hint with 7 threads for jitter-sensitive workloads
+export OV_THREADS=7
+export OV_MODE=latency
 python optimizations/optimized_main.py --method hrnet --input video.mp4 --enable-cpu-opt
 ```
 
@@ -208,12 +280,14 @@ For more details, see the `OPTIMIZATION_PLAN.md` in the parent directory.
 
 ---
 
-**Hardware Target**: 4 vCPU Cloud Instance (AMD EPIC 7551P) + RTX A4000 + 16GB RAM  
-**Software**: OpenVINO 2022.3+, Python 3.8+, Ubuntu 18.04+
+**Hardware Targets:**  
+- *Original calibration*: 4 vCPU Cloud Instance (AMD EPIC 7551P) + RTX A4000 + 16 GB RAM  
+- *Current handoff host (May 2026)*: 8 vCPU Cloud Instance (AMD EPYC 7551P) + RTX A4000 + 16 GB RAM  
+
+**Software**: OpenVINO 2022.3+, Python 3.8+, Ubuntu 20.04+
 
 <citations>
 <document>
 <document_type>RULE</document_type>
-<document_id>/Users/georgek/MeasurementsDTs/WARP.md</document_id>
 </document>
 </citations>
