@@ -98,6 +98,7 @@ def _is_stream_url(url: str) -> bool:
 class BaseHPE(ABC):
     input_type = None
     output_dir = ""
+    IMAGE_EXTENSIONS = ("*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.tiff", "*.webp")
 
     def __init__(self, input_src=None,
                 output_dir=None,
@@ -263,7 +264,7 @@ class BaseHPE(ABC):
         elif self.input_type == "directory":
             # Get all image files from the directory
             image_files = []
-            for ext in ("*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.tiff", "*.webp"):
+            for ext in self.IMAGE_EXTENSIONS:
                 image_files.extend(glob.glob(os.path.join(self.img_dir, ext)))
             print(f"Found {len(image_files)} images in {self.img_dir}")
 
@@ -349,7 +350,7 @@ class BaseHPE(ABC):
             elif self.input_type == "directory":
                 # Get all image files from the directory
                 image_files = []
-                for ext in ("*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.tiff", "*.webp"):
+                for ext in self.IMAGE_EXTENSIONS:
                     image_files.extend(glob.glob(os.path.join(self.img_dir, ext)))
                 print(f"Found {len(image_files)} images in {self.img_dir}")
 
