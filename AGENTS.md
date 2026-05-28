@@ -225,8 +225,9 @@ cd monitor_hpe  && ./run_experiment.sh [METHOD] [VIDEO_FILE]
 # See monitor_hpe/USAGE.md for complete usage guide
 # See monitor_hpe/SCALING_GUIDE.md for auto-scaling behavior (4-32 vCPU VMs)
 
-# ffmpeg_hpe — RTSP stream + full monitoring stack
-cd ffmpeg_hpe   && ./run_experiment.sh movenet
+# ffmpeg_hpe — RTSP stream + full monitoring stack with auto-scaling
+cd ffmpeg_hpe   && ./run_experiment.sh [METHOD]
+# See ffmpeg_hpe/DYNAMIC_RESOURCE_ALLOCATION.md for auto-scaling details
 
 # recent-dash — DASH/HTTP caching experiment (not HPE)
 cd recent-dash  && ./run_experiment.sh

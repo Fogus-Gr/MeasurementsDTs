@@ -284,10 +284,15 @@ The main experiment rig. Six containers total, with `bcc-tracer` optional:
 - `gpu-metrics` — polls `nvidia-smi` every 500ms
 - `bcc-tracer` (optional, commented out) — eBPF/BCC kernel tracing of network traffic
 
+**Resource allocation:** Auto-detects available vCPUs via `nproc`, reserves 2 for sidecars (streamer, perf_monitor, bcc-tracer, gpu-metrics), allocates remainder to HPE. Per-method tuning: GPU methods cap OV_THREADS at 4; OpenVINO methods scale threads with vCPUs; memory scales 1-1.5GB per vCPU. Works on any VM with 4+ vCPUs without manual configuration.
+
 ```bash
 cd ffmpeg_hpe && ./run_experiment.sh <method>
 # e.g. ./run_experiment.sh movenet
 ```
+
+**Documentation:**
+- [`ffmpeg_hpe/DYNAMIC_RESOURCE_ALLOCATION.md`](ffmpeg_hpe/DYNAMIC_RESOURCE_ALLOCATION.md) — Auto-scaling implementation and usage guide
 
 #### `recent-dash/` — DASH/HTTP caching experiment
 
