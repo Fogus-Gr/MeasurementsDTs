@@ -60,6 +60,84 @@ arguments=${2:-""}
 results_dir="results_${container_type}_${cpu_model}_${timestamp}"
 mkdir -p "$results_dir/logs" "$results_dir/traces" "$results_dir/perf"
 
+# Step 4b: Auto-detect available vCPUs and compute dynamic resource allocation.
+# Sidecars (streamer 0.75, perf_monitor 0.25, bcc-tracer 0.5, gpu-metrics 0.1)
+# consume ~1.6 CPUs at peak; we reserve 2 to give headroom and keep HPE
+# measurements uncontaminated by scheduler contention.
+TOTAL_VCPUS=$(nproc)
+echo "[INFO] Detected $TOTAL_VCPUS vCPUs on this system"
+
+if [ "$TOTAL_VCPUS" -lt 4 ]; then
+  echo "[ERROR] This experiment requires at least 4 vCPUs. Found: $TOTAL_VCPUS"
+  exit 1
+fi
+
+SIDECAR_VCPUS=2
+HPE_VCPUS=$((TOTAL_VCPUS - SIDECAR_VCPUS))
+if [ "$HPE_VCPUS" -lt 2 ]; then
+  HPE_VCPUS=2
+fi
+
+# Per-method resource tuning — resolved here so docker-compose picks up the
+# exported vars when the hpe service is started in Step 10.
+# HPE_METHOD is parsed in Step 9; we default to the CLI arg now so the case
+# block can run before any containers start.
+_METHOD_PREVIEW="${1:-alphapose}"
+case "$_METHOD_PREVIEW" in
+  alphapose|openpose)
+    # GPU methods: PyTorch/CUDA does the heavy lifting; cap OV_THREADS at 4
+    # (used only for pre/post-processing on CPU).
+    export OV_THREADS=$(( HPE_VCPUS < 4 ? HPE_VCPUS : 4 ))
+    export HPE_CPU_LIMIT="${HPE_VCPUS}.0"
+    export HPE_CPU_RESERVATION=$(awk "BEGIN {printf \"%.1f\", $HPE_VCPUS * 0.5}")
+    export HPE_MEMORY_LIMIT="8G"
+    export HPE_MEMORY_RESERVATION="6G"
+    ;;
+  movenet|ae1|ae2|ae3)
+    # Lightweight OpenVINO models: scale threads with available vCPUs.
+    # Memory: 1 GB per vCPU, minimum 4 GB.
+    export OV_THREADS=$HPE_VCPUS
+    export HPE_CPU_LIMIT="${HPE_VCPUS}.0"
+    export HPE_CPU_RESERVATION=$(awk "BEGIN {printf \"%.1f\", $HPE_VCPUS * 0.67}")
+    MEM_GB=$(( HPE_VCPUS > 4 ? HPE_VCPUS : 4 ))
+    export HPE_MEMORY_LIMIT="${MEM_GB}G"
+    export HPE_MEMORY_RESERVATION=$(awk "BEGIN {printf \"%.0f\", $MEM_GB * 0.67}")G
+    ;;
+  hrnet)
+    # HigherHRNet: heavier model, needs more memory.
+    # Memory: 1.5 GB per vCPU, minimum 6 GB.
+    export OV_THREADS=$HPE_VCPUS
+    export HPE_CPU_LIMIT="${HPE_VCPUS}.0"
+    export HPE_CPU_RESERVATION=$(awk "BEGIN {printf \"%.1f\", $HPE_VCPUS * 0.67}")
+    MEM_GB=$(awk "BEGIN {printf \"%.0f\", $HPE_VCPUS * 1.5}")
+    MEM_GB=$(( MEM_GB > 6 ? MEM_GB : 6 ))
+    export HPE_MEMORY_LIMIT="${MEM_GB}G"
+    export HPE_MEMORY_RESERVATION=$(awk "BEGIN {printf \"%.0f\", $MEM_GB * 0.75}")G
+    ;;
+  *)
+    echo "[WARNING] Unknown method '$_METHOD_PREVIEW', using default resource settings"
+    export OV_THREADS=$HPE_VCPUS
+    export HPE_CPU_LIMIT="${HPE_VCPUS}.0"
+    export HPE_CPU_RESERVATION=$(awk "BEGIN {printf \"%.1f\", $HPE_VCPUS * 0.67}")
+    MEM_GB=$(( HPE_VCPUS > 4 ? HPE_VCPUS : 4 ))
+    export HPE_MEMORY_LIMIT="${MEM_GB}G"
+    export HPE_MEMORY_RESERVATION=$(awk "BEGIN {printf \"%.0f\", $MEM_GB * 0.67}")G
+    ;;
+esac
+
+export OV_MODE="latency"
+export OV_CPU_PINNING="true"
+export OV_HYPER_THREADING="false"
+
+echo "[INFO] System Configuration:"
+echo "  Total vCPUs:    $TOTAL_VCPUS"
+echo "  HPE vCPUs:      $HPE_VCPUS  (sidecars reserved: $SIDECAR_VCPUS)"
+echo "[INFO] HPE Resource Allocation:"
+echo "  CPU limit:      $HPE_CPU_LIMIT  (reserved: $HPE_CPU_RESERVATION)"
+echo "  Memory limit:   $HPE_MEMORY_LIMIT  (reserved: $HPE_MEMORY_RESERVATION)"
+echo "  OV_THREADS:     $OV_THREADS"
+echo ""
+
 # Step 5: Clean up old CSV files and tracer output before starting a new experiment
 rm -f ./results/*.csv ./traces/*.csv ./perf_monitor/output/*.csv 2>/dev/null || true
 rm -f ./csv/*.csv 2>/dev/null || true
