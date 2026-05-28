@@ -5,7 +5,7 @@ services:
       context: ..
       dockerfile: Dockerfile_base
     entrypoint: ["/app/entrypoint.sh"]
-    command: python3 main.py --method movenet --input /videos/${VIDEO_FILE:-ultimatum/hd_00_00.mp4}
+    command: python3 main.py --method ${HPE_METHOD:-movenet} --input /videos/${VIDEO_FILE:-ultimatum/hd_00_00.mp4} --device ${HPE_DEVICE:-CPU}
     pid: "host"
     cap_add:
       - SYS_PTRACE
@@ -16,14 +16,19 @@ services:
       - /home/user/MeasurementsDTs/videos:/videos:ro
     environment:
       - PYTHONUNBUFFERED=1
+      # OpenVINO CPU optimization (configured by run_experiment.sh based on method)
+      - OV_THREADS=${OV_THREADS:-6}
+      - OV_MODE=${OV_MODE:-latency}
+      - OV_CPU_PINNING=${OV_CPU_PINNING:-true}
+      - OV_HYPER_THREADING=${OV_HYPER_THREADING:-false}
     deploy:
       resources:
         limits:
-          cpus: '4.0'  # Allow up to 4 cores
-          memory: 4G   # Maximum memory
+          cpus: ${HPE_CPU_LIMIT:-6.0}
+          memory: ${HPE_MEMORY_LIMIT:-6G}
         reservations:
-          cpus: '2.0'  # Guarantee at least 2 cores
-          memory: 2G   # Guarantee memory
+          cpus: ${HPE_CPU_RESERVATION:-4.0}
+          memory: ${HPE_MEMORY_RESERVATION:-4G}
 
   monitor:
     build:
@@ -45,7 +50,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'  # Limit to 1 core to minimize impact
+          cpus: '2.0'  # 2 cores for monitoring (8 vCPU total: 6 HPE + 2 monitor)
           memory: 512M # Modest memory limit
+        reservations:
+          cpus: '1.0'  # Guarantee at least 1 core
+          memory: 256M
 
 
