@@ -16,12 +16,15 @@ services:
     # has `restart: on-failure` which covers the rare case where it loses the race.
     deploy:
       resources:
+        # MediaMTX is a relay (no transcoding); RTSP forwarding fits well under
+        # 0.5 CPU and 256 MB even at 1080p. Tightened from 2.0/1G to free
+        # headroom on the 8 vCPU / 16 GB cloud GPU benchmarking VM.
         limits:
-          cpus: '2.0'
-          memory: 1G
+          cpus: '0.5'
+          memory: 256M
         reservations:
-          cpus: '1.0'
-          memory: 512M
+          cpus: '0.25'
+          memory: 128M
 
   streamer:
     image: jrottenberg/ffmpeg:4.4-nvidia
@@ -39,6 +42,12 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=video,compute,utility
     deploy:
       resources:
+        # NVENC offloads H.264 encode to the GPU; the FFmpeg control loop and
+        # RTSP packetisation are light. 0.75 CPU / 512 MB is sufficient for
+        # 1080p sources on the 8 vCPU benchmarking VM.
+        limits:
+          cpus: '0.75'
+          memory: 512M
         reservations:
           devices:
             - driver: nvidia
@@ -95,8 +104,24 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4.0'
-          memory: 16G
+          # 2.5 CPUs caps HPE to a known measurement budget. On the 8 vCPU
+          # benchmarking host this leaves ~5.5 cores free for the streamer,
+          # sidecars, and OS — preventing scheduler contention from corrupting
+          # the very pid_metrics.csv we are trying to measure. Bump back to
+          # 4.0 to reproduce historical `results_*_4cores_CPU_*` benchmark
+          # configurations.
+          cpus: '2.5'
+          # 8 GB covers AlphaPose CPU (--detbatch 5, ResNet-50 + YOLOv3) plus the
+          # OpenVINO compile cache and OpenCV/FFmpeg RTSP decode buffers, with
+          # ~2 GB headroom. OpenVINO-only methods (movenet, hrnet, ae1/2/3)
+          # peak well under 4 GB. Bump only if a specific method OOMs with the
+          # current detbatch / video resolution.
+          memory: 8G
+        reservations:
+          # Guarantee HPE always gets 2 cores even under sidecar BPF compile
+          # spikes. Without this, BCC startup (BPF JIT compile) can briefly
+          # starve the inference loop.
+          cpus: '2.0'
     container_name: hpe
     depends_on:
       rtsp-broker:
@@ -130,6 +155,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    deploy:
+      resources:
+        # nvidia-smi polling is essentially idle CPU; cap aggressively so it
+        # cannot interfere with HPE measurements.
+        limits:
+          cpus: '0.1'
+          memory: 128M
 
   perf_monitor:
     container_name: perf_monitor
@@ -155,6 +187,13 @@ services:
     user: root
     networks:
       - streaming-network
+    deploy:
+      resources:
+        # bpftrace + ps polling at 500 ms is light; cap to keep host PID-mode
+        # tracing isolated from HPE CPU accounting.
+        limits:
+          cpus: '0.25'
+          memory: 256M
 
   bcc-tracer:
     build:
@@ -187,6 +226,13 @@ services:
       - SYS_RESOURCE
     security_opt:
       - seccomp:unconfined
+    deploy:
+      resources:
+        # 0.5 CPU accommodates the BPF JIT compile burst at startup; steady
+        # state is far lower. Memory cap covers BPF maps + Python runtime.
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
 networks:
   streaming-network:
