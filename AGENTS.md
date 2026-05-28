@@ -46,7 +46,6 @@ recent-dash/                   # Rig 3: DASH/HTTP caching experiment (separate r
 Measure_Flops/                 # Standalone: GPU FLOPS via Nsight Compute
 Measure_gpu_dcgm/              # Standalone: GPU power/temp/util via nvidia-smi
 Measure_plot_cpu_perf/         # Standalone: CPU cycles via perf stat
-optimizations/                 # OpenVINO CPU thread/stream tuning for 4-vCPU cloud instances
 Dockerfile_base                # Active HPE container image (used by monitor_hpe/ and ffmpeg_hpe/)
 Dockerfile_optimized_multistage_v4  # FFmpeg-only image; not used for the HPE service
 docker-compose.yml             # GPU observability stack (DCGM + Prometheus + Grafana)
@@ -239,12 +238,6 @@ cd recent-dash  && ./run_experiment.sh
 ./Measure_gpu_dcgm/run_nvidia_dcgm.sh
 ./Measure_plot_cpu_perf/run_perf_plot.sh
 ```
-
-### CPU optimisations
-```bash
-python3 optimizations/optimized_main.py --method openpose --input video.mp4 --device CPU --enable-cpu-opt
-```
-
 ---
 
 ## Environment Setup

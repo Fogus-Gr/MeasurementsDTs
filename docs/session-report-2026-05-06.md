@@ -109,7 +109,6 @@ Painful driver upgrade (history lines 496-553):
 #### ~Mid 2026 — Final Optimization Round
 
 - Extensive OpenVINO env var tuning (history lines 667-741)
-- Testing `optimizations/optimized_main.py` with `--enable-cpu-opt`
 - Running `alphapose` on GPU, `openpose` and `movenet` on CPU
 - Network traffic analysis with `nethogs` and `iftop`
 - Cleaning up old model files (`rm -rf models/ONNX/`)

@@ -317,20 +317,6 @@ cd recent-dash && ./run_experiment.sh
 | `Measure_gpu_dcgm/run_nvidia_dcgm.sh` | GPU power, temperature, utilisation, memory | `nvidia-smi` polling loop → CSV; `plot_smi_output.py` generates PNG charts |
 | `Measure_plot_cpu_perf/run_perf_plot.sh` | CPU cycles and clock | Reads PID from `/pids/dash.pid`, runs `perf stat -p`, plots with `plot_perf_metrics.py` |
 
-### CPU Optimisations (`optimizations/`)
-
-OpenVINO thread/stream tuning targeted at 4-vCPU AMD EPYC cloud instances:
-
-- `cpu_performance_optimizer.py` — auto-detects CPU topology and computes optimal OpenVINO thread/stream config
-- `enhanced_openvino_hpe.py` — drop-in replacement for `OpenVINOBaseHPE` with the optimisations applied
-- `optimized_main.py` — CLI wrapper with `--enable-cpu-opt` and `--benchmark` flags
-
-```bash
-python3 optimizations/optimized_main.py --method openpose --input video.mp4 --device CPU --enable-cpu-opt
-```
-
-See `optimizations/README.md` and `OPTIMIZATION_PLAN.md` for configuration details and expected performance gains.
-
 ### Root-level Dockerfiles
 
 Six Dockerfiles at the repo root represent iteration history on the HPE container image. `monitor_hpe/` and the active `ffmpeg_hpe/` RTSP rig use `Dockerfile_base`.

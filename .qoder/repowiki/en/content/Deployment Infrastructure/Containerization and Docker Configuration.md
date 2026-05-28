@@ -9,6 +9,7 @@
 - [run_nvidia_dcgm.sh](file://ffmpeg_hpe/run_nvidia_dcgm.sh)
 - [Dockerfile.bcc](file://ffmpeg_hpe/bpftrace-tracer/Dockerfile.bcc)
 - [bcc_rx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py)
+- [bcc_tx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_tx_bytes.py)
 - [entrypoint.sh](file://ffmpeg_hpe/bpftrace-tracer/entrypoint.sh)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
 - [HTTP-Server.Dockerfile](file://recent-dash/HTTP-Server.Dockerfile)
@@ -20,16 +21,20 @@
 - [prometheus.yml](file://prometheus.yml)
 - [docker-compose.yml](file://docker-compose.yml)
 - [README.md](file://README.md)
+- [run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
+- [USAGE.md](file://monitor_hpe/USAGE.md)
+- [DYNAMIC_RESOURCE_ALLOCATION_SUMMARY.md](file://DYNAMIC_RESOURCE_ALLOCATION_SUMMARY.md)
+- [plot_rx_bytes.py](file://ffmpeg_hpe/plot_rx_bytes.py)
+- [bcc-bpf-tracing.md](file://docs/bcc-bpf-tracing.md)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Updated RTSP streaming architecture with new MediaMTX broker and FFmpeg NVENC streamer services
-- Replaced legacy HTTP H.264 streaming server with RTSP-based streaming pipeline
-- Updated Docker Compose configuration to reflect new service dependencies and networking
-- Revised component analysis to reflect RTSP broker (rtsp-broker:8554) and streamer service using jrottenberg/ffmpeg:4.4-nvidia
-- Updated troubleshooting guidance to address RTSP-specific configurations
-- Enhanced documentation to reflect the migration from HTTP-based streaming to RTSP-based streaming
+- Enhanced GPU metrics collection with improved Docker configurations and comprehensive environment variable management for resource allocation
+- Added comprehensive environment variable management for resource allocation (HPE_CPU_LIMIT, HPE_CPU_RESERVATION, HPE_MEMORY_LIMIT, HPE_MEMORY_RESERVATION)
+- Integrated BCC-based TX byte counter with 10ms granularity measurements alongside RX byte counter
+- Updated resource allocation strategy with dynamic CPU and memory limits based on system vCPUs and HPE method
+- Enhanced monitoring capabilities with dual-direction traffic measurement (TX/RX) for complete network bandwidth analysis
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -52,7 +57,7 @@ This document explains the containerization and Docker configuration used to orc
 - Best practices for container resource allocation, GPU passthrough, and production deployment considerations.
 - Examples of scaling services and managing container lifecycles.
 
-**Updated** The architecture has been restructured to use RTSP streaming instead of the legacy HTTP H.264 streaming server, providing improved reliability and performance for video streaming in containerized environments.
+**Updated** The architecture now includes enhanced GPU metrics collection with comprehensive environment variable management for resource allocation and integrated BCC-based TX byte counter with 10ms granularity measurements for complete network bandwidth analysis.
 
 ## Project Structure
 The repository organizes containerization artifacts primarily under:
@@ -71,41 +76,49 @@ C["entrypoint.sh"]
 D["run_nvidia_dcgm.sh"]
 E["Dockerfile.bcc"]
 F["bcc_rx_bytes.py"]
-G["entrypoint.sh (bcc)"]
-H["rtsp-broker:8554"]
-I["streamer (jrottenberg/ffmpeg:4.4-nvidia)"]
+G["bcc_tx_bytes.py"]
+H["entrypoint.sh (bcc)"]
+I["rtsp-broker:8554"]
+J["streamer (jrottenberg/ffmpeg:4.4-nvidia)"]
+K["HPE_CPU_LIMIT/HPE_CPU_RESERVATION"]
+L["HPE_MEMORY_LIMIT/HPE_MEMORY_RESERVATION"]
 end
 subgraph "docker-compose.rtsp.yml"
-J["docker-compose.rtsp.yml"]
-K["mediamtx:latest"]
-L["ffmpeg-streamer:4.4-ubuntu"]
+M["docker-compose.rtsp.yml"]
+N["mediamtx:latest"]
+O["ffmpeg-streamer:4.4-ubuntu"]
 end
 subgraph "recent-dash"
-M["docker-compose.yml"]
-N["HTTP-Server.Dockerfile"]
-O["HTTP-Proxy.Dockerfile"]
-P["entrypoint.sh"]
+P["docker-compose.yml"]
+Q["HTTP-Server.Dockerfile"]
+R["HTTP-Proxy.Dockerfile"]
+S["entrypoint.sh"]
 end
 subgraph "monitor_hpe"
-Q["Dockerfile"]
-R["docker-compose.yaml"]
+T["Dockerfile"]
+U["docker-compose.yaml"]
+V["Resource Allocation"]
 end
-S["Dockerfile.hpe"]
-T["prometheus.yml"]
-U["docker-compose.yml (root)"]
+W["Dockerfile.hpe"]
+X["prometheus.yml"]
+Y["docker-compose.yml (root)"]
 A --> C
 A --> D
 A --> E
 E --> F
 E --> G
-A --> H
+E --> H
 A --> I
-J --> K
-J --> L
+A --> J
+A --> K
+A --> L
 M --> N
 M --> O
-M --> P
-R --> Q
+P --> Q
+P --> R
+P --> S
+U --> T
+V --> U
 ```
 
 **Diagram sources**
@@ -116,6 +129,7 @@ R --> Q
 - [run_nvidia_dcgm.sh](file://ffmpeg_hpe/run_nvidia_dcgm.sh)
 - [Dockerfile.bcc](file://ffmpeg_hpe/bpftrace-tracer/Dockerfile.bcc)
 - [bcc_rx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py)
+- [bcc_tx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_tx_bytes.py)
 - [entrypoint.sh](file://ffmpeg_hpe/bpftrace-tracer/entrypoint.sh)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
 - [HTTP-Server.Dockerfile](file://recent-dash/HTTP-Server.Dockerfile)
@@ -137,50 +151,55 @@ R --> Q
 - HPE Application: Performs pose estimation on the RTSP stream; supports GPU acceleration and configurable device selection.
 - GPU metrics collector: Gathers GPU utilization and telemetry periodically.
 - Performance monitor: Monitors host-level processes and system resources.
-- BPF tracer: Captures and logs network traffic related to the HPE pipeline using BCC/BPF.
+- BPF tracer: Captures and logs network traffic related to the HPE pipeline using BCC/BPF with dual-direction TX/RX measurements.
 - Recent-DASH services: HTTP server and proxy for caching experiments.
 
 Key orchestration highlights:
 - Services share a dedicated bridge network for isolated communication.
 - Health checks ensure readiness before dependent services start.
-- Resource limits and reservations are configured for predictable performance.
+- Comprehensive resource allocation with dynamic CPU and memory limits based on system capacity.
 - GPU passthrough is enabled via NVIDIA runtime and environment variables.
+- Dual-direction network monitoring with 10ms granularity for precise bandwidth analysis.
 
-**Updated** The streaming architecture now uses RTSP with MediaMTX as the broker and FFmpeg with NVENC encoding for improved streaming performance and reliability.
+**Updated** The streaming architecture now includes enhanced resource allocation with environment variables (HPE_CPU_LIMIT, HPE_CPU_RESERVATION, HPE_MEMORY_LIMIT, HPE_MEMORY_RESERVATION) and integrated BCC-based TX/RX byte counters for complete network traffic analysis.
 
 **Section sources**
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.rtsp.yml](file://docker-compose.rtsp.yml)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
 - [docker-compose.yaml](file://monitor_hpe/docker-compose.yaml)
+- [run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
+- [USAGE.md](file://monitor_hpe/USAGE.md)
 
 ## Architecture Overview
-The orchestration centers on a shared network and a strict startup order:
+The orchestration centers on a shared network and a strict startup order with enhanced resource management:
 - rtsp-broker starts first and exposes RTSP (8554) and HLS (8888) ports.
 - streamer depends on the broker and encodes video using NVENC with low-latency settings.
 - hpe depends on both the broker and streamer being healthy and consumes the RTSP stream.
-- gpu-metrics runs alongside hpe to collect GPU telemetry.
-- perf_monitor and bcc-tracer operate independently but can observe the pipeline.
+- gpu-metrics runs alongside hpe to collect GPU telemetry with configured resource limits.
+- perf_monitor operates independently with controlled resource allocation.
+- bcc-tracer operates with dual-direction monitoring (TX/RX) using 10ms granularity.
 
 ```mermaid
 graph TB
 subgraph "Network: streaming-network"
 BROKER["rtsp-broker:8554"]
 STREAMER["streamer (NVENC H.264)"]
-H["hpe"]
-G["gpu-metrics"]
-P["perf_monitor"]
-T["bcc-tracer"]
+H["hpe<br/>CPU: ${HPE_CPU_LIMIT}<br/>Memory: ${HPE_MEMORY_LIMIT}"]
+G["gpu-metrics<br/>CPU: 0.1<br/>Memory: 128M"]
+P["perf_monitor<br/>CPU: 0.25<br/>Memory: 256M"]
+T["bcc-tracer<br/>TX/RX 10ms<br/>CPU: 0.5<br/>Memory: 512M"]
 end
 BROKER --> |"RTSP Stream"| STREAMER
 STREAMER --> |"Encoded Stream"| H
 H --> |"GPU Telemetry"| G
 H --> |"System Metrics"| P
-H --> |"Traffic Tracing"| T
+H --> |"Dual-direction Traffic"| T
 ```
 
 **Diagram sources**
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
+- [run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
 
 **Section sources**
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
@@ -227,55 +246,66 @@ Encoding configuration highlights:
 - Shared Memory: Configured for large model requirements.
 - Startup Command: Executes the main application with method, input, CSV output, and measurement interval parameters.
 - Entrypoint Behavior: Conditionally starts GPU metrics in the background and executes the main command.
+- **Updated**: Now supports dynamic resource allocation via HPE_CPU_LIMIT, HPE_CPU_RESERVATION, HPE_MEMORY_LIMIT, and HPE_MEMORY_RESERVATION environment variables.
 
 Runtime configuration highlights:
 - Device selection and CUDA visibility are explicitly set.
 - FFMPEG timeouts are increased to accommodate long streams.
 - Healthcheck monitors the main process.
 - RTSP transport forced to TCP via OPENCV_FFMPEG_CAPTURE_OPTIONS.
+- **Updated**: Resource allocation is dynamically calculated based on system vCPUs and HPE method.
 
 **Section sources**
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [entrypoint.sh](file://ffmpeg_hpe/entrypoint.sh)
 - [Dockerfile.hpe](file://Dockerfile.hpe)
+- [run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
+- [USAGE.md](file://monitor_hpe/USAGE.md)
 
 ### GPU Metrics Collector
 - Purpose: Periodically collect GPU telemetry (utilization, memory, temperature, power) and write to CSV.
 - Image: NVIDIA CUDA base image with NVIDIA utilities.
 - Execution: Runs a monitoring script that queries GPU statistics at a configurable interval.
 - Output: Writes CSV data to a mounted output directory.
+- **Updated**: Now operates with controlled resource limits (0.1 CPU, 128M memory) to prevent interference with HPE measurements.
 
 Operational notes:
 - Supports duration-limited runs and graceful shutdown via signal handling.
 - Designed to run in parallel with the HPE workload.
+- **Updated**: Resource constraints ensure minimal impact on HPE performance.
 
 **Section sources**
 - [Dockerfile.gpu_metrics](file://ffmpeg_hpe/Dockerfile.gpu_metrics)
 - [run_nvidia_dcgm.sh](file://ffmpeg_hpe/run_nvidia_dcgm.sh)
+- [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 
 ### Performance Monitor
 - Purpose: Observe host-level processes and system resources for the experiment.
 - Privileges: Requires elevated capabilities and host PID namespace for accurate monitoring.
 - Volumes: Mounts output and PID directories for artifact persistence and process tracking.
+- **Updated**: Operates with controlled resource allocation (0.25 CPU, 256M memory) to isolate from HPE workloads.
 
 **Section sources**
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yaml](file://monitor_hpe/docker-compose.yaml)
 - [Dockerfile](file://monitor_hpe/Dockerfile)
 
-### BPF Tracer (BCC-based)
-- Purpose: Capture TCP RX bytes for the RTSP stream between the streamer and HPE.
+### BPF Tracer (BCC-based) - Enhanced with TX/RX Monitoring
+- Purpose: Capture TCP RX and TX bytes for the RTSP stream between the streamer and HPE with 10ms granularity.
 - Image: Ubuntu-based with BCC built from source and Python dependencies.
-- Execution: Detects the HPE listening port and attaches a raw socket filter to capture traffic on the default interface.
-- Output: Writes per-timestamp RX deltas and cumulative byte counts to CSV.
+- Execution: Detects the HPE listening port and attaches both raw socket filters (RX) and tracepoints (TX) to capture traffic on the default interface.
+- Output: Writes per-timestamp RX/TX deltas and cumulative byte counts to CSV.
+- **Updated**: Now provides dual-direction monitoring with TX byte counter complementing RX byte counter.
 
 Security and capabilities:
 - Requires privileged mode and specific capabilities for kernel tracing.
 - Shares the HPE service network namespace to simplify IP/port discovery.
+- **Updated**: 10ms polling interval provides precise bandwidth measurements for real-time analysis.
 
 **Section sources**
 - [Dockerfile.bcc](file://ffmpeg_hpe/bpftrace-tracer/Dockerfile.bcc)
 - [bcc_rx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py)
+- [bcc_tx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_tx_bytes.py)
 - [entrypoint.sh](file://ffmpeg_hpe/bpftrace-tracer/entrypoint.sh)
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 
@@ -301,32 +331,34 @@ Security and capabilities:
 - [entrypoint.sh](file://recent-dash/entrypoint.sh)
 
 ## Dependency Analysis
-Inter-service dependencies and startup order:
+Inter-service dependencies and startup order with enhanced resource management:
 - rtsp-broker starts first and exposes RTSP/HLS services.
 - streamer depends on rtsp-broker being started and encodes video files.
-- hpe depends on both rtsp-broker and streamer being healthy.
+- hpe depends on both rtsp-broker and streamer being healthy, with dynamic resource allocation applied.
 - gpu-metrics and perf-monitor can start independently but benefit from the pipeline being active.
 - bcc-tracer depends on the HPE container's network namespace and detects HPE's outbound connection to the broker.
 
 ```mermaid
 graph LR
 BROKER["rtsp-broker:8554"] --> STREAMER["streamer (NVENC)"]
-STREAMER --> HPE["hpe"]
-HPE --> GPU["gpu-metrics"]
-HPE --> PERF["perf_monitor"]
-HPE --> BPF["bcc-tracer"]
+STREAMER --> HPE["hpe<br/>Dynamic Resources"]
+HPE --> GPU["gpu-metrics<br/>Controlled Limits"]
+HPE --> PERF["perf_monitor<br/>Controlled Limits"]
+HPE --> BPF["bcc-tracer<br/>TX/RX 10ms"]
 ```
 
 **Diagram sources**
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
+- [run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
 
 **Section sources**
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 
 ## Performance Considerations
 - Resource Allocation:
-  - CPU and memory limits and reservations are defined per service to prevent noisy-neighbor effects.
-  - HPE uses significant shared memory to support model inference.
+  - **Updated**: Comprehensive resource allocation system with HPE_CPU_LIMIT, HPE_CPU_RESERVATION, HPE_MEMORY_LIMIT, and HPE_MEMORY_RESERVATION environment variables.
+  - CPU and memory limits and reservations are dynamically calculated based on system vCPUs and HPE method to prevent noisy-neighbor effects.
+  - HPE uses significant shared memory to support model inference with controlled resource allocation.
 - GPU Passthrough:
   - NVIDIA runtime and environment variables ensure the HPE container sees the correct GPU(s).
   - Device reservations are configured for guaranteed GPU access.
@@ -334,18 +366,22 @@ HPE --> BPF["bcc-tracer"]
 - Observability:
   - Healthchecks provide early failure detection.
   - GPU metrics and BPF tracing offer deep insights into throughput and bottlenecks.
+  - **Updated**: Dual-direction network monitoring with 10ms granularity for precise bandwidth analysis.
 - FFMPEG Tuning:
   - Increased timeouts reduce premature failures on long streams.
   - NVENC low-latency settings (-preset p2 -tune ll) optimize for real-time streaming.
 - Security Hardening:
   - Non-root users, read-only root filesystems, and temporary filesystems for /tmp improve isolation.
+  - **Updated**: Controlled resource limits prevent resource contention between services.
 
-**Updated** The new RTSP architecture with NVENC encoding provides improved streaming performance and reduced CPU usage compared to software-based encoding.
+**Updated** Enhanced resource allocation system with dynamic CPU and memory limits based on system capacity, plus dual-direction network monitoring for complete traffic analysis.
 
 **Section sources**
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.rtsp.yml](file://docker-compose.rtsp.yml)
 - [docker-compose.yaml](file://monitor_hpe/docker-compose.yaml)
+- [run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
+- [USAGE.md](file://monitor_hpe/USAGE.md)
 
 ## Troubleshooting Guide
 Common issues and remedies:
@@ -354,6 +390,7 @@ Common issues and remedies:
   - Confirm environment variables for input RTSP URL and device selection are correct.
   - Check GPU visibility and NVIDIA runtime configuration.
   - Verify RTSP stream is being produced by the streamer service.
+  - **Updated**: Verify HPE resource allocation variables (HPE_CPU_LIMIT, HPE_CPU_RESERVATION, HPE_MEMORY_LIMIT, HPE_MEMORY_RESERVATION) are properly set.
 - RTSP stream not available:
   - Check that rtsp-broker container is running and exposing ports 8554/8888.
   - Verify streamer service is encoding and publishing to rtsp://rtsp-broker:8554/stream.
@@ -365,6 +402,7 @@ Common issues and remedies:
   - Confirm the tracer shares the HPE network namespace.
   - Verify the default interface is correctly detected and accessible.
   - Check that HPE establishes an outbound connection to the broker before the tracer starts.
+  - **Updated**: Verify both TX and RX tracers are running with 10ms polling interval.
 - Port conflicts or accessibility:
   - Review port mappings and ensure host ports 8554/8888 are free.
   - Validate firewall and network policies in the environment.
@@ -372,17 +410,22 @@ Common issues and remedies:
   - Verify NVIDIA GPU is available and properly configured.
   - Check that jrottenberg/ffmpeg:4.4-nvidia image supports NVENC capabilities.
   - Ensure proper GPU reservations are configured.
+- **Updated**: Resource allocation issues:
+  - Check that HPE_CPU_LIMIT and HPE_MEMORY_LIMIT are set appropriately for the system capacity.
+  - Verify HPE_CPU_RESERVATION provides guaranteed CPU access for stable performance.
+  - Monitor docker stats to confirm resource limits are being enforced.
 
-**Updated** Troubleshooting guidance now addresses RTSP-specific issues including broker connectivity, streamer encoding problems, and NVENC configuration.
+**Updated** Troubleshooting guidance now includes resource allocation validation and dual-direction network monitoring verification.
 
 **Section sources**
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [run_nvidia_dcgm.sh](file://ffmpeg_hpe/run_nvidia_dcgm.sh)
 - [entrypoint.sh](file://ffmpeg_hpe/bpftrace-tracer/entrypoint.sh)
 - [docker-compose.rtsp.yml](file://docker-compose.rtsp.yml)
+- [run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
 
 ## Conclusion
-The containerization setup provides a robust, observable, and scalable pipeline for RTSP streaming, inference, and monitoring. By leveraging Docker Compose, RTSP streaming with MediaMTX, NVENC encoding, GPU passthrough, and BPF-based tracing, teams can reproduce and operate the HPE experiment consistently across environments. The new RTSP architecture with hardware-accelerated encoding provides improved performance and reliability compared to the legacy HTTP streaming approach. Applying the best practices outlined here ensures predictable performance, improved security, and easier maintenance.
+The containerization setup provides a robust, observable, and scalable pipeline for RTSP streaming, inference, and monitoring. By leveraging Docker Compose, RTSP streaming with MediaMTX, NVENC encoding, GPU passthrough, and BPF-based tracing with dual-direction monitoring, teams can reproduce and operate the HPE experiment consistently across environments. The new RTSP architecture with hardware-accelerated encoding provides improved performance and reliability compared to the legacy HTTP streaming approach. The enhanced resource allocation system with dynamic CPU and memory limits, combined with comprehensive network monitoring capabilities, ensures predictable performance, improved security, and easier maintenance. The addition of TX/RX byte counters with 10ms granularity provides unprecedented insight into network bandwidth utilization for optimization and troubleshooting.
 
 ## Appendices
 
@@ -406,7 +449,7 @@ Highlights:
   - Recent-DASH services expose port 80 internally; client can publish externally if needed.
 - DNS: Search domain configured for service discovery.
 
-**Updated** Networking configuration now uses RTSP broker (8554) and HLS (8888) ports instead of the legacy HTTP streaming server.
+**Updated** Networking configuration now uses RTSP broker (8554) and HLS (8888) ports instead of the legacy HTTP streaming server, with enhanced resource allocation controls.
 
 **Section sources**
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
@@ -425,16 +468,19 @@ Highlights:
 - Scaling:
   - Duplicate the HPE service with different device assignments or separate instances for multiple inputs.
   - Scale the RTSP broker and streamer if bandwidth becomes a bottleneck.
+  - **Updated**: Adjust resource allocation variables (HPE_CPU_LIMIT, HPE_MEMORY_LIMIT) based on scaling requirements.
 - Lifecycle:
   - Use restart policies to maintain service uptime.
   - Healthchecks ensure automatic restarts on failure.
   - Graceful shutdown via signals allows cleanup of background processes.
+  - **Updated**: Resource limits prevent runaway resource consumption during scaling.
 
-**Updated** Scaling considerations now include RTSP broker and streamer services for handling increased streaming demands.
+**Updated** Scaling considerations now include dynamic resource allocation variables for optimal performance scaling.
 
 **Section sources**
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.rtsp.yml](file://docker-compose.rtsp.yml)
+- [run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
 
 ### Prometheus and Grafana Integration
 - Prometheus configuration file is included at the repository root for scraping metrics.
@@ -466,3 +512,51 @@ The repository has migrated from HTTP H.264 streaming to RTSP streaming for impr
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.rtsp.yml](file://docker-compose.rtsp.yml)
 - [README.md](file://README.md)
+
+### Enhanced Resource Allocation System
+**Updated** The system now includes comprehensive environment variable management for resource allocation:
+
+#### Dynamic Resource Calculation
+- **HPE_CPU_LIMIT**: Maximum CPU cores allocated to HPE based on system vCPUs and method requirements
+- **HPE_CPU_RESERVATION**: Guaranteed CPU cores for stable performance
+- **HPE_MEMORY_LIMIT**: Maximum memory allocated to HPE based on model requirements
+- **HPE_MEMORY_RESERVATION**: Guaranteed memory for critical operations
+
+#### Implementation Details
+- CPU limits calculated as HPE_VCPUS with method-specific adjustments
+- Memory limits calculated as 1.5GB per vCPU for heavy models (HRNet) with minimum 6GB
+- Reservation ratios optimized for stability (CPU: 67%, Memory: 75% for heavy models)
+- Environment variables exported before docker compose execution
+
+**Section sources**
+- [run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
+- [USAGE.md](file://monitor_hpe/USAGE.md)
+- [DYNAMIC_RESOURCE_ALLOCATION_SUMMARY.md](file://DYNAMIC_RESOURCE_ALLOCATION_SUMMARY.md)
+
+### Dual-Direction Network Monitoring
+**Updated** The BPF tracer now provides comprehensive network monitoring with 10ms granularity:
+
+#### TX Byte Counter (bcc_tx_bytes.py)
+- **Purpose**: Measures transmitted bytes from HPE process using sys_enter_sendto tracepoint
+- **Implementation**: Attaches to sendto syscall events filtered by HPE PID
+- **Output**: Timestamped TX deltas, cumulative bytes, and timing information
+- **Polling Interval**: 10ms (0.01 seconds) for precise bandwidth measurement
+
+#### RX Byte Counter (bcc_rx_bytes.py)
+- **Purpose**: Measures received bytes for RTSP stream using raw socket filter
+- **Implementation**: Parses Ethernet/TCP headers and accumulates packet lengths
+- **Output**: Timestamped RX deltas, cumulative bytes, and timing information
+- **Polling Interval**: 10ms (0.01 seconds) for synchronized TX/RX comparison
+
+#### Integration Benefits
+- **Complete Bandwidth Analysis**: Compare TX vs RX for network utilization insights
+- **Real-time Monitoring**: 10ms intervals provide granular performance data
+- **Kernel-level Accuracy**: BPF programs ensure precise packet counting without user-space overhead
+- **Complementary Data**: TX/RX counters enable identification of network bottlenecks
+
+**Section sources**
+- [bcc_tx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_tx_bytes.py)
+- [bcc_rx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py)
+- [entrypoint.sh](file://ffmpeg_hpe/bpftrace-tracer/entrypoint.sh)
+- [bcc-bpf-tracing.md](file://docs/bcc-bpf-tracing.md)
+- [plot_rx_bytes.py](file://ffmpeg_hpe/plot_rx_bytes.py)

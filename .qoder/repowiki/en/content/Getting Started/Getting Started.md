@@ -283,7 +283,9 @@ python3 main.py --method ae1 --input unit_tests/video/giphy.gif --save_video
 python3 main.py --method movenet --input http://192.168.1.10:8080/video_feed --device CPU
 
 # RTSP stream (matches the experiment-rig pipeline)
-python3 main.py --method movenet --input rtsp://rtsp-broker:8554/stream --device CPU
+# Note: rtsp://rtsp-broker:8554/stream only works when running inside the Docker network.
+# If running locally on the host machine, map the port and use localhost:
+python3 main.py --method movenet --input rtsp://localhost:8554/stream --device CPU
 ```
 
 #### AlphaPose with Custom Settings

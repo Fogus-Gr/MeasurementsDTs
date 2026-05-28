@@ -110,7 +110,6 @@ The top-level folders fall into three categories:
 | `Measure_Flops/` | GPU FLOPS measurement via Nsight Compute |
 | `Measure_gpu_dcgm/` | GPU power/temp/util via nvidia-smi (standalone, no compose) |
 | `Measure_plot_cpu_perf/` | CPU cycles via `perf stat` |
-| `optimizations/` | OpenVINO CPU thread/stream tuning scripts |
 | `dev_tools/` | Local MJPEG stream server for manual testing |
 
 ```
@@ -258,11 +257,25 @@ conda install --file requirements.txt
 
 ### Option B: pip + virtualenv
 
+**Linux / macOS**
 ```bash
-python3 -m venv myenv
-source myenv/bin/activate
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements_torch_cpu.txt
+pip install -r requirements_dev.txt
 ```
+
+**Windows (PowerShell)**
+```powershell
+python -m venv .venv
+# Use the .ps1 script — activate.bat does not propagate PATH changes in PowerShell
+.venv\Scripts\Activate.ps1
+pip install -r requirements_torch_cpu.txt
+pip install -r requirements_dev.txt
+```
+
+> `requirements_torch_cpu.txt` must be installed first — it carries the
+> `--index-url` for the PyTorch CPU wheels which are not on PyPI.
 
 ### Build AlphaPose C++/CUDA Extensions
 
@@ -1078,7 +1091,7 @@ Unfamiliar term? Look it up here. Listed in the order a newcomer is most likely 
 | **`hpe_video_rx.csv`** | Output of `bcc-tracer`: incoming bytes from the RTSP stream, per 10ms window. |
 | **Padding / Pad-and-resize** | Letterbox preprocessing inside `BaseHPE` so that any input resolution becomes the model's expected size without distorting aspect ratio. |
 | **Experiment rig** | A self-contained subdirectory (`monitor_hpe/`, `ffmpeg_hpe/`, `recent-dash/`) with its own `run_experiment.sh` and `docker-compose.yaml`. |
-| **Cloud GPU VM** | The canonical deployment target documented in this repo: **8 vCPU + 16 GB RAM + RTX A4000, EPYC 7551P host**. The [optimizations/](file:///c:/Users/bigbu/Downloads/MeasurementsDTs/optimizations) scripts were originally calibrated for a 4 vCPU SKU; their runtime auto-detector adapts to the actual core count present on the host. |
+| **Cloud GPU VM** | The canonical deployment target documented in this repo: **8 vCPU + 16 GB RAM + RTX A4000, EPYC 7551P host**.|
 
 ---
 

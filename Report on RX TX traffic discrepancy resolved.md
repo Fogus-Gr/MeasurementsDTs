@@ -107,3 +107,36 @@ summary[['timestamp', 'len']].to_csv('rx_10ms.csv', index=False)
 Now, `rx_10ms.csv` will have columns: `timestamp,len` (timestamp in seconds, bytes in 10ms).
 
 ---
+
+---
+
+## Resolution Analysis (May 2026)
+
+**Status: RESOLVED** — This report is obsolete. All issues described here were caused by a combination of a pre-RTSP streaming architecture and a disabled BPF filter, both of which have since been fixed.
+
+### Root Cause Identification
+
+**Branch and date context:** This report was written on the `cuda-dev` branch on July 6 2025, during the HTTP streaming phase of the project. The companion document `AlphaPose_HTTP_Streaming_Optimization.md` confirms the setup at the time: FFmpeg pushing `-c:v copy -f mpegts` over HTTP to a custom server, with AlphaPose consuming it via `http://<host>:8089/stream.h264`.
+
+Every problem described in this report maps to a specific bug or architectural decision that has since been addressed:
+
+| Original complaint | Actual root cause | Fix |
+|---|---|---|
+| bpftrace undercounting (~339 MB vs ~420 MB TX) | Bug #1 — the IP/port BPF filter in `bcc_rx_bytes.py` was **disabled**, so it was counting all TCP traffic indiscriminately, not just the video stream. The 339 MB figure is unreliable for a different reason than this report guessed. | Re-enabled in commit `256a21c` |
+| "bpftrace may start late or end early" | The entrypoint did not wait for HPE to establish its RTSP connection before attaching the socket filter | Fixed: `entrypoint.sh` now runs `detect_hpe_port()` with a retry loop before starting the tracer |
+| "Docker stats are the most comprehensive measurement" | This was the correct workaround at the time, before `bcc-tracer` was working correctly | Superseded: `hpe_video_rx.csv` from `bcc-tracer` is now the authoritative RX source. Docker stats are no longer needed for this purpose. |
+| HTTP/MPEG-TS streaming architecture | The entire transport layer was HTTP-based, which introduced its own framing and connection-management complexity | Replaced: the full stack was migrated to RTSP/MediaMTX + NVENC in `feat/rtsp-mediamtx-migration`, which is what `ffmpeg_hpe/` uses today |
+
+### The 833 MB vs 420 MB Discrepancy Explained
+
+The report did not identify the most likely cause of the 833 MB → 420 MB drop. `-c:v copy -f mpegts` remuxes the MP4 into an MPEG-TS container — it does not stream the MP4 file byte-for-byte. The MP4 container includes a `moov` atom (metadata) and `mdat` atom (media data), while MPEG-TS uses fixed 188-byte transport stream packets. The resulting stream size depends on the actual encoded video bitrate, not the file size. A 833 MB MP4 at a high container overhead ratio can easily produce a ~420 MB MPEG-TS stream. This is expected behaviour, not a measurement error.
+
+The 339 MB bpftrace figure being lower than 420 MB TX is explained by the disabled IP/port filter: the filter was not counting all video stream packets, producing an undercount unrelated to payload vs. wire-byte differences.
+
+### Current Authoritative Measurement Approach
+
+The tcpdump/tshark approach proposed in the "Steps" section above is superseded. The current setup provides equivalent functionality without the overhead of writing a full pcap to disk:
+
+- **RX bytes:** `traces/bcc/hpe_video_rx.csv` — produced by `bcc_rx_bytes.py` with the IP/port BPF filter active, polling at 10ms intervals, measuring wire bytes (Ethernet frame length including all protocol headers, ~4% overhead above pure video payload — consistent across all runs and therefore valid for relative comparisons).
+- **TX bytes:** `network_stats.csv` from `perf_monitor` — produced by `bpftrace sys_enter_sendto`, PID-filtered to the HPE process.
+- **Never use** the RX column from `network_stats.csv` — it uses `netif_receive_skb` which fires in softirq context and always reads ~0 (known open issue #12).

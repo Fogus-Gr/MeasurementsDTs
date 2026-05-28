@@ -107,15 +107,6 @@ environment:
 
 **Recommendation:** Should also configure OpenVINO threads based on `HPE_METHOD`
 
-### `optimizations/` Directory
-
-**Purpose:** Dedicated CPU optimization experiments
-
-**Current State:** Has `enhanced_openvino_hpe.py` with sophisticated CPU optimization
-
-**Difference:** Uses `EPICCPUOptimizer` to auto-detect optimal settings based on CPU topology
-
----
 
 ## Recommendations
 
