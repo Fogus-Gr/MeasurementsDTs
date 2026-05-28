@@ -372,13 +372,24 @@ fi
 # Step 18: Copy trace files
 mkdir -p "$results_dir/traces/bcc"
 if [ -n "$TRACE_CONTAINER" ]; then
+  # Copy RX trace (incoming video bytes)
   if docker exec $TRACE_CONTAINER ls -la /opt/tracer/output/hpe_video_rx.csv 2>/dev/null || false; then
     docker cp "$TRACE_CONTAINER:/opt/tracer/output/hpe_video_rx.csv" "$results_dir/traces/bcc/hpe_video_rx.csv" && \
-    echo "Copied BCC trace to $results_dir/traces/bcc/hpe_video_rx.csv" || \
-    echo "[ERROR] Failed to copy BCC trace file"
+    echo "Copied BCC RX trace to $results_dir/traces/bcc/hpe_video_rx.csv" || \
+    echo "[ERROR] Failed to copy BCC RX trace file"
   else
     echo "[WARNING] Could not find hpe_video_rx.csv in bcc-tracer."
   fi
+  
+  # Copy TX trace (outgoing bytes)
+  if docker exec $TRACE_CONTAINER ls -la /opt/tracer/output/hpe_video_tx.csv 2>/dev/null || false; then
+    docker cp "$TRACE_CONTAINER:/opt/tracer/output/hpe_video_tx.csv" "$results_dir/traces/bcc/hpe_video_tx.csv" && \
+    echo "Copied BCC TX trace to $results_dir/traces/bcc/hpe_video_tx.csv" || \
+    echo "[WARNING] Failed to copy BCC TX trace file"
+  else
+    echo "[WARNING] Could not find hpe_video_tx.csv in bcc-tracer."
+  fi
+  
   docker cp "$TRACE_CONTAINER:/opt/tracer/output/logs/bcc-tracer.log" "$results_dir/logs/bcc-tracer-internal.log" 2>/dev/null || true
 fi
 

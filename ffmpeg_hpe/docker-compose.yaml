@@ -200,6 +200,7 @@ services:
     container_name: bcc-tracer
     volumes:
       - ./tracer_output:/opt/tracer/output
+      - ./pids:/pids:ro
       - /lib/modules:/lib/modules:ro
       - /usr/src:/usr/src:ro
       - /sys/kernel/debug:/sys/kernel/debug

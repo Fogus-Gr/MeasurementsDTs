@@ -63,4 +63,11 @@ if [ -z "$HPE_PORT" ]; then
 fi
 
 echo "[SUCCESS] Monitoring HPE traffic on port $HPE_PORT"
+
+# Start TX tracer in background (measures outgoing bytes via sys_enter_sendto)
+python3 /app/bcc_tx_bytes.py &
+TX_PID=$!
+echo "[INFO] Started TX tracer (PID: $TX_PID)"
+
+# Start RX tracer in foreground (measures incoming video bytes via socket filter)
 exec python3 /app/bcc_rx_bytes.py "$STREAMER_IP" "$STREAMER_PORT" "$HPE_PORT" "$INTERFACE"
