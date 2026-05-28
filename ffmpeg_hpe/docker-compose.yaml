@@ -92,6 +92,11 @@ services:
       # default is UDP, which (a) bypasses the bcc-tracer TCP socket filter so
       # RX bytes read as ~0, and (b) silently drops packets under load.
       - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp
+      # OpenVINO CPU tuning — set by run_experiment.sh based on method and nproc
+      - OV_THREADS=${OV_THREADS:-4}
+      - OV_MODE=${OV_MODE:-latency}
+      - OV_CPU_PINNING=${OV_CPU_PINNING:-true}
+      - OV_HYPER_THREADING=${OV_HYPER_THREADING:-false}
     volumes:
       - ./results:/output:rw
       - ../videos:/videos:ro
@@ -104,24 +109,17 @@ services:
     deploy:
       resources:
         limits:
-          # 2.5 CPUs caps HPE to a known measurement budget. On the 8 vCPU
-          # benchmarking host this leaves ~5.5 cores free for the streamer,
-          # sidecars, and OS — preventing scheduler contention from corrupting
-          # the very pid_metrics.csv we are trying to measure. Bump back to
-          # 4.0 to reproduce historical `results_*_4cores_CPU_*` benchmark
-          # configurations.
-          cpus: '2.5'
-          # 8 GB covers AlphaPose CPU (--detbatch 5, ResNet-50 + YOLOv3) plus the
-          # OpenVINO compile cache and OpenCV/FFmpeg RTSP decode buffers, with
-          # ~2 GB headroom. OpenVINO-only methods (movenet, hrnet, ae1/2/3)
-          # peak well under 4 GB. Bump only if a specific method OOMs with the
-          # current detbatch / video resolution.
-          memory: 8G
+          # CPU and memory are set dynamically by run_experiment.sh based on
+          # nproc and HPE method. Sidecars (streamer, perf_monitor, bcc-tracer,
+          # gpu-metrics) consume ~1.6 CPUs peak; 2 vCPUs are reserved for them,
+          # leaving the remainder for HPE. Override by setting HPE_CPU_LIMIT,
+          # HPE_MEMORY_LIMIT before running run_experiment.sh.
+          cpus: '${HPE_CPU_LIMIT:-2.0}'
+          memory: ${HPE_MEMORY_LIMIT:-4G}
         reservations:
-          # Guarantee HPE always gets 2 cores even under sidecar BPF compile
-          # spikes. Without this, BCC startup (BPF JIT compile) can briefly
-          # starve the inference loop.
-          cpus: '2.0'
+          # Guarantee HPE always gets its reserved cores even under sidecar BPF
+          # compile spikes at startup.
+          cpus: '${HPE_CPU_RESERVATION:-2.0}'
     container_name: hpe
     depends_on:
       rtsp-broker:
