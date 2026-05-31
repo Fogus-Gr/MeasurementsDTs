@@ -75,15 +75,11 @@ if [[ "$VIDEO_FILE_BASENAME" == "" || "$VIDEO_FILE_BASENAME" == "." || "$VIDEO_F
   VIDEO_FILE_BASENAME="unknown"
 fi
 
-# Add device type to results dir (GPU or CPU)
-device_type="${HPE_DEVICE:-CPU}"
-if [[ -z "$device_type" ]]; then
-  device_type="CPU"
-fi
-
+# Placeholder - will be resolved after Step 10
+device_type=""
 start_time=$(date +%s)
-results_dir="results_${container_type}_${cpu_threads}cores_${device_type}_${VIDEO_FILE_BASENAME}_${timestamp}"
-mkdir -p "$results_dir/logs" "$results_dir/traces/bcc" "$results_dir/perf"
+# NOTE: results_dir created AFTER device configuration in Step 10
+mkdir -p ./logs ./traces/bcc ./perf
 
 # Step 5: Enhanced cleanup including BCC tracer outputs
 echo "[DEBUG] Cleaning previous run artifacts..."
@@ -154,6 +150,16 @@ echo "Method: $HPE_METHOD"
 echo "Device: $HPE_DEVICE"
 echo "Input: $HPE_INPUT"
 
+# Resolve device type from configuration
+device_type="${HPE_DEVICE:-CPU}"
+if [[ -z "$device_type" ]]; then
+  device_type="CPU"
+fi
+
+# Create results dir with correct device type
+results_dir="results_${container_type}_${cpu_threads}cores_${device_type}_${VIDEO_FILE_BASENAME}_${timestamp}"
+mkdir -p "$results_dir/logs" "$results_dir/traces/bcc" "$results_dir/perf"
+echo "Results directory: $results_dir"
 
 # Step 11: Start HPE container
 hpe_start=$(date +%s.%N)
@@ -274,13 +280,12 @@ mkdir -p "$results_dir/gpu"
 # BCC tracer outputs
 if [ -n "$TRACE_CONTAINER" ]; then
   echo "[DEBUG] Collecting BCC tracer outputs..."
-  docker cp "$TRACE_CONTAINER:/opt/tracer/output/hpe_video_rx.csv" "$results_dir/traces/bcc/video_rx.csv" 2>/dev/null || \
-    echo "[WARNING] Failed to copy BCC trace data"
-  
-  docker cp "$TRACE_CONTAINER:/opt/tracer/output/logs" "$results_dir/traces/bcc/" 2>/dev/null || \
-    echo "[WARNING] Failed to copy BCC logs"
-  
-  docker logs $TRACE_CONTAINER 2>&1 | grep "Detected HPE video port" > "$results_dir/traces/bcc/port_info.txt"
+  docker cp "$TRACE_CONTAINER:/opt/tracer/output/hpe_video_rx.csv" "$results_dir/traces/bcc/video_rx.csv" 2>/dev/null || true
+  echo "[DEBUG] Copied BCC trace data (or skipped if not present)"
+  docker cp "$TRACE_CONTAINER:/opt/tracer/output/logs" "$results_dir/traces/bcc/" 2>/dev/null || true
+  echo "[DEBUG] Copied BCC logs (or skipped)"
+  docker logs "$TRACE_CONTAINER" 2>&1 | grep "Detected HPE video port" > "$results_dir/traces/bcc/port_info.txt" 2>/dev/null || true
+  echo "[DEBUG] Extracted port info (or skipped)"
 fi
 
 # Container logs
@@ -292,12 +297,16 @@ done
 
 # HPE output — read from bind-mounted host path (container has already exited)
 mkdir -p "$results_dir/hpe_output"
-if compgen -G "./results/*.csv" > /dev/null 2>&1 || compgen -G "./results/*.json" > /dev/null 2>&1; then
-  cp ./results/*.csv "$results_dir/hpe_output/" 2>/dev/null || true
-  cp ./results/*.json "$results_dir/hpe_output/" 2>/dev/null || true
+echo "[DEBUG] Checking for HPE output files in $(pwd)/results/..."
+ls -la ./results/*.csv 2>/dev/null || echo "[DEBUG] No CSV files found in ./results/"
+# Only copy HPE-specific outputs (JSON and Tx), not monitoring sidecar outputs
+if ls ./results/*_JSON.csv ./results/*_Tx.csv 1>/dev/null 2>&1; then
+  cp ./results/*_JSON.csv "$results_dir/hpe_output/" 2>/dev/null || true
+  cp ./results/*_Tx.csv "$results_dir/hpe_output/" 2>/dev/null || true
   echo "Copied HPE output files to $results_dir/hpe_output/"
+  ls "$results_dir/hpe_output/"
 else
-  echo "[WARNING] No CSV or JSON files found in ./results — HPE may not have produced output"
+  echo "[WARNING] No HPE CSV files (JSON/Tx) found in ./results/"
 fi
 
 # Step 16: Cleanup

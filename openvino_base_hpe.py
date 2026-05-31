@@ -76,7 +76,7 @@ class OpenVINOBaseHPE(BaseHPE):
         env_cpu_pinning = os.getenv("OV_CPU_PINNING")
         env_hyper_threading = os.getenv("OV_HYPER_THREADING")
 
-        self.ov_threads = int(ov_threads if ov_threads is not None else (env_threads or 1))
+        self.ov_threads = int(ov_threads if ov_threads is not None else (env_threads or max(1, (len(os.sched_getaffinity(0)) if hasattr(os, 'sched_getaffinity') else os.cpu_count() or 1) - 2)))
         self.ov_mode = (ov_mode or env_mode or "latency").lower()
         self.ov_streams = int(env_streams) if (ov_streams is None and env_streams and env_streams.isdigit()) else ov_streams
         

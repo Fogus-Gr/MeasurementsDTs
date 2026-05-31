@@ -220,9 +220,11 @@ python3 main.py --method movenet --input http://<your-ip>:8080/video_feed --save
 ### Experiment rigs
 ```bash
 cd monitor_hpe  && ./run_experiment.sh
-cd ffmpeg_hpe   && ./run_experiment.sh movenet
+cd ffmpeg_hpe   && ./run_experiment_bcc.sh movenet
 cd recent-dash  && ./run_experiment.sh
 ```
+
+**OpenVINO threading:** The `ffmpeg_hpe` rig uses `OV_MODE=throughput`, `OV_STREAMS=1`, `OV_THREADS=6` in `docker-compose.yaml`. Without `OV_THREADS`, the code auto-sizes using cgroup-aware CPU detection (`sched_getaffinity`).
 
 ### Standalone measurement tools
 ```bash

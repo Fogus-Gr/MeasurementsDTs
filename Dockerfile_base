@@ -29,6 +29,11 @@ RUN apt-get update && apt-get install -y \
     dnsutils \
     python3-tk \
     ffmpeg \
+    libavfilter-dev \
+    libavformat-dev \
+    libavcodec-dev \
+    libswresample-dev \
+    libavutil-dev \
     tcpdump \
     cmake \
     git \
@@ -37,16 +42,25 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install --no-cache-dir -r requirements.txt
 RUN pip3 install --no-cache-dir gdown
 
-# Install PyNvCodec for hardware-accelerated video decoding
-# This assumes PyNvCodec can be built against the CUDA version in the base image.
-# Adjust the PyNvCodec version/branch as needed.
-RUN git clone https://github.com/NVIDIA/VideoProcessingFramework.git /tmp/VideoProcessingFramework && \
-    cd /tmp/VideoProcessingFramework/PyNvCodec && \
-    pip install . && \
+# Install PyNvCodec (VideoProcessingFramework) for hardware-accelerated video decoding.
+# NOTE: VPF was archived by NVIDIA in 2024 and the repo was restructured: the legacy
+# PyNvCodec/ subdirectory no longer exists. setup.py/pyproject.toml is now at the repo
+# root. Also installs the optional PytorchNvCodec extension required for the PyTorch
+# tensor export path used by base_hpe.py (decoded GPU surfaces -> torch.Tensor).
+#
+# WORKAROUND: VPF's setup.py uses `import pkg_resources` which was removed from
+# setuptools >=70. We pin setuptools<70 + wheel + scikit-build into the outer env
+# and use --no-build-isolation so the source build sees them. This is required
+# because VPF is archived and its setup.py will not be modernized.
+RUN pip install --no-cache-dir "setuptools<70" wheel scikit-build && \
+    git clone --depth 1 https://github.com/NVIDIA/VideoProcessingFramework.git /tmp/VideoProcessingFramework && \
+    cd /tmp/VideoProcessingFramework && \
+    pip install --no-build-isolation --no-cache-dir . && \
+    pip install --no-build-isolation --no-cache-dir src/PytorchNvCodec && \
     rm -rf /tmp/VideoProcessingFramework
 
 # Install OpenVINO with GPU (NVIDIA) support
-RUN pip install --no-cache-dir openvino-dev[onnx,tensorflow2,pytorch,caffe]==2024.2.0
+RUN pip install --no-cache-dir openvino-dev[onnx,tensorflow2,pytorch,caffe]==2024.4.0
 
 ENV TORCH_CUDA_ARCH_LIST=8.6
 # (Optional) Set OpenVINO environment variables
