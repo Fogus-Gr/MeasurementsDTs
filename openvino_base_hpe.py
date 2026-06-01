@@ -33,13 +33,13 @@ MODEL_CONFIGS = {
         "gpu_supported": True,
     },
     "efficienthrnet2": {
-        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0006/FP32/human-pose-estimation-0006.xml",
+        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/public/human-pose-estimation-0006/FP32/human-pose-estimation-0006.xml",
         "input_size": (352, 352),
         "architecture": "HPE-associative-embedding",
         "gpu_supported": True,
     },
     "efficienthrnet3": {
-        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/intel/human-pose-estimation-0007/FP32/human-pose-estimation-0007.xml",
+        "path": SCRIPT_DIR / "models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.xml",
         "input_size": (448, 448),
         "architecture": "HPE-associative-embedding",
         "gpu_supported": True,
@@ -224,34 +224,25 @@ class OpenVINOBaseHPE(BaseHPE):
 
         print(f"DEBUG: Model adapter outputs: {list(model_adapter.get_output_layers().keys())}")
 
-        w = int(self.img_w or 0)
-        h = int(self.img_h or 0)
-        aspect_ratio = (w / h) if (w > 0 and h > 0) else 1.0
+        # Default to 1.0 aspect ratio if dimensions aren't known at load time
+        aspect_ratio = (self.img_w / self.img_h) if (self.img_w and self.img_h) else 1.0
 
         if self.model_type == "openpose":
-            height_int = int(self.model_cfg["input_size"][1])
             config = {
-                "target_size": height_int,
-                "aspect_ratio": float(aspect_ratio),
-                "confidence_threshold": self.score_thresh,
-                "use_pooled_heatmaps": False,
-                "upsample_ratio": 4,
+                'target_size': None,
+                'aspect_ratio': aspect_ratio,
+                'confidence_threshold': self.score_thresh,
+                'use_pooled_heatmaps': False,
+                'upsample_ratio': 4,
             }
         else:
-            is_ae = (self.model_cfg["architecture"] == "HPE-associative-embedding")
-            size_int = int(self.model_cfg["input_size"][0])
-
             config = {
-                "target_size": size_int,
-                "aspect_ratio": float(aspect_ratio),
-                "confidence_threshold": self.score_thresh,
+                'target_size': None,
+                'aspect_ratio': aspect_ratio,
+                'confidence_threshold': self.score_thresh,
+                'padding_mode': 'center' if self.model_type == 'higherhrnet' else None,
+                'delta': 0.5 if self.model_type == 'higherhrnet' else None,
             }
-
-            if is_ae or self.model_type == 'higherhrnet':
-                config["padding_mode"] = "center"
-
-            if self.model_type == "higherhrnet":
-                config["delta"] = 0.5
 
         architecture = self.model_cfg["architecture"]
         self.model = ImageModel.create_model(architecture, model_adapter, config)
@@ -287,6 +278,8 @@ class OpenVINOBaseHPE(BaseHPE):
 
             score = float(np.mean(keypoints_scores))
             if score > self.score_thresh:
+                # Scale keypoints from model output space to original image space
+                # OpenVINO model API outputs coordinates in the padded/resized space
                 unpadded_w = self.img_w + self.padding.w
                 unpadded_h = self.img_h + self.padding.h
                 keypoints_xy_orig = keypoints_xy.copy()
