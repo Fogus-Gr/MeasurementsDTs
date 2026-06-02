@@ -577,13 +577,13 @@ class BaseHPE(ABC):
         # Draw FPS on the frame
         if frame_np is not None and fps > 0:
             try:
-                f_width, _ = frame_np.shape[:2]
+                img_h, img_w = frame_np.shape[:2]
                 cv2.putText(
                     frame_np,
                     f"Inference time: {processing_time_ms:.1f}ms ({fps:.1f} FPS)",
                     (20, 40), # Position of the text
                     cv2.FONT_HERSHEY_COMPLEX,
-                    f_width / 1000, # Font scale
+                    img_w / 1000, # Font scale
                     (0, 0, 255), # Text color (BGR format, red)
                     1, # Thickness
                     cv2.LINE_AA, # Line type

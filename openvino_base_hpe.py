@@ -240,7 +240,9 @@ class OpenVINOBaseHPE(BaseHPE):
                 'target_size': None,
                 'aspect_ratio': aspect_ratio,
                 'confidence_threshold': self.score_thresh,
-                'use_pooled_heatmaps': False,
+                # NOTE: do NOT pass use_pooled_heatmaps here — the parameter was
+                # removed from open_pose.py in a90d5dd. The NMS pooled_heatmaps
+                # layer is always added dynamically; no config flag controls it.
                 'upsample_ratio': 4,
             }
         else:

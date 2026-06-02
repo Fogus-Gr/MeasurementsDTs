@@ -27,7 +27,7 @@ openvino_base_hpe.py           # OpenVINO backend (OpenPose, HigherHRNet, Effici
 movenet_hpe.py                 # MoveNet backend (OpenVINO runtime, CPU only)
 alphapose_hpe.py               # AlphaPose backend (PyTorch + YOLO detector)
 utils/
-  export_pose_results.py       # COCO JSON/CSV serialisation + Tx bandwidth measurement
+  evaluator.py                 # COCO JSON/CSV serialisation + Tx bandwidth measurement
   visualizer.py                # OpenCV skeleton/keypoint rendering
 models/
   AlphaPose/                   # AlphaPose source + Cython extensions (built via setup.py)
@@ -194,8 +194,47 @@ issues.
   `raw_result` is falsy — needs a guard.
 - `export_pose_results.py`: global accumulator never reset between runs —
   `reset_results()` exists but is never called.
-- The eBPF/bpftrace tracer (`bcc-tracer`) in `ffmpeg_hpe/` and `recent-dash/`
-  is commented out — requires a kernel with debug symbols and is fragile.
+
+### Fixed — Broken bounding boxes and skeletons across all OpenVINO models (`a90d5dd`)
+
+Discovered June 2026: running `python3 main.py --method <any_openvino_model>`
+produced visibly wrong bounding boxes and skeletons for all OpenVINO-backed
+methods (openpose, ae1, ae2, ae3, higherhrnet). Root causes were two
+independent regressions in `openvino_base_hpe.py` and `open_pose.py`.
+
+**Root cause 1 — OpenPose NMS disabled** (`models/OpenVINO/model_api/models/open_pose.py`):
+A previous commit replaced the correct dynamic `max_pool` NMS layer (which
+adds a `pooled_heatmaps` output to the OpenVINO graph at runtime) with a
+conditional path gated on a `use_pooled_heatmaps` config flag. The flag was
+then set to `False` in `openvino_base_hpe.py`, so NMS was never applied.
+Without NMS, `postprocess()` received raw heatmaps instead of suppressed peaks,
+causing multiple ghost detections per person and wrong keypoint positions.
+
+Fix (`a90d5dd`): reverted `open_pose.py` to the correct implementation —
+`pooled_heatmaps_blob_name` is always set, the `max_pool` NMS node is always
+added dynamically to the graph, and `postprocess()` always calls
+`heatmap_nms()`. The `use_pooled_heatmaps` parameter was removed entirely.
+
+**Root cause 2 — wrong `target_size` for all models** (`openvino_base_hpe.py`):
+`load_model()` was passing a hard-coded integer from `model_cfg["input_size"]`
+as `target_size` to `ImageModel.create_model()`. The OpenVINO model API's
+`target_size` is meant to be `None` (let the model API derive it from the IR)
+or set only when reshaping is explicitly needed. Passing a fixed integer forced
+the model into a rigid shape that didn't match the actual input, skewing all
+coordinate scaling downstream.
+
+Fix (`a90d5dd`): changed `target_size` to `None` for all model types. Also
+corrected model paths for `ae2`/`ae3` (were pointing to `intel/` subdirectory;
+changed to `public/`).
+
+**Documentation**: `docs/perf-tuning-base-diff-report.md` and
+`docs/hpe-aspect-ratio-support.md` (commit `fe2f148`) describe the branch
+context in which this regression was identified.
+- The `bcc-tracer` service in `ffmpeg_hpe/docker-compose.yaml` is **enabled**
+  and has been since commit `50bd638` (Jul 13 2025). It replaced the old
+  `trace_container` (bpftrace-based, still commented out in the compose file).
+  Note: `recent-dash/` has its own `bcc-tracer` service whose enabled/disabled
+  state has not been audited — verify before relying on it.
 - Several root-level files (`full_shell_history.txt`, `hist.txt`, `bug.md`,
   `*.bak`, `original.py`) are development artefacts that need cleanup.
 
@@ -303,3 +342,5 @@ was inaccurate at time of generation (filter was disabled).
 | `b6a9fd2` | Replace `pidstat 1 1` (blocks 1s) with `/proc/$PID/stat` delta — preserves 500ms sampling cadence |
 | `3c006cf` | Fix `run_experiment.sh` result collection: correct filenames for bcc-tracer and perf_monitor output, add HPE output copy step, guard `docker exec` calls against `set -e` |
 | `7493830` | Expand README: newcomer orientation, experiment rigs table, known issues table |
+| `a90d5dd` | Fix broken bounding boxes/skeletons on all OpenVINO models: restore dynamic NMS in `open_pose.py`, set `target_size=None` in `openvino_base_hpe.py`, fix `ae2`/`ae3` model paths |
+| `fe2f148` | Add docs: `hpe-aspect-ratio-support.md` and `perf-tuning-base-diff-report.md` describing the regression context |
