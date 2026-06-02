@@ -9,7 +9,7 @@ exec 2>&1
 echo "[INFO] Starting HPE traffic monitor at $(date)"
 
 # Configuration - using host networking via service:hpe
-STREAMER_IP=$(getent hosts "${STREAMER_IP:-rtsp-broker}" | awk '{ print $1 }')
+STREAMER_IP=$(getent hosts "${STREAMER_IP:-rtsp-broker}" | awk '/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/ {print $1; exit}')
 STREAMER_PORT=${STREAMER_PORT:-8554}  # Default to 8554 (MediaMTX RTSP) if not set
 INTERFACE=${BCC_INTERFACE:-$(ip route | awk '/default/ {print $5; exit}')}
 if [ -z "$INTERFACE" ]; then
@@ -69,5 +69,18 @@ python3 /app/bcc_tx_bytes.py &
 TX_PID=$!
 echo "[INFO] Started TX tracer (PID: $TX_PID)"
 
+# Forward SIGTERM/SIGINT to the TX tracer and wait for it before exiting
+cleanup() {
+    echo "[INFO] Shutting down — forwarding signal to TX tracer (PID: $TX_PID)"
+    kill "$TX_PID" 2>/dev/null || true
+    wait "$TX_PID" 2>/dev/null || true
+    exit 0
+}
+trap cleanup SIGTERM SIGINT
+
 # Start RX tracer in foreground (measures incoming video bytes via socket filter)
-exec python3 /app/bcc_rx_bytes.py "$STREAMER_IP" "$STREAMER_PORT" "$HPE_PORT" "$INTERFACE"
+# Do NOT use exec here — the shell must stay alive to handle the trap above.
+python3 /app/bcc_rx_bytes.py "$STREAMER_IP" "$STREAMER_PORT" "$HPE_PORT" "$INTERFACE"
+
+# RX tracer exited normally — clean up TX tracer
+cleanup

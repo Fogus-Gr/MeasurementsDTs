@@ -90,7 +90,7 @@ def extract_x_metadata(header_region):
 
     return frame_number
 
-def _is_stream_url(url: str) -> bool:
+def _is_stream_url(url):
     """Return True for any URL-based video stream (HTTP or RTSP)."""
     return url.startswith("http") or url.startswith("rtsp://")
 

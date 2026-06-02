@@ -55,9 +55,10 @@ TRACEPOINT_PROBE(syscalls, sys_enter_sendto) {
     if (pid != %d)
         return 0;
 
-    u64 size = (u64)args->size;
+    u64 size = (u64)args->len;
     u32 key = 0;
-    u64 *val = tx_bytes.lookup_or_init(&key, &size);
+    u64 zero = 0;
+    u64 *val = tx_bytes.lookup_or_init(&key, &zero);
     if (val) {
         __sync_fetch_and_add(val, size);
     }
@@ -96,12 +97,6 @@ TRACEPOINT_PROBE(syscalls, sys_enter_sendto) {
                 
                 prev_bytes = bytes_total
                 prev_time = now_ms
-                
-                # Clear the map to avoid unbounded growth
-                try:
-                    b["tx_bytes"].clear()
-                except Exception:
-                    pass
                 
                 time.sleep(poll_interval_s)
                 

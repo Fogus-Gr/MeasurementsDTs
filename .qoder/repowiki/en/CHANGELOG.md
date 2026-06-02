@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 10ms granularity measurements for precise bandwidth analysis
   - Dual-direction TX/RX monitoring for complete network traffic analysis
 - Auto-scaling behavior for 4-32 vCPU VMs (documented in `monitor_hpe/SCALING_GUIDE.md`)
-- Hardware applicability table in `optimizations/README.md` comparing cloud VM vs bare metal behavior
+- Hardware applicability table comparing cloud VM vs bare metal behavior (documented in `ONBOARDING.md`)
 
 ### Changed
 - **Migrated from HTTP H.264 streaming to RTSP-based streaming pipeline**

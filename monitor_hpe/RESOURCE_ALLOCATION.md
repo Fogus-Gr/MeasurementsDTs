@@ -70,7 +70,7 @@ monitor:
 
 ---
 
-## Resource Distribution for a 8 vCPU Cloud VM
+## Resource Distribution for an 8 vCPU Cloud VM
 
 ```
 ┌─────────────────────────────────────────────────────────┐

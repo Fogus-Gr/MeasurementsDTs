@@ -748,7 +748,7 @@ awk -F, 'NR>1 {sum += $2} END {printf "%.2f MB\n", sum/1024/1024}' traces/bcc/hp
 awk -F, 'NR>1 {sum += $2; n++} END {printf "%.1f%%\n", sum/n}' gpu/gpu_metrics.csv
 
 # Peak memory usage (MB)
-awk -F, 'NR>1 {if ($3 > max) max=$3} END {print max " MB"}' perf/pid_metrics.csv
+awk -F, 'NR>1 {if ($4 > max) max=$4} END {print max/1024 " MB"}' perf/pid_metrics.csv
 
 # Number of frames processed
 wc -l hpe_output/*.csv

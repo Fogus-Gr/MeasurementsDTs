@@ -8,14 +8,47 @@ import sys
 
 def plot_metrics(pid_csv, rx_csv):
     try:
-        # Read pid_metrics CSV
+        # Read and validate pid_metrics CSV
         df_pid = pd.read_csv(pid_csv)
+        required_pid_cols = {'timestamp', 'cpu_percent', 'mem_rss_kb'}
+        missing = required_pid_cols - set(df_pid.columns)
+        if missing:
+            print('Error: {} is missing columns: {}'.format(pid_csv, missing), file=sys.stderr)
+            sys.exit(1)
+        if df_pid.empty:
+            print('Error: {} is empty'.format(pid_csv), file=sys.stderr)
+            sys.exit(1)
+        df_pid['timestamp'] = pd.to_numeric(df_pid['timestamp'], errors='coerce')
+        df_pid = df_pid.dropna(subset=['timestamp'])
+        if df_pid.empty:
+            print('Error: {} has no valid timestamp rows'.format(pid_csv), file=sys.stderr)
+            sys.exit(1)
+
         # Compute elapsed seconds from first timestamp
         t0_pid = df_pid['timestamp'].iloc[0]
         df_pid['elapsed'] = df_pid['timestamp'] - t0_pid
 
-        # Read hpe_video_rx CSV
+        # Read and validate hpe_video_rx CSV
         df_rx = pd.read_csv(rx_csv)
+        required_rx_cols = {'timestamp', 'rx_bytes'}
+        # Accept the actual column name used in the CSV (timestamp_ms or timestamp)
+        if 'timestamp_ms' in df_rx.columns and 'timestamp' not in df_rx.columns:
+            df_rx = df_rx.rename(columns={'timestamp_ms': 'timestamp'})
+        if 'rx_video_bytes_delta' in df_rx.columns and 'rx_bytes' not in df_rx.columns:
+            df_rx = df_rx.rename(columns={'rx_video_bytes_delta': 'rx_bytes'})
+        missing = {'timestamp', 'rx_bytes'} - set(df_rx.columns)
+        if missing:
+            print('Error: {} is missing columns: {}'.format(rx_csv, missing), file=sys.stderr)
+            sys.exit(1)
+        if df_rx.empty:
+            print('Error: {} is empty'.format(rx_csv), file=sys.stderr)
+            sys.exit(1)
+        df_rx['timestamp'] = pd.to_numeric(df_rx['timestamp'], errors='coerce')
+        df_rx = df_rx.dropna(subset=['timestamp'])
+        if df_rx.empty:
+            print('Error: {} has no valid timestamp rows'.format(rx_csv), file=sys.stderr)
+            sys.exit(1)
+
         t0_rx = df_rx['timestamp'].iloc[0]
         df_rx['elapsed'] = df_rx['timestamp'] - t0_rx
 

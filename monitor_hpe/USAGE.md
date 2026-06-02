@@ -44,7 +44,7 @@ Device: CPU
 
 ```
 CPU:    6 cores (reserved: 4 cores)
-Memory: 8GB (reserved: 6GB)
+Memory: 9GB (reserved: 6GB)
 OpenVINO Threads: 6
 Device: CPU
 ```
