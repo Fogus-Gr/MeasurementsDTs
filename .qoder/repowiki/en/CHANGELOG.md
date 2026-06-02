@@ -7,33 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [Unreleased] — `final-merge-validation` branch
 
 ### Added
 - Dynamic resource allocation system for HPE containers with environment variable management
   - `HPE_CPU_LIMIT`, `HPE_CPU_RESERVATION` for CPU allocation
   - `HPE_MEMORY_LIMIT`, `HPE_MEMORY_RESERVATION` for memory allocation
   - Automatic calculation based on system vCPUs and HPE method requirements
-- BCC-based TX byte counter (`bcc_tx_bytes.py`) complementing RX byte counter
+  - Auto-scaling for `ffmpeg_hpe` rig (`9d45a66`) and `monitor_hpe` rig (`14da4b6`)
+  - Per-method resource tuning: GPU methods (alphapose/openpose) capped at 4 OV threads; OpenVINO methods scale threads with vCPU count; hrnet gets 1.5× memory floor
+  - Documented in `ffmpeg_hpe/DYNAMIC_RESOURCE_ALLOCATION.md` and `monitor_hpe/SCALING_GUIDE.md` (`f1e2729`, `5d01c4b`)
+- BCC-based TX byte counter (`bcc_tx_bytes.py`) complementing RX byte counter (`4491765`)
   - 10ms granularity measurements for precise bandwidth analysis
   - Dual-direction TX/RX monitoring for complete network traffic analysis
-- Auto-scaling behavior for 4-32 vCPU VMs (documented in `monitor_hpe/SCALING_GUIDE.md`)
+  - Filters by HPE PID via `/pids/hpe.pid`; writes `hpe_video_tx.csv`
+- BCC polling rate now configurable via `BCC_POLL_INTERVAL_S` env var, defaulting to 10ms (`a1bba0a`)
+- Auto-scaling behavior for 4–32 vCPU VMs (documented in `monitor_hpe/SCALING_GUIDE.md`)
 - Hardware applicability table comparing cloud VM vs bare metal behavior (documented in `ONBOARDING.md`)
+- `requirements_dev.txt` for development-only dependencies (`c6235f2`)
+- RTSP support added to `base_hpe.py` input routing, OpenCV init, and HTTP fallback guard (`78b9df5`)
+- `ffmpeg_hpe` now uses `Dockerfile_base` (HPE app image) instead of a separate Dockerfile (`ff6b34d`)
 
 ### Changed
-- **Migrated from HTTP H.264 streaming to RTSP-based streaming pipeline**
+- **Migrated from HTTP H.264 streaming to RTSP-based streaming pipeline** (`e5fee4b`, `553ec02`)
   - Replaced legacy `h264-streaming-server` (port 8089) with MediaMTX RTSP broker (port 8554)
   - Streamer service now uses `jrottenberg/ffmpeg:4.4-nvidia` with NVENC hardware encoding
   - HPE application consumes RTSP stream with TCP transport for reliable packet capture
   - HLS debugging support on port 8888
+  - `bcc-tracer` entrypoint updated for RTSP port 8554 (`aad5940`)
+  - `.env` updated for RTSP pipeline (`5d19bd1`)
 - RTSP broker (MediaMTX) and streamer services added to Docker Compose for handling increased streaming demands
 - Resource allocation strategy updated with dynamic CPU and memory limits based on system vCPUs
 - Monitoring capabilities enhanced with dual-direction traffic measurement (TX/RX)
-- GPU metrics collection improved with controlled resource limits (0.1 CPU, 128M memory)
+- GPU metrics collection improved with controlled resource limits (0.1 CPU, 128M memory) (`b16122d`)
 - Performance monitor resource allocation optimized (0.25 CPU, 256M memory)
 - BPF tracer enhanced with 10ms polling interval for synchronized TX/RX comparison
+- `run_experiment.sh` (ffmpeg_hpe) RTSP startup hardened: ffprobe/MediaMTX REST API stream liveness check, video file pre-validation, container name release wait (`22684e1`)
+- `openvino_base_hpe.py` OpenVINO env vars now read at runtime; `_configure_core()` uses `openvino.properties` API (`3161ac1`)
+- `BaseHPE.IMAGE_EXTENSIONS` deduplicated — removed duplicate glob patterns (`da11ade`)
+- `requirements_torch_cpu.txt` versions aligned with `requirements.txt` (2.2.1→2.4.1 / 0.17.1→0.19.1) (`54aa916`)
 
 ### Fixed
+- **Broken bounding boxes and skeletons on all OpenVINO models** — two-bug regression from `797089e` (Aug 2025) (`9031a24`)
+  - `open_pose.py`: restored always-on dynamic `max_pool` NMS node; removed `use_pooled_heatmaps` conditional that disabled NMS
+  - `openvino_base_hpe.py`: `target_size` set to `None` for all models (was passing hard-coded integers, corrupting coordinate scaling); `ae2`/`ae3` model paths corrected (`intel/` → `public/`)
+- Stale `use_pooled_heatmaps: False` key removed from OpenPose config dict in `openvino_base_hpe.py` (`a851eaf`)
+- Font scale in `base_hpe.py` FPS overlay was using height instead of width (`f_width` mislabel) (`a851eaf`)
+- Missing `logging` import in `openvino_base_hpe.py` (`5ae86f2`)
+- CPU-only PyTorch wheels not installable via `pip install -r` due to missing `--index-url` (`be34481`)
+- `run_experiment.sh` (ffmpeg_hpe): RTSP pipeline wiring, stream liveness check, TCP transport enforcement (`553ec02`, `c36c65c`)
 - IP/port BPF filter re-enabled in `bcc_rx_bytes.py` — now counts only video stream traffic
 - Plot scripts no longer use hardcoded absolute paths — accept CSV path as CLI arg
 - `plot_smi_output.py` column names now match `run_nvidia_dcgm.sh` output
@@ -45,16 +67,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `perf_monitor` output filename corrected to `pid_metrics.csv`
 - BCC tracer output filename corrected to `hpe_video_rx.csv`
 - HPE container output (keypoint CSVs/JSON) now copied to results directory
-- `plot_graph.py` now uses Agg backend and saves PNGs (no `plt.show()` blocking)
+- `plot_graph.py` (ffmpeg_hpe) now validates CSV columns and emptiness before plotting (`54aa916`)
+- `plot_graph.py` (monitor_hpe) now uses Agg backend and saves PNGs (no `plt.show()` blocking) (`76b8f30`)
+- `bcc_tx_bytes.py`: `args->size` → `args->len` (correct `sys_enter_sendto` field); double-count on first packet fixed; `clear()` removed so map stays cumulative (`54aa916`)
+- `entrypoint.sh` (bcc-tracer): `getent hosts` IPv4-only filter to avoid multi-line `STREAMER_IP`; replaced `exec` with plain call + `trap` so TX tracer receives SIGTERM and flushes on shutdown (`54aa916`)
+- `_is_stream_url` type annotations removed (project no-annotations rule) (`54aa916`)
+- ONBOARDING.md peak memory awk used `$3` (cpu%) instead of `$4` (mem_rss_kb) (`54aa916`)
+- `.gitignore`: trailing whitespace on line 5; redundant `models/OpenVINO/pretrained_models/` directory-wide ignore removed (`54aa916`)
+- `monitor_hpe/USAGE.md` hrnet memory corrected to 9GB (was 8GB; formula gives 9GB on 6-HPE-vCPU host) (`54aa916`)
 
 ### Removed
+- `optimizations/` folder and associated scripts (`optimized_main.py`, `cpu_performance_optimizer.py`, `enhanced_openvino_hpe.py`, `optimizations/README.md`) — CPU tuning now integrated into main codebase via ENV vars (`76ac613`)
 - HTTP streaming server and related infrastructure (replaced by RTSP pipeline)
 - Legacy HTTP stream byte-reader from `cuda-dev` branch
 - `PoseMonitor` class (deprecated)
 - `video_detection.py` module (deprecated)
 - CLI args `--timeout` and `--max-frames` (removed for simplicity)
 - Dual logging system (file + structured JSONL)
-- `optimizations/` folder (CPU tuning now integrated into main codebase)
 - `OPTIMIZATION_PLAN.md` (completed and superseded by implementation)
 
 ---
@@ -253,12 +282,16 @@ The `optimizations/` folder was originally calibrated for 4 vCPU but runtime aut
 | # | Component | Issue | Status |
 |---|---|---|---|
 | 1 | `monitor_pid.sh` | `netif_receive_skb` bpftrace PID filter fires in softirq context — RX bytes always ~0 | ⚠️ Open — use `bcc-tracer` for accurate RX |
-| 2 | `movenet_hpe.py` | Keypoint-level score filtering not yet applied to body score | ⚠️ Open |
+| 2 | `movenet_hpe.py` | Keypoint-level score filtering not yet applied to body score | ✅ Fixed (`final-merge-validation`) — now uses mean keypoint score |
 | 3 | `alphapose_hpe.py` | Batch parallelism for directory input not implemented | ⚠️ Open |
-| 4 | `visualizer.py` | Keypoint colouring logic only verified correct for MoveNet | ⚠️ Open |
-| 5 | `openvino_base_hpe.py` | `results` variable may be unbound if `raw_result` is falsy | ⚠️ Open |
-| 6 | `export_pose_results.py` | Global accumulator never reset between runs | ⚠️ Open |
-| 7 | Root files | Development artefacts need cleanup (`full_shell_history.txt`, `hist.txt`, `bug.md`, `*.bak`) | ⚠️ Open |
+| 4 | `alphapose_hpe.py` | Bounding box derived from keypoints, not detector | ✅ Fixed (`final-merge-validation`) — uses detector bbox scaled to padded-frame coords |
+| 5 | `visualizer.py` | Keypoint colouring logic only verified correct for MoveNet | ⚠️ Open (colouring rule unchanged; bounds guard added) |
+| 6 | `openvino_base_hpe.py` | `results` variable may be unbound if `raw_result` is falsy | ✅ Fixed — `run_model` now returns `[], []` on falsy `raw_result` |
+| 7 | `evaluator.py` | Global accumulator never reset between runs | ✅ Fixed — `reset_results()` called at top of both loop methods |
+| 8 | Root files | Development artefacts need cleanup (`full_shell_history.txt`, `hist.txt`, `bug.md`, `*.bak`) | ⚠️ Open |
+| 9 | `open_pose.py` + `openvino_base_hpe.py` | NMS disabled + wrong target_size — broken bounding boxes/skeletons on all OpenVINO models | ✅ Fixed (`9031a24`, `a851eaf`) |
+| 10 | `bcc_tx_bytes.py` | `args->size` wrong field, double-count, `clear()` breaks delta | ✅ Fixed (`54aa916`) |
+| 11 | `entrypoint.sh` | TX tracer orphaned on container stop; STREAMER_IP could be multi-line | ✅ Fixed (`54aa916`) |
 
 ---
 
