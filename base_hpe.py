@@ -523,9 +523,7 @@ class BaseHPE(ABC):
         padded = self.pad_and_resize(frame_np) # pad_and_resize expects numpy array
         
         # --- Inference and Timing ---
-        inference_start = time.time()
         predictions = self.run_model(padded)
-        inference_stop = time.time()
         stop_time = time.time()
 
         # Handle different model output formats
