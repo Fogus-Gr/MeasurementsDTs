@@ -62,8 +62,6 @@ def main():
     })
 
     hpe = get_hpe_method(args)
-    
-    hpe.load_model()
 
     is_url_stream = args.input.startswith('http') or args.input.startswith('rtsp://')
 
