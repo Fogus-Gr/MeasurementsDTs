@@ -63,8 +63,6 @@ def main():
 
     hpe = get_hpe_method(args)
     
-    hpe.load_model()
-    
     # Add timeout and frame count detection for HTTP streams and video files
     if args.input.startswith('http'):
         logging.info(f"HTTP stream detected: {args.input}")
