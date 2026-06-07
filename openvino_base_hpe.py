@@ -252,7 +252,7 @@ class OpenVINOBaseHPE(BaseHPE):
 
     def run_model(self, padded):
         """Run inference on preprocessed frame"""
-        if self.model_type == "openpose" and hasattr(self, "_current_frame"):
+        if self.model_type in ("openpose", "higherhrnet") and hasattr(self, "_current_frame"):
             model_input = self._current_frame
         else:
             model_input = padded
@@ -285,7 +285,7 @@ class OpenVINOBaseHPE(BaseHPE):
             if score > self.score_thresh:
                 keypoints_xy_orig = keypoints_xy.copy()
 
-                if self.model_type != "openpose":
+                if self.model_type not in ("openpose", "higherhrnet"):
                     unpadded_w = self.img_w + self.padding.w
                     unpadded_h = self.img_h + self.padding.h
                     keypoints_xy_orig[:, 0] *= (unpadded_w / self.pd_w)
