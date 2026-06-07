@@ -252,7 +252,12 @@ class OpenVINOBaseHPE(BaseHPE):
 
     def run_model(self, padded):
         """Run inference on preprocessed frame"""
-        inputs, preprocessing_meta = self.model.preprocess(padded)
+        if self.model_type == "openpose" and hasattr(self, "_current_frame"):
+            model_input = self._current_frame
+        else:
+            model_input = padded
+
+        inputs, preprocessing_meta = self.model.preprocess(model_input)
         raw_result = self.model.infer_sync(inputs)
 
         results = None
@@ -278,13 +283,13 @@ class OpenVINOBaseHPE(BaseHPE):
 
             score = float(np.mean(keypoints_scores))
             if score > self.score_thresh:
-                # Scale keypoints from model output space to original image space
-                # OpenVINO model API outputs coordinates in the padded/resized space
-                unpadded_w = self.img_w + self.padding.w
-                unpadded_h = self.img_h + self.padding.h
                 keypoints_xy_orig = keypoints_xy.copy()
-                keypoints_xy_orig[:, 0] *= (unpadded_w / self.pd_w)
-                keypoints_xy_orig[:, 1] *= (unpadded_h / self.pd_h)
+
+                if self.model_type != "openpose":
+                    unpadded_w = self.img_w + self.padding.w
+                    unpadded_h = self.img_h + self.padding.h
+                    keypoints_xy_orig[:, 0] *= (unpadded_w / self.pd_w)
+                    keypoints_xy_orig[:, 1] *= (unpadded_h / self.pd_h)
 
                 visible_kps = keypoints_xy_orig[keypoints_scores > 0.1]
                 if len(visible_kps) == 0:
@@ -305,6 +310,13 @@ class OpenVINOBaseHPE(BaseHPE):
                 bodies.append(body)
 
         return bodies
+
+    def process_frame(self, frame, frame_number):
+        self._current_frame = frame.cpu().numpy() if isinstance(frame, torch.Tensor) else frame
+        try:
+            return super().process_frame(frame, frame_number)
+        finally:
+            self._current_frame = None
 
     def main_loop(self):
         """Override main_loop to handle streaming URLs properly"""
