@@ -161,8 +161,8 @@ def main():
         hpe.main_loop()
     else:
         logging.info(f"Video file detected: {args.input}")
-        if args.timeout > 0:
-            logging.info(f"Processing video with timeout: {args.timeout}s")
+        if args.timeout > 0 or args.max_frames > 0:
+            logging.info(f"Processing video with timeout: {args.timeout}s, max_frames: {args.max_frames}")
             log_structured_data('processing_start', {
                 'input_type': 'video_file',
                 'input_source': args.input,

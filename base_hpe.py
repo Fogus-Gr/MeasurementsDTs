@@ -371,7 +371,7 @@ class BaseHPE(ABC):
                 while True:
                     try:
                         # Check timeout
-                        if time.time() - start_time > timeout_seconds:
+                        if timeout_seconds > 0 and time.time() - start_time > timeout_seconds:
                             print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
                             break
                         
@@ -404,6 +404,40 @@ class BaseHPE(ABC):
                         print(f"[ERROR] PyNvCodec decoding error: {e}")
                         break # Exit loop on error
 
+            elif self.cap is not None:
+                print("Starting processing video/webcam data with OpenCV. Press CTRL+C to exit")
+
+                consecutive_failures = 0
+                max_consecutive_failures = 10
+
+                while True:
+                    if timeout_seconds > 0 and time.time() - start_time > timeout_seconds:
+                        print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
+                        break
+
+                    if max_frames > 0 and frame_idx >= max_frames:
+                        print(f"Max frames reached ({max_frames}) - stopping processing")
+                        break
+
+                    ok, frame = self.cap.read()
+                    if not ok:
+                        consecutive_failures += 1
+                        if consecutive_failures >= max_consecutive_failures:
+                            print(f"Stream ended after {consecutive_failures} consecutive read failures")
+                            break
+                        print(f"Frame read failed ({consecutive_failures}/{max_consecutive_failures}), retrying...")
+                        time.sleep(0.1)
+                        continue
+
+                    consecutive_failures = 0
+                    self.process_frame(frame, frame_idx)
+                    frame_idx += 1
+
+                    if frame_idx % 100 == 0:
+                        elapsed = time.time() - start_time
+                        fps = frame_idx / elapsed if elapsed > 0 else 0
+                        print(f"Processed {frame_idx} frames in {elapsed:.1f}s (avg {fps:.1f} FPS)")
+
             else:
                 # Fallback path: MJPEG-over-HTTP socket reader.
                 # RTSP streams must NEVER reach this branch — they should be handled
@@ -411,12 +445,17 @@ class BaseHPE(ABC):
                 # (_init_opencv_video_capture with CAP_FFMPEG), both of which set
                 # self.is_pynvcodec_enabled or self.cap before reaching main_loop_with_timeout.
                 url = self.input_src
-                if url.startswith("rtsp://"):
+                if isinstance(url, str) and url.startswith("rtsp://"):
                     raise RuntimeError(
                         f"[base_hpe] RTSP stream '{url}' reached the HTTP/MJPEG fallback loop. "
                         "This means _init_pynvcodec_video_capture or _init_opencv_video_capture "
                         "did not initialise correctly. Check PyNvCodec availability and OpenCV "
                         "FFmpeg backend support."
+                    )
+                if not isinstance(url, str) or not url.startswith("http"):
+                    raise RuntimeError(
+                        f"[base_hpe] Non-HTTP source '{url}' reached the HTTP/MJPEG fallback loop. "
+                        "This means OpenCV video capture was not initialised correctly."
                     )
 
                 r = requests.get(url, stream=True, timeout=30)
@@ -486,7 +525,7 @@ class BaseHPE(ABC):
                         time.sleep(0.001)
                         
                         # Check termination conditions
-                        if time.time() - start_time > timeout_seconds:
+                        if timeout_seconds > 0 and time.time() - start_time > timeout_seconds:
                             print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
                             break
                         if max_frames > 0 and frame_idx >= max_frames:
