@@ -434,3 +434,13 @@ end_time=$(date +%s)
 duration=$((end_time - start_time))
 echo "Experiment completed in $duration seconds."
 echo "Results are saved in the directory: $results_dir"
+
+# Verify collected data
+echo "[DEBUG] Collected data summary:"
+if command -v tree >/dev/null 2>&1; then
+  tree -h "$results_dir" | head -n 20
+else
+  echo "[WARNING] 'tree' command not found, using 'ls' instead:"
+  ls -Rlh "$results_dir"
+fi
+
