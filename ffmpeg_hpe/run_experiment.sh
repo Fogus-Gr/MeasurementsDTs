@@ -1,6 +1,21 @@
 #!/bin/bash
 set -e
 
+# Load .env defaults if present. Caller-provided environment variables keep
+# priority so one-off runs can override VIDEO_FILE_NAME, HPE_METHOD, etc.
+if [ -f .env ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    line="${line#export }"
+    key="${line%%=*}"
+    value="${line#*=}"
+    if [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && [ -z "${!key+x}" ]; then
+      export "$key=$value"
+    fi
+  done < .env
+fi
+
 # Step 1: Ensure bc is installed (for floating point math)
 if ! command -v bc &> /dev/null; then
   echo "Installing bc (required for timestamp alignment)..."
@@ -53,12 +68,33 @@ capture_diagnostics() {
 
 # Step 4: Prepare results directory and experiment metadata
 timestamp=$(date +%Y%m%d_%H%M%S)
-cpu_model=$(lscpu | grep "Model name" | sed 's/.*: *//g' | tr -s ' ' '_' | tr -d ',()/')
+cpu_threads=$(lscpu | awk '/^CPU\(s\):/ {print $2; exit}')
 start_time=$(date +%s)
 container_type=${1:-movenet}
 arguments=${2:-""}
-results_dir="results_${container_type}_${cpu_model}_${timestamp}"
-mkdir -p "$results_dir/logs" "$results_dir/traces" "$results_dir/perf"
+
+# Resolve device type early for results directory naming.
+_preview_method="${1:-movenet}"
+GPU_METHODS_PREVIEW=("alphapose" "openpose")
+device_type="CPU"
+if [[ " ${GPU_METHODS_PREVIEW[*]} " == *" $_preview_method "* ]]; then
+  device_type="GPU"
+fi
+
+# Resolve video file basename early for results directory naming.
+# Export VIDEO_FILE_NAME so docker-compose streamer uses the same validated value.
+export VIDEO_FILE_NAME="${VIDEO_FILE_NAME:-Clipchamp30s.mp4}"
+VIDEO_FILE="$VIDEO_FILE_NAME"
+VIDEO_FILE_BASENAME=$(basename "$VIDEO_FILE")
+
+# Validate that the video file exists before starting the streamer.
+VIDEO_HOST_PATH="$(dirname "$0")/../videos/${VIDEO_FILE}"
+if [ ! -f "$VIDEO_HOST_PATH" ]; then
+  echo "[ERROR] Video file not found: $VIDEO_HOST_PATH"
+  echo "[ERROR] Set VIDEO_FILE_NAME to a file that exists under $(dirname "$0")/../videos/"
+  exit 1
+fi
+echo "[DEBUG] Video file validated: $VIDEO_HOST_PATH"
 
 # Step 4b: Auto-detect available vCPUs and compute dynamic resource allocation.
 # Sidecars (streamer 0.75, perf_monitor 0.25, bcc-tracer 0.5, gpu-metrics 0.1)
@@ -78,11 +114,14 @@ if [ "$HPE_VCPUS" -lt 2 ]; then
   HPE_VCPUS=2
 fi
 
+results_dir="results_${container_type}_${cpu_threads}cores_${device_type}_${VIDEO_FILE_BASENAME}_${timestamp}"
+mkdir -p "$results_dir/logs" "$results_dir/traces" "$results_dir/perf"
+
 # Per-method resource tuning — resolved here so docker-compose picks up the
 # exported vars when the hpe service is started in Step 10.
 # HPE_METHOD is parsed in Step 9; we default to the CLI arg now so the case
 # block can run before any containers start.
-_METHOD_PREVIEW="${1:-alphapose}"
+_METHOD_PREVIEW="${1:-movenet}"
 case "$_METHOD_PREVIEW" in
   alphapose|openpose)
     # GPU methods: PyTorch/CUDA does the heavy lifting; cap OV_THREADS at 4
@@ -162,7 +201,6 @@ echo "Stopping and removing existing containers..."
 docker compose -f $docker_compose_file down -v --remove-orphans
 docker rm -f hpe 2>/dev/null || true
 
-touch "$results_dir/container_timing.txt"
 echo "Container Instantiation Timing:" > "$results_dir/container_timing.txt"
 
 # Step 8: Start the RTSP broker and wait for the RTSP port to accept connections.
@@ -196,7 +234,7 @@ echo "[DEBUG] rtsp-broker accepting connections on localhost:8554"
 
 # Step 9: Resolve HPE method, device, and GPU runtime before starting any containers.
 # The rtsp-broker service name resolves via Docker bridge DNS.
-export HPE_METHOD="${1:-alphapose}"
+export HPE_METHOD="${1:-movenet}"
 export HPE_INPUT="rtsp://rtsp-broker:8554/stream"
 export HPE_DEVICE="CPU"
 
@@ -217,22 +255,13 @@ export HPE_RUNTIME
 
 echo "[DEBUG] HPE_INPUT=$HPE_INPUT  HPE_METHOD=$HPE_METHOD  HPE_DEVICE=$HPE_DEVICE  HPE_RUNTIME=$HPE_RUNTIME"
 
-# Step 9b: Validate that the video file exists before starting the streamer.
-# The streamer mounts ../videos as /data inside the container.
-VIDEO_FILE="${VIDEO_FILE_NAME:-vga_01_01.mp4}"
-VIDEO_HOST_PATH="$(dirname "$0")/../videos/${VIDEO_FILE}"
-if [ ! -f "$VIDEO_HOST_PATH" ]; then
-  echo "[ERROR] Video file not found: $VIDEO_HOST_PATH"
-  echo "[ERROR] Set VIDEO_FILE_NAME to a file that exists under $(dirname "$0")/../videos/"
-  exit 1
-fi
-echo "[DEBUG] Video file validated: $VIDEO_HOST_PATH"
+# Step 9b: Video file already validated in Step 4 (VIDEO_FILE, VIDEO_HOST_PATH set there)
 
-# Step 9c: Start the NVENC streamer (video file validated above)
+# Step 9c: Start the NVENC streamer (video file validated in Step 4)
 echo "Starting video-producer (FFmpeg NVENC streamer)..."
 docker compose -f $docker_compose_file up -d streamer
 
-# Step 9c: Wait for the streamer to publish the RTSP stream before starting HPE.
+# Step 9d: Wait for the streamer to publish the RTSP stream before starting HPE.
 # Probing localhost:8554 only confirms MediaMTX is listening; it does NOT mean
 # the /stream path is being published. We use ffprobe if available, otherwise
 # fall back to the MediaMTX REST API.
@@ -266,7 +295,13 @@ wait_for_rtsp_stream() {
   echo "[ERROR] Check video-producer and mediamtx logs before retrying."
   return 1
 }
-wait_for_rtsp_stream
+wait_for_rtsp_stream || {
+  echo "[ERROR] Aborting experiment due to stream timeout."
+  echo "[DEBUG] Stopping and cleaning up containers..."
+  docker compose -f $docker_compose_file down --remove-orphans --volumes
+  docker rm -f hpe mediamtx video-producer gpu-metrics perf_monitor bcc-tracer 2>/dev/null || true
+  exit 1
+}
 
 # Step 10: Start hpe container
 hpe_start=$(date +%s.%N)
@@ -443,4 +478,3 @@ else
   echo "[WARNING] 'tree' command not found, using 'ls' instead:"
   ls -Rlh "$results_dir"
 fi
-

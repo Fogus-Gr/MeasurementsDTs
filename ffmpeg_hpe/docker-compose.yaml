@@ -61,7 +61,7 @@ services:
     # NVENC low-latency: -preset p2 (low-latency-balanced) + -tune ll (low-latency tune).
     # Do NOT also pass -zerolatency 1 — it duplicates -tune ll and triggers an NVENC warning.
     command: >
-      -re -stream_loop -1 -i /data/${VIDEO_FILE_NAME:-vga_01_01.mp4}
+      -re -stream_loop -1 -i /data/${VIDEO_FILE_NAME:-Clipchamp30s.mp4}
       -c:v h264_nvenc -preset p2 -tune ll
       -rtsp_transport tcp
       -f rtsp rtsp://rtsp-broker:8554/stream
