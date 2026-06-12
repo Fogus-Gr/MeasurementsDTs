@@ -25,7 +25,7 @@ def render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_b
             
             # Simple colour rule for bodies that preserve the repo's COCO-17-style
             # keypoint order: nose cyan, odd indices green, remaining indices red.
-            for i,x_y in enumerate(body.keypoints):
+            for i, x_y in enumerate(body.keypoints):
                 if i >= len(body.keypoints_score):
                     continue
                 if body.keypoints_score[i] > score_thresh:

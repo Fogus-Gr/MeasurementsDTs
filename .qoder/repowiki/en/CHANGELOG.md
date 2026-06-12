@@ -46,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `openvino_base_hpe.py` OpenVINO env vars now read at runtime; `_configure_core()` uses `openvino.properties` API (`3161ac1`)
 - `BaseHPE.IMAGE_EXTENSIONS` deduplicated — removed duplicate glob patterns (`da11ade`)
 - `requirements_torch_cpu.txt` versions aligned with `requirements.txt` (2.2.1→2.4.1 / 0.17.1→0.19.1) (`54aa916`)
+- `ffmpeg_hpe` GPU visibility split so the NVENC streamer keeps GPU access while CPU-only HPE methods run with GPU visibility disabled.
+- `ffmpeg_hpe` sidecar CPU documentation now states the actual 2.1 CPU sidecar limit total.
 
 ### Fixed
 - **Broken bounding boxes and skeletons on all OpenVINO models** — two-bug regression from `797089e` (Aug 2025) (`9031a24`)
@@ -75,6 +77,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ONBOARDING.md peak memory awk used `$3` (cpu%) instead of `$4` (mem_rss_kb) (`54aa916`)
 - `.gitignore`: trailing whitespace on line 5; redundant `models/OpenVINO/pretrained_models/` directory-wide ignore removed (`54aa916`)
 - `monitor_hpe/USAGE.md` hrnet memory corrected to 9GB (was 8GB; formula gives 9GB on 6-HPE-vCPU host) (`54aa916`)
+- `bcc_rx_bytes.py` default polling interval aligned to 10ms and RX map initialization corrected to avoid double-counting the first matching packet.
+- `bcc-tracer` entrypoint now propagates the foreground RX tracer exit code while still shutting down the TX tracer.
+- `ffmpeg_hpe` and `monitor_hpe` experiment scripts now propagate failed or uninspectable HPE exits instead of reporting successful runs.
+- `ffmpeg_hpe` startup log capture now tolerates early HPE exits so diagnostics can still be collected.
+- `run_nvidia_dcgm.sh`, legacy `trace_video_traffic.sh`, and `monitor_hpe/run_experiment.sh` line endings normalized so Bash parses them on Windows/WSL checkouts.
+- `Dockerfile_base` duplicate entrypoint copy/chmod removed; `visualizer.py` keypoint loop spacing cleaned up.
+- Repowiki metadata now points to the real README instead of the stale "No readme file" placeholder.
+- Dynamic resource allocation summary now mirrors the rounded hrnet memory calculation used by the experiment scripts.
 
 ### Removed
 - `optimizations/` folder and associated scripts (`optimized_main.py`, `cpu_performance_optimizer.py`, `enhanced_openvino_hpe.py`, `optimizations/README.md`) — CPU tuning now integrated into main codebase via ENV vars (`76ac613`)

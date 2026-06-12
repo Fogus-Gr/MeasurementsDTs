@@ -80,7 +80,9 @@ case "$METHOD" in
     ;;
   hrnet)
     OV_THREADS=$HPE_VCPUS
-    HPE_MEMORY_LIMIT="$((HPE_VCPUS * 3 / 2))G"  # 1.5GB per vCPU, min 6G
+    MEM_GB=$(awk "BEGIN {printf \"%.0f\", $HPE_VCPUS * 1.5}")
+    MEM_GB=$(( MEM_GB > 6 ? MEM_GB : 6 ))
+    HPE_MEMORY_LIMIT="${MEM_GB}G"  # 1.5GB per vCPU, rounded, min 6G
     ;;
 esac
 ```
