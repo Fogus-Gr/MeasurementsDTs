@@ -239,21 +239,22 @@ export HPE_INPUT="rtsp://rtsp-broker:8554/stream"
 export HPE_DEVICE="CPU"
 
 # GPU runtime: only alphapose and openpose actually use the GPU.
-# For all other methods (movenet, ae1, ae2, ae3, hrnet) we set
-# NVIDIA_VISIBLE_DEVICES=none so the NVIDIA container runtime is not required
-# and the container can start on hosts without a GPU driver.
+# For all other methods (movenet, ae1, ae2, ae3, hrnet), hide the GPU from
+# HPE only. The streamer still needs GPU visibility because it uses NVENC.
 GPU_METHODS=("alphapose" "openpose")
 HPE_RUNTIME="runc"
+export STREAMER_NVIDIA_VISIBLE_DEVICES="${STREAMER_NVIDIA_VISIBLE_DEVICES:-all}"
 if [[ " ${GPU_METHODS[*]} " == *" $HPE_METHOD "* ]]; then
   export HPE_DEVICE="GPU"
   HPE_RUNTIME="nvidia"
-  export NVIDIA_VISIBLE_DEVICES="${NVIDIA_VISIBLE_DEVICES:-all}"
+  export HPE_NVIDIA_VISIBLE_DEVICES="${HPE_NVIDIA_VISIBLE_DEVICES:-all}"
 else
-  export NVIDIA_VISIBLE_DEVICES="none"
+  export HPE_NVIDIA_VISIBLE_DEVICES="none"
 fi
 export HPE_RUNTIME
 
 echo "[DEBUG] HPE_INPUT=$HPE_INPUT  HPE_METHOD=$HPE_METHOD  HPE_DEVICE=$HPE_DEVICE  HPE_RUNTIME=$HPE_RUNTIME"
+echo "[DEBUG] HPE_NVIDIA_VISIBLE_DEVICES=$HPE_NVIDIA_VISIBLE_DEVICES  STREAMER_NVIDIA_VISIBLE_DEVICES=$STREAMER_NVIDIA_VISIBLE_DEVICES"
 
 # Step 9b: Video file already validated in Step 4 (VIDEO_FILE, VIDEO_HOST_PATH set there)
 
@@ -312,9 +313,14 @@ measure_container_startup "$HPE_SERVICE" "$hpe_start"
 
 # Step 12: Capture initial logs from hpe container
 sleep 2
-docker logs $(docker ps -qf "name=^/hpe$") > "$results_dir/logs/hpe_startup.log" 2>&1
-tail -n 20 "$results_dir/logs/hpe_startup.log"
-docker logs $(docker ps -qf "name=^/hpe$") | tee "$results_dir/logs/hpe_startup_full.log"
+HPE_CONTAINER_STARTUP=$(docker ps -aqf "name=^/hpe$")
+if [ -n "$HPE_CONTAINER_STARTUP" ]; then
+  docker logs "$HPE_CONTAINER_STARTUP" > "$results_dir/logs/hpe_startup.log" 2>&1 || true
+  tail -n 20 "$results_dir/logs/hpe_startup.log" || true
+  docker logs "$HPE_CONTAINER_STARTUP" 2>&1 | tee "$results_dir/logs/hpe_startup_full.log" || true
+else
+  echo "[WARNING] HPE container not found for startup log capture" | tee "$results_dir/logs/hpe_startup.log"
+fi
 
 # Step 13: Start and measure monitoring containers
 perf_monitor_start=$(date +%s.%N)
@@ -372,6 +378,7 @@ done
 echo "[DEBUG] Ending the experiment..."
 
 # Check HPE container exit code
+hpe_exit_code="unknown"
 HPE_CONTAINER_FINAL=$(docker ps -aqf "name=^/hpe$")
 if [ -n "$HPE_CONTAINER_FINAL" ]; then
   hpe_exit_code=$(docker inspect --format='{{.State.ExitCode}}' "$HPE_CONTAINER_FINAL" 2>/dev/null || echo "unknown")
@@ -379,6 +386,8 @@ if [ -n "$HPE_CONTAINER_FINAL" ]; then
   if [ "$hpe_exit_code" != "0" ] && [ "$hpe_exit_code" != "unknown" ]; then
     echo "[WARNING] HPE container exited with non-zero code ($hpe_exit_code) — results may be incomplete"
   fi
+else
+  echo "[ERROR] HPE container not found; treating experiment as failed" | tee -a "$results_dir/logs/hpe_exit.log"
 fi
 
 # Step 16: Wait for the hpe container name to be fully released
@@ -477,4 +486,9 @@ if command -v tree >/dev/null 2>&1; then
 else
   echo "[WARNING] 'tree' command not found, using 'ls' instead:"
   ls -Rlh "$results_dir"
+fi
+
+if [ "$hpe_exit_code" != "0" ]; then
+  echo "[ERROR] Experiment failed because HPE exit code was $hpe_exit_code"
+  exit 1
 fi

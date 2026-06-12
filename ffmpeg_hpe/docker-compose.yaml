@@ -38,7 +38,7 @@ services:
     networks:
       - streaming-network
     environment:
-      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+      - NVIDIA_VISIBLE_DEVICES=${STREAMER_NVIDIA_VISIBLE_DEVICES:-all}
       - NVIDIA_DRIVER_CAPABILITIES=video,compute,utility
     deploy:
       resources:
@@ -71,15 +71,15 @@ services:
       context: ..
       dockerfile: Dockerfile_base
     # runtime: nvidia is NOT set here unconditionally.
-    # run_experiment.sh sets NVIDIA_VISIBLE_DEVICES=none for CPU-only methods
+    # run_experiment.sh sets HPE_NVIDIA_VISIBLE_DEVICES=none for CPU-only methods
     # (ae1, ae2, ae3, hrnet, movenet) so the NVIDIA container runtime is not
     # required and the container starts on hosts without a GPU driver.
-    # For GPU methods (alphapose, openpose) run_experiment.sh leaves
-    # NVIDIA_VISIBLE_DEVICES unset (defaults to "all") and passes
+    # For GPU methods (alphapose, openpose) run_experiment.sh leaves HPE GPU
+    # visibility at "all" and passes
     # --gpus all via DOCKER_COMPOSE_HPE_RUNTIME, which is substituted below.
     runtime: ${HPE_RUNTIME:-runc}
     environment:
-      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+      - NVIDIA_VISIBLE_DEVICES=${HPE_NVIDIA_VISIBLE_DEVICES:-all}
       - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
       - OPENCV_FFMPEG_DEBUG=1
       - OPENCV_LOG_LEVEL=DEBUG
@@ -110,10 +110,10 @@ services:
       resources:
         limits:
           # CPU and memory are set dynamically by run_experiment.sh based on
-          # nproc and HPE method. Sidecars (streamer, perf_monitor, bcc-tracer,
-          # gpu-metrics) consume ~1.6 CPUs peak; 2 vCPUs are reserved for them,
-          # leaving the remainder for HPE. Override by setting HPE_CPU_LIMIT,
-          # HPE_MEMORY_LIMIT before running run_experiment.sh.
+          # nproc and HPE method. Sidecar CPU limits total 2.1 CPUs on the
+          # 8-vCPU baseline: rtsp-broker 0.5, streamer 0.75, gpu-metrics
+          # 0.1, perf_monitor 0.25, bcc-tracer 0.5. Override by setting
+          # HPE_CPU_LIMIT, HPE_MEMORY_LIMIT before running run_experiment.sh.
           cpus: '${HPE_CPU_LIMIT:-2.0}'
           memory: ${HPE_MEMORY_LIMIT:-4G}
         reservations:
