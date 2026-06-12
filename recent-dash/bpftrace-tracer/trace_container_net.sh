@@ -2,8 +2,20 @@
 echo "trace_container_net.sh started, monitoring network interface" >&2
 set -ex
 
-# Get network information from environment variables
-NETIF=${NETIF:-"eth0"}  # Default to eth0 if not specified
+# Get network information from environment variables.
+# NETIF=auto uses the host default route interface.
+NETIF=${NETIF:-auto}
+if [ "$NETIF" = "auto" ] || [ -z "$NETIF" ]; then
+  NETIF=$(ip route | awk '/default/ {print $5; exit}')
+fi
+if [ -z "$NETIF" ]; then
+  NETIF=$(ip -o link show | awk -F': ' '$2 != "lo" {sub(/@.*/, "", $2); print $2; exit}')
+fi
+if [ -z "$NETIF" ] || ! ip link show "$NETIF" >/dev/null 2>&1; then
+  echo "[ERROR] Could not detect network interface. Set NETIF to a valid interface." >&2
+  ip -br link >&2 || true
+  exit 1
+fi
 echo "Monitoring interface: $NETIF" >&2
 
 # Calculate UNIX epoch offset in ms

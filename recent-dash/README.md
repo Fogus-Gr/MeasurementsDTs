@@ -1,4 +1,8 @@
 
+# Prerequisites
+
+- `bc` on the host for timestamp/startup timing.
+
 # Build info
 
 First we build the images

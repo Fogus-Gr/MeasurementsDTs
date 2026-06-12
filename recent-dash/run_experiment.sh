@@ -1,10 +1,11 @@
 #!/bin/bash
 set -e
 
-# Add near the beginning of your script to ensure bc is installed
+# bc is required for timestamp/startup timing. Install it on the host first.
 if ! command -v bc &> /dev/null; then
-    echo "Installing bc (required for timestamp alignment)..."
-    apt-get update && apt-get install -y bc || yum install -y bc
+    echo "[ERROR] Missing required host command: bc" >&2
+    echo "Install bc before running this experiment." >&2
+    exit 1
 fi
 
 # Define the measure_container_startup function FIRST
@@ -37,6 +38,7 @@ start_time=$(date +%s)
 # Container type from first argument (default to "dash")
 container_type=${1:-dash}
 arguments=${2:-""}  # Optional second argument
+experiment_duration_seconds=${EXPERIMENT_DURATION_SECONDS:-500}
 
 # Create a uniquely named results directory
 results_dir="results_${container_type}_${cpu_model}_${timestamp}"
@@ -130,16 +132,9 @@ echo "[DEBUG] DASH client mapped port: $CLIENT_PORT"
 # Print URL for DASH client
 echo "DASH URL: http://localhost:$CLIENT_PORT/manifest.mpd"
 
-# Wait for user input to end the experiment
-echo "Press ENTER to end the experiment..."
-# Add a timeout and be more explicit about input handling
-if [ -t 0 ]; then  # Check if stdin is a terminal
-  read -p "WAITING FOR USER INPUT > " -r
-  echo "[DEBUG] User input received, ending experiment..."
-else
-  echo "[DEBUG] Running in non-interactive mode, waiting 60 seconds..."
-  sleep 500
-fi
+# Run the experiment for a fixed duration so unattended runs are reproducible.
+echo "Running experiment for ${experiment_duration_seconds} seconds..."
+sleep "$experiment_duration_seconds"
 echo "[DEBUG] Ending the experiment..."
 
 # NOW collect the performance data AFTER the experiment has run

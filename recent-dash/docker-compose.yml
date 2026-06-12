@@ -84,7 +84,7 @@ services:
       - apparmor:unconfined
       - seccomp:unconfined
     environment:
-      - NETIF=eth0  # Use the container's default interface
+      - NETIF=auto  # Auto-detect the host default interface
     volumes:
       - /sys/kernel/debug:/sys/kernel/debug  # Required for bpftrace
       - /lib/modules:/lib/modules:ro  # Required for bpftrace
