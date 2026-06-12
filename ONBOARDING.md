@@ -175,11 +175,6 @@ MeasurementsDTs/
 │   ├── images/                    # Sample test images (testImage.jpg, etc.)
 │   └── video/                     # Sample test video (giphy.gif)
 │
-├── optimizations/                 # Performance optimization experiments
-│   ├── cpu_performance_optimizer.py
-│   ├── enhanced_openvino_hpe.py
-│   └── optimized_main.py
-│
 ├── Dockerfile_base                # Active HPE Docker image used by monitor_hpe and ffmpeg_hpe
 ├── Dockerfile_optimized_multistage_v4  # FFmpeg-only image; not used for the HPE service
 ├── Dockerfile.hpe                 # Alternative HPE Dockerfile
@@ -206,7 +201,7 @@ MeasurementsDTs/
 
 ### Hardware floor & expected runtime
 
-A single benchmark run takes roughly **3–7 minutes** on a short VGA clip (e.g. `vga_01_01.mp4`) once the Docker images are already built; the very first `docker compose build` adds ~10–20 minutes on top. The currently deployed handoff target is an **8 vCPU / 16 GB cloud GPU VM on AMD EPYC 7551P + RTX A4000** — the same instance used to validate every fix in `AGENTS.md`. The [optimizations/](file:///c:/Users/bigbu/Downloads/MeasurementsDTs/optimizations) scripts were originally calibrated for a 4 vCPU SKU; their runtime auto-detector adapts to whatever core count is present (see the Hardware Applicability table in [optimizations/README.md](file:///c:/Users/bigbu/Downloads/MeasurementsDTs/optimizations/README.md) for what transfers to other VM CPUs vs. bare metal). As a **practical floor** for new deployments, allocate at least **4 vCPU / 16 GB RAM** — this matches the per-service caps in [ffmpeg_hpe/docker-compose.yaml](file:///c:/Users/bigbu/Downloads/MeasurementsDTs/ffmpeg_hpe/docker-compose.yaml) (`hpe`: 2.5 CPU / 8 GB, `streamer`: 0.75 CPU, `rtsp-broker`: 0.5 CPU, sidecars: ~0.85 CPU combined). Plan for **≥30 GB free disk** for image layers, model weights, and result CSVs. GPU runs additionally need an NVIDIA card with up-to-date drivers and `nvidia-container-toolkit`; CPU-only methods (`movenet`, `hrnet`, `ae1/2/3`) work fine without a GPU.
+A single benchmark run takes roughly **3–7 minutes** on a short VGA clip (e.g. `vga_01_01.mp4`) once the Docker images are already built; the very first `docker compose build` adds ~10–20 minutes on top. The currently deployed handoff target is an **8 vCPU / 16 GB cloud GPU VM on AMD EPYC 7551P + RTX A4000** — the same instance used to validate every fix in `AGENTS.md`. CPU/OpenVINO tuning now lives in `openvino_base_hpe.py` and is exercised through `main.py`; there is no standalone `optimizations/` package anymore. As a **practical floor** for new deployments, allocate at least **4 vCPU / 16 GB RAM** — this matches the per-service caps in [ffmpeg_hpe/docker-compose.yaml](file:///c:/Users/bigbu/Downloads/MeasurementsDTs/ffmpeg_hpe/docker-compose.yaml) (`hpe`: 2.5 CPU / 8 GB, `streamer`: 0.75 CPU, `rtsp-broker`: 0.5 CPU, sidecars: ~0.85 CPU combined). Plan for **≥30 GB free disk** for image layers, model weights, and result CSVs. GPU runs additionally need an NVIDIA card with up-to-date drivers and `nvidia-container-toolkit`; CPU-only methods (`movenet`, `hrnet`, `ae1/2/3`) work fine without a GPU.
 
 ### Verified working hardware stack
 
@@ -656,14 +651,16 @@ docker compose down -v --remove-orphans
 Results are saved to a timestamped directory inside `ffmpeg_hpe/`:
 
 ```
-results_alphapose_AMD_EPYC_7551P_32-Core_20250428_120000/
+results_movenet_32cores_CPU_vga_01_01.mp4_20250428_120000/
 ├── container_timing.txt         # Startup time per container (seconds)
 ├── logs/
 │   ├── hpe_startup.log          # HPE container early startup output
 │   ├── hpe_startup_full.log     # Full HPE container log
 │   ├── hpe_exit.log             # HPE container exit code (0 = clean, non-zero = crash)
+│   ├── hpe.log                  # Final complete HPE container log (collected at teardown)
 │   ├── perf_monitor.log         # bpftrace perf monitor log
-│   ├── bcc-tracer.log           # BCC tracer log (port detection, tracing events)
+│   ├── bcc-tracer.log           # BCC tracer container stdout/stderr log
+│   ├── bcc-tracer-internal.log  # BCC tracer's own internal log (from inside the container)
 │   └── gpu-metrics.log          # GPU metrics collector log
 ├── perf/
 │   ├── pid_metrics.csv          # Columns: timestamp, pid, cpu_percent, mem_rss_kb, tx_bytes*, rx_bytes*
@@ -672,7 +669,8 @@ results_alphapose_AMD_EPYC_7551P_32-Core_20250428_120000/
 ├── gpu/
 │   └── gpu_metrics.csv          # Columns: timestamp, gpu_id, gpu_utilization, mem_utilization, temperature, power_usage
 ├── traces/bcc/
-│   └── hpe_video_rx.csv         # Columns: timestamp_ms, rx_bytes (per 10ms interval)  ← RX data lives here
+│   ├── hpe_video_rx.csv         # Columns: timestamp_ms, rx_bytes (per 10ms interval)  ← RX data lives here
+│   └── hpe_video_tx.csv         # Columns: timestamp_ms, tx_bytes (per 10ms interval)  ← TX data (alternative source)
 └── hpe_output/
     ├── *.csv                    # Keypoint data: frame, person_id, joint coordinates
     └── *.json                   # COCO-format keypoint export (if --json flag used)
