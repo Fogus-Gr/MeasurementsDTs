@@ -172,6 +172,8 @@ services:
     environment:
       - OUTPUT_DIR=/output
       - EXPERIMENT_TYPE=ffmpeg_hpe
+      - PID_FILE=/pids/hpe.pid
+      - INTERVAL=${PERF_MONITOR_INTERVAL_SECONDS:-0.5}
     depends_on:
       - rtsp-broker
       - hpe

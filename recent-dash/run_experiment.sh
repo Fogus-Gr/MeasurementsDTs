@@ -30,6 +30,73 @@ measure_container_startup() {
   fi
 }
 
+wait_for_container() {
+  local container_name=$1
+  local waited=0
+  local container_id=""
+
+  while [ "$waited" -lt "$readiness_timeout_seconds" ]; do
+    container_id=$(docker ps -qf "name=dash-caching-$container_name")
+    if [ -n "$container_id" ]; then
+      echo "$container_id"
+      return 0
+    fi
+    echo "[DEBUG] Waiting for $container_name container... (${waited}s elapsed)" >&2
+    sleep "$readiness_poll_seconds"
+    waited=$((waited + readiness_poll_seconds))
+  done
+
+  echo "[ERROR] Timed out waiting for $container_name container after ${readiness_timeout_seconds}s" >&2
+  return 1
+}
+
+http_url_ok() {
+  local url=$1
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS --max-time 2 "$url" >/dev/null
+    return $?
+  fi
+  if command -v wget >/dev/null 2>&1; then
+    wget -q --timeout=2 -O /dev/null "$url"
+    return $?
+  fi
+
+  local rest=${url#http://}
+  local host_port=${rest%%/*}
+  local path="/${rest#*/}"
+  local host=${host_port%%:*}
+  local port=${host_port##*:}
+  if [ "$host" = "$port" ]; then
+    port=80
+  fi
+
+  exec 3<>"/dev/tcp/$host/$port" || return 1
+  printf 'GET %s HTTP/1.0\r\nHost: %s\r\n\r\n' "$path" "$host" >&3
+  local status=""
+  IFS= read -r status <&3 || true
+  exec 3<&-
+  exec 3>&-
+  [[ "$status" =~ ^HTTP/[0-9.]+[[:space:]](2|3)[0-9][0-9] ]]
+}
+
+wait_for_http_url() {
+  local name=$1
+  local url=$2
+  local waited=0
+
+  while [ "$waited" -lt "$readiness_timeout_seconds" ]; do
+    if http_url_ok "$url"; then
+      echo "[DEBUG] $name ready at $url"
+      return 0
+    fi
+    echo "[DEBUG] Waiting for $name at $url... (${waited}s elapsed)"
+    sleep "$readiness_poll_seconds"
+    waited=$((waited + readiness_poll_seconds))
+  done
+
+  echo "[ERROR] Timed out waiting for $name at $url after ${readiness_timeout_seconds}s" >&2
+  return 1
+}
 # Get current timestamp and CPU info for results directory
 timestamp=$(date +%Y%m%d_%H%M%S)
 cpu_model=$(lscpu | grep "Model name" | sed 's/.*: *//g' | tr -s ' ' '_' | tr -d ',()/')
@@ -39,6 +106,8 @@ start_time=$(date +%s)
 container_type=${1:-dash}
 arguments=${2:-""}  # Optional second argument
 experiment_duration_seconds=${EXPERIMENT_DURATION_SECONDS:-500}
+readiness_timeout_seconds=${READINESS_TIMEOUT_SECONDS:-60}
+readiness_poll_seconds=${READINESS_POLL_SECONDS:-2}
 
 # Create a uniquely named results directory
 results_dir="results_${container_type}_${cpu_model}_${timestamp}"
@@ -74,13 +143,23 @@ main_containers_start=$(date +%s.%N)
 echo "Building and starting fresh containers..."
 echo "[DEBUG] Starting all services except trace_container..."
 docker compose -f $COMPOSE_FILE up http_server http_proxy http_client -d
-echo "[DEBUG] Sleeping 2 seconds to allow containers to start..."
-sleep 4
+
+SERVER_CONTAINER=$(wait_for_container "http_server")
+PROXY_CONTAINER=$(wait_for_container "http_proxy")
+CLIENT_CONTAINER=$(wait_for_container "http_client")
 
 # Measure main container startup times
 measure_container_startup "http_server" "$main_containers_start"
 measure_container_startup "http_proxy" "$main_containers_start" 
 measure_container_startup "http_client" "$main_containers_start"
+
+CLIENT_PORT=$(docker port $CLIENT_CONTAINER 80 | cut -d ":" -f 2)
+if [ -z "$CLIENT_PORT" ]; then
+  echo "[ERROR] Could not resolve DASH client host port." >&2
+  exit 1
+fi
+CLIENT_URL="http://localhost:$CLIENT_PORT/manifest.mpd"
+wait_for_http_url "DASH client manifest" "$CLIENT_URL"
 
 # # Get proxy PIDs
 # echo "[DEBUG] Getting proxy PIDs inside the container..."
@@ -88,9 +167,7 @@ measure_container_startup "http_client" "$main_containers_start"
 # echo "[DEBUG] PROXY_PIds detected: $PROXY_PIDS"
 
 
-# Early in the script - detect and update PIDs immediately
-echo "[DEBUG] Getting proxy container ID..."
-PROXY_CONTAINER=$(docker ps -qf "name=dash-caching-http_proxy")
+# Early in the script - use detected proxy container ID and update PIDs immediately
 echo "[DEBUG] Proxy container ID: $PROXY_CONTAINER"
 
 # Get all PIDs inside the proxy container
@@ -98,8 +175,6 @@ echo "[DEBUG] Getting all PIDs inside the proxy container..."
 PROXY_PIDS=$(docker top $PROXY_CONTAINER -eo pid | awk 'NR>1 {print $1}')
 echo "[DEBUG] All PIDs detected: $PROXY_PIDS"
 
-SERVER_CONTAINER=$(docker ps -qf "name=dash-caching-http_server")
-CLIENT_CONTAINER=$(docker ps -qf "name=dash-caching-http_client")
 DASH_SERVER_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$SERVER_CONTAINER")
 DASH_PROXY_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$PROXY_CONTAINER")
 DASH_CLIENT_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CLIENT_CONTAINER")
@@ -136,12 +211,9 @@ TRACE_CONTAINER=$(docker ps -qf "name=dash-caching-trace_container")
 echo "[DEBUG] trace_container container ID: $TRACE_CONTAINER"
 measure_container_startup "trace_container" "$trace_container_start"
 
-# Get the port for the DASH client
-CLIENT_PORT=$(docker port $CLIENT_CONTAINER 80 | cut -d ":" -f 2)
-echo "[DEBUG] DASH client mapped port: $CLIENT_PORT"
-
 # Print URL for DASH client
-echo "DASH URL: http://localhost:$CLIENT_PORT/manifest.mpd"
+echo "[DEBUG] DASH client mapped port: $CLIENT_PORT"
+echo "DASH URL: $CLIENT_URL"
 
 # Run the experiment for a fixed duration so unattended runs are reproducible.
 echo "Running experiment for ${experiment_duration_seconds} seconds..."

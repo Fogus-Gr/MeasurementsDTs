@@ -21,7 +21,7 @@ The tracer image already includes `tcpdump`, `gawk`, `iproute2`, `procps`, and `
 | `http_server` | Origin HTTP server for DASH content. |
 | `http_proxy` | DASH caching/ABR proxy under measurement. |
 | `http_client` | HTTP client endpoint that exposes the DASH manifest URL for VLC/player access. |
-| `perf_monitor` | Reads proxy PIDs from `./pids/dash.pid` and writes CPU/RSS samples to `results/perf_metrics.csv` inside the container. |
+| `perf_monitor` | Reads proxy PIDs from `./pids/dash.pid` and writes 500 ms `/proc` delta CPU/RSS samples to `results/perf_metrics.csv` inside the container. |
 | `trace_container` | Captures DASH-only TCP payload bytes and writes `/opt/tracer/output/trace.csv`. |
 
 ## Build
@@ -44,6 +44,12 @@ The default run duration is 500 seconds. Override it with:
 EXPERIMENT_DURATION_SECONDS=120 ./run_experiment.sh
 ```
 
+Readiness checks wait up to 60 seconds by default and poll every 2 seconds. Override them with:
+
+```bash
+READINESS_TIMEOUT_SECONDS=90 READINESS_POLL_SECONDS=3 ./run_experiment.sh
+```
+
 Optional first argument changes the result-directory label:
 
 ```bash
@@ -60,14 +66,15 @@ The runner performs one complete experiment lifecycle:
 4. Runs `docker compose down --remove-orphans` to clear old containers.
 5. Starts `http_server`, `http_proxy`, and `http_client`.
 6. Detects the host PIDs for the proxy container and writes them to `./pids/dash.pid` for `perf_monitor`.
-7. Resolves Docker-network IPs for `http_server`, `http_proxy`, and `http_client`.
-8. Exports those IPs as `DASH_SERVER_IP`, `DASH_PROXY_IP`, and `DASH_CLIENT_IP` before starting the tracer.
-9. Builds and starts `perf_monitor`.
-10. Starts `trace_container` with the exported DASH endpoint IPs.
-11. Prints the player URL: `http://localhost:<mapped_port>/manifest.mpd`.
-12. Sleeps for `EXPERIMENT_DURATION_SECONDS`.
-13. Copies performance CSV, trace CSV, and logs into the timestamped result directory.
-14. Stops the compose stack and writes a short `results.txt` summary.
+7. Resolves the published `http_client` port and waits for `http://localhost:<mapped_port>/manifest.mpd` to respond.
+8. Resolves Docker-network IPs for `http_server`, `http_proxy`, and `http_client`.
+9. Exports those IPs as `DASH_SERVER_IP`, `DASH_PROXY_IP`, and `DASH_CLIENT_IP` before starting the tracer.
+10. Builds and starts `perf_monitor`.
+11. Starts `trace_container` with the exported DASH endpoint IPs.
+12. Prints the player URL: `http://localhost:<mapped_port>/manifest.mpd`.
+13. Sleeps for `EXPERIMENT_DURATION_SECONDS`.
+14. Copies performance CSV, trace CSV, and logs into the timestamped result directory.
+15. Stops the compose stack and writes a short `results.txt` summary.
 
 ## DASH-Only Network Tracing
 
@@ -118,6 +125,51 @@ proxy_ip:80 -> client_ip
 
 This is HTTP response payload filtering. If the same services later carry non-video HTTP responses on port 80, those response bytes will also match. Strict URL/path filtering such as `/video_...` would require HTTP-aware parsing instead of packet-header filtering.
 
+## Readiness Checks
+
+`run_experiment.sh` no longer relies on a fixed startup sleep. After starting `http_server`, `http_proxy`, and `http_client`, it waits for all three containers to exist and then checks the client manifest URL:
+
+```text
+http://localhost:<EXPOSED_HTTP_CLIENT_PORT>/manifest.mpd
+```
+
+Readiness knobs:
+
+| Variable | Default | Meaning |
+|---|---:|---|
+| `READINESS_TIMEOUT_SECONDS` | `60` | Maximum wait for containers and manifest readiness. |
+| `READINESS_POLL_SECONDS` | `2` | Delay between readiness attempts. |
+
+The readiness helper uses `curl` when available, then `wget`, then a Bash `/dev/tcp` HTTP probe. This avoids adding a new host prerequisite.
+
+## Resource Limits
+
+`docker-compose.yml` applies conservative local Compose resource limits. Each limit can be overridden from the environment before running the experiment.
+
+| Service | CPU env var | Default | Memory env var | Default |
+|---|---|---:|---|---:|
+| `http_server` | `HTTP_SERVER_CPU_LIMIT` | `0.5` | `HTTP_SERVER_MEMORY_LIMIT` | `512M` |
+| `http_proxy` | `HTTP_PROXY_CPU_LIMIT` | `1.0` | `HTTP_PROXY_MEMORY_LIMIT` | `1G` |
+| `http_client` | `HTTP_CLIENT_CPU_LIMIT` | `0.5` | `HTTP_CLIENT_MEMORY_LIMIT` | `512M` |
+| `perf_monitor` | `PERF_MONITOR_CPU_LIMIT` | `0.25` | `PERF_MONITOR_MEMORY_LIMIT` | `256M` |
+| `trace_container` | `TRACE_CONTAINER_CPU_LIMIT` | `0.5` | `TRACE_CONTAINER_MEMORY_LIMIT` | `256M` |
+
+Example override:
+
+```bash
+HTTP_PROXY_CPU_LIMIT=2.0 HTTP_PROXY_MEMORY_LIMIT=2G ./run_experiment.sh
+```
+
+The proxy gets the largest default budget because it is the measured cache/ABR component. The tracer gets more CPU than `perf_monitor` because `tcpdump` plus `gawk` can burst during high-throughput periods.
+
+`perf_monitor` also accepts:
+
+| Variable | Default | Meaning |
+|---|---:|---|
+| `PERF_MONITOR_INTERVAL_SECONDS` | `0.5` | Sampling interval for `/proc` CPU deltas. |
+
+The underlying monitor image is shared with `ffmpeg_hpe`; each rig passes its own `PID_FILE` so the shared script reads the correct process list.
+
 ## Result Files
 
 Each run creates a timestamped directory with this shape:
@@ -142,7 +194,7 @@ Important files:
 
 | File | Use |
 |---|---|
-| `perf/perf_metrics.csv` | Proxy CPU/RSS samples from `perf_monitor`. |
+| `perf/perf_metrics.csv` | Proxy CPU/RSS samples from `perf_monitor`, sampled from `/proc` at 500 ms by default. |
 | `traces/trace.csv` | DASH-only proxy RX/TX TCP payload bytes. |
 | `logs/*.log` | Container logs captured before teardown. |
 | `container_timing.txt` | Container startup timing summary. |
@@ -165,6 +217,5 @@ http://<SERVER_IP>:<EXPOSED_HTTP_CLIENT_PORT>/manifest.mpd
 ## Notes and Limits
 
 - This rig measures DASH/HTTP proxy behavior, not HPE inference.
-- `perf_monitor` still uses `pidstat` 1-second samples; it is useful but not identical to the `/proc` delta CPU monitor used by `ffmpeg_hpe`.
 - `trace_container` is intentionally privileged and host-networked so it can see Docker bridge traffic.
-- Compose `depends_on` only guarantees container start order, not application readiness. Add healthchecks or wait loops if startup races appear.
+- Compose `depends_on` only guarantees container start order; `run_experiment.sh` adds a manifest readiness probe before starting monitors.
