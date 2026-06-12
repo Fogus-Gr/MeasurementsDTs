@@ -9,7 +9,7 @@ import os
 def log(message, level="INFO"):
     print(f"[{level}] {message}", file=sys.stderr)
 
-def main(poll_interval_s=0.1):
+def main(poll_interval_s=0.01):
     if len(sys.argv) < 4:
         log("Usage: python3 bcc_rx_bytes.py <streamer_ip> <streamer_port> <hpe_port> [interface]", "ERROR")
         sys.exit(1)
@@ -64,7 +64,7 @@ int count_rx(struct __sk_buff *skb) {
     if (ip.saddr != htonl(%d) || tcp.source != htons(%d) || tcp.dest != htons(%d))
         return 0;
 
-    u64 *val = rx_bytes.lookup_or_init(&zero, &len);
+    u64 *val = rx_bytes.lookup_or_init(&zero, &zero);
     if (val) (*val) += len;
 
     return 0;

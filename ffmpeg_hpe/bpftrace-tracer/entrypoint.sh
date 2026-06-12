@@ -71,16 +71,18 @@ echo "[INFO] Started TX tracer (PID: $TX_PID)"
 
 # Forward SIGTERM/SIGINT to the TX tracer and wait for it before exiting
 cleanup() {
+    local exit_code="${1:-0}"
     echo "[INFO] Shutting down — forwarding signal to TX tracer (PID: $TX_PID)"
     kill "$TX_PID" 2>/dev/null || true
     wait "$TX_PID" 2>/dev/null || true
-    exit 0
+    exit "$exit_code"
 }
 trap cleanup SIGTERM SIGINT
 
 # Start RX tracer in foreground (measures incoming video bytes via socket filter)
 # Do NOT use exec here — the shell must stay alive to handle the trap above.
-python3 /app/bcc_rx_bytes.py "$STREAMER_IP" "$STREAMER_PORT" "$HPE_PORT" "$INTERFACE"
+RX_EXIT=0
+python3 /app/bcc_rx_bytes.py "$STREAMER_IP" "$STREAMER_PORT" "$HPE_PORT" "$INTERFACE" || RX_EXIT=$?
 
 # RX tracer exited normally — clean up TX tracer
-cleanup
+cleanup "$RX_EXIT"
