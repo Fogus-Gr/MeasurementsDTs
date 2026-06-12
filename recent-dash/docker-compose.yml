@@ -84,7 +84,11 @@ services:
       - apparmor:unconfined
       - seccomp:unconfined
     environment:
-      - NETIF=auto  # Auto-detect the host default interface
+      - NETIF=${DASH_TRACE_INTERFACE:-any}  # Capture Docker bridge traffic by default
+      - DASH_SERVER_IP=${DASH_SERVER_IP:-}
+      - DASH_PROXY_IP=${DASH_PROXY_IP:-}
+      - DASH_CLIENT_IP=${DASH_CLIENT_IP:-}
+      - TRACE_INTERVAL_MS=${TRACE_INTERVAL_MS:-10}
     volumes:
       - /sys/kernel/debug:/sys/kernel/debug  # Required for bpftrace
       - /lib/modules:/lib/modules:ro  # Required for bpftrace

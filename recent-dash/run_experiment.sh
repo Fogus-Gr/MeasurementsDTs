@@ -98,6 +98,18 @@ echo "[DEBUG] Getting all PIDs inside the proxy container..."
 PROXY_PIDS=$(docker top $PROXY_CONTAINER -eo pid | awk 'NR>1 {print $1}')
 echo "[DEBUG] All PIDs detected: $PROXY_PIDS"
 
+SERVER_CONTAINER=$(docker ps -qf "name=dash-caching-http_server")
+CLIENT_CONTAINER=$(docker ps -qf "name=dash-caching-http_client")
+DASH_SERVER_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$SERVER_CONTAINER")
+DASH_PROXY_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$PROXY_CONTAINER")
+DASH_CLIENT_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CLIENT_CONTAINER")
+if [ -z "$DASH_SERVER_IP" ] || [ -z "$DASH_PROXY_IP" ] || [ -z "$DASH_CLIENT_IP" ]; then
+  echo "[ERROR] Could not resolve DASH container IPs for video-byte tracing." >&2
+  exit 1
+fi
+export DASH_SERVER_IP DASH_PROXY_IP DASH_CLIENT_IP
+echo "[DEBUG] DASH trace endpoints: server=$DASH_SERVER_IP proxy=$DASH_PROXY_IP client=$DASH_CLIENT_IP"
+
 # IMPORTANT: Update dash.pid IMMEDIATELY after detection
 mkdir -p ./pids
 echo "$PROXY_PIDS" | grep -v "^1$" | sort -u > ./pids/dash.pid
@@ -125,7 +137,6 @@ echo "[DEBUG] trace_container container ID: $TRACE_CONTAINER"
 measure_container_startup "trace_container" "$trace_container_start"
 
 # Get the port for the DASH client
-CLIENT_CONTAINER=$(docker ps -qf "name=dash-caching-http_client")
 CLIENT_PORT=$(docker port $CLIENT_CONTAINER 80 | cut -d ":" -f 2)
 echo "[DEBUG] DASH client mapped port: $CLIENT_PORT"
 
