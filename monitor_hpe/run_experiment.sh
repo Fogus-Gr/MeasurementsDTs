@@ -3,7 +3,7 @@
 # Script to run the monitoring experiment from scratch
 
 # Change to the correct directory
-cd $(dirname "$0")
+cd "$(dirname "$0")"
 
 # Parse command-line arguments
 HPE_METHOD="${1:-movenet}"
@@ -164,7 +164,7 @@ check_containers() {
 }
 
 # Trap Ctrl+C to clean up
-trap 'echo "Stopping experiment..."; docker compose -f docker-compose.yaml down; exit 0' SIGINT
+trap 'echo "Stopping experiment..."; docker compose -f docker-compose.yaml down; exit 130' SIGINT
 
 # Monitor containers until they stop
 while check_containers; do
@@ -173,6 +173,15 @@ while check_containers; do
 done
 
 echo "\nContainers have stopped. Cleaning up..."
+
+hpe_exit_code="unknown"
+HPE_CONTAINER_FINAL=$(docker compose -f docker-compose.yaml ps -aq hpe 2>/dev/null || true)
+if [ -n "$HPE_CONTAINER_FINAL" ]; then
+    hpe_exit_code=$(docker inspect --format='{{.State.ExitCode}}' "$HPE_CONTAINER_FINAL" 2>/dev/null || echo "unknown")
+    echo "HPE container exit code: $hpe_exit_code"
+else
+    echo "Warning: Could not inspect HPE container exit code"
+fi
 
 # Save container logs first
 echo "Saving container logs to $results_dir/logs/..."
@@ -231,4 +240,9 @@ fi
 docker compose -f docker-compose.yaml down
 
 echo "Results saved in: $results_dir"
+if [ "$hpe_exit_code" != "0" ]; then
+    echo "Experiment failed because HPE exit code was $hpe_exit_code"
+    exit 1
+fi
+
 exit 0

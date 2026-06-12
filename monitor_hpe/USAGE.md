@@ -73,7 +73,7 @@ Device: GPU
 │                                                         │
 │  HPE Service                                            │
 │  ├─ Lightweight models: 6 vCPUs + 6GB RAM              │
-│  ├─ Heavy models:       6 vCPUs + 8GB RAM              │
+│  ├─ Heavy models:       6 vCPUs + 9GB RAM              │
 │  └─ GPU models:         4 vCPUs + 8GB RAM              │
 │                                                         │
 │  Monitor Service                                        │
@@ -319,7 +319,6 @@ HPE_MEMORY_LIMIT=12G ./run_experiment.sh hrnet
 ## See Also
 
 - [SCALING_GUIDE.md](SCALING_GUIDE.md) — Auto-scaling for 4-32 vCPU VMs
-- [USAGE.md](USAGE.md) — Complete usage guide
 - [RESOURCE_ALLOCATION.md](RESOURCE_ALLOCATION.md) — Technical resource allocation details
 - [../README.md](../README.md) — Main project README
 - [../AGENTS.md](../AGENTS.md) — Agent guidance for working in this repository
