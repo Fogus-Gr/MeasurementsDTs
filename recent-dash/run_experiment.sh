@@ -80,20 +80,6 @@ measure_container_startup "http_server" "$main_containers_start"
 measure_container_startup "http_proxy" "$main_containers_start" 
 measure_container_startup "http_client" "$main_containers_start"
 
-# Start and measure perf_monitor container
-perf_monitor_start=$(date +%s.%N)
-echo "[DEBUG] Starting performance monitoring..."
-docker compose -f $COMPOSE_FILE up -d perf_monitor
-PERF_MONITOR_CONTAINER=$(docker ps -qf "name=dash-caching-perf_monitor")
-measure_container_startup "perf_monitor" "$perf_monitor_start"
-
-# Start and measure trace_container
-trace_container_start=$(date +%s.%N)
-echo "[DEBUG] Starting trace_container..."
-docker compose -f $COMPOSE_FILE up -d trace_container
-TRACE_CONTAINER=$(docker ps -qf "name=dash-caching-trace_container")
-measure_container_startup "trace_container" "$trace_container_start"
-
 # # Get proxy PIDs
 # echo "[DEBUG] Getting proxy PIDs inside the container..."
 # PROXY_PIDS=$(docker exec $PROXY_CONTAINER pgrep -f "proxy")
@@ -116,21 +102,25 @@ echo "$PROXY_PIDS" | grep -v "^1$" | sort -u > ./pids/dash.pid
 echo "[DEBUG] Updated dash.pid contents:"
 cat ./pids/dash.pid
 
-# Rebuild perf_monitor image without cache before starting it
-echo "[DEBUG] Rebuilding perf_monitor image without cache..."
-docker compose -f $COMPOSE_FILE build --no-cache perf_monitor
+# Build perf_monitor image before starting it
+echo "[DEBUG] Building perf_monitor image..."
+docker compose -f $COMPOSE_FILE build perf_monitor
 
-# Now start the performance monitoring container
+# Start and measure the performance monitoring container
+perf_monitor_start=$(date +%s.%N)
 echo "[DEBUG] Starting performance monitoring..."
 docker compose -f $COMPOSE_FILE up -d perf_monitor
 PERF_MONITOR_CONTAINER=$(docker ps -qf "name=dash-caching-perf_monitor")
 echo "[DEBUG] perf_monitor container ID: $PERF_MONITOR_CONTAINER"
+measure_container_startup "perf_monitor" "$perf_monitor_start"
 
-# Start the trace container
+# Start and measure the trace container
+trace_container_start=$(date +%s.%N)
 echo "[DEBUG] Starting trace_container..."
 docker compose -f $COMPOSE_FILE up -d trace_container
 TRACE_CONTAINER=$(docker ps -qf "name=dash-caching-trace_container")
 echo "[DEBUG] trace_container container ID: $TRACE_CONTAINER"
+measure_container_startup "trace_container" "$trace_container_start"
 
 # Get the port for the DASH client
 CLIENT_CONTAINER=$(docker ps -qf "name=dash-caching-http_client")
@@ -155,13 +145,13 @@ echo "[DEBUG] Ending the experiment..."
 # NOW collect the performance data AFTER the experiment has run
 echo "[DEBUG] Collecting performance data after experiment completion..."
 if [ -n "$PERF_MONITOR_CONTAINER" ]; then
-  if docker exec $PERF_MONITOR_CONTAINER ls -la /output/aggregated_metrics.csv 2>/dev/null; then
-    echo "[DEBUG] Found aggregated_metrics.csv, copying performance monitoring data..."
-    docker cp "$PERF_MONITOR_CONTAINER:/output/aggregated_metrics.csv" "$results_dir/perf/performance_data.csv"
+  if docker exec $PERF_MONITOR_CONTAINER ls -la /output/perf_metrics.csv 2>/dev/null; then
+    echo "[DEBUG] Found perf_metrics.csv, copying performance monitoring data..."
+    docker cp "$PERF_MONITOR_CONTAINER:/output/perf_metrics.csv" "$results_dir/perf/perf_metrics.csv"
     chmod -R u+rw "$results_dir"
-    echo "Copied perf_monitor output to $results_dir/perf/performance_data.csv"
+    echo "Copied perf_monitor output to $results_dir/perf/perf_metrics.csv"
   else
-    echo "[WARNING] Could not find aggregated_metrics.csv in perf_monitor container."
+    echo "[WARNING] Could not find perf_metrics.csv in perf_monitor container."
   fi
 fi
 
@@ -247,7 +237,7 @@ echo "Wrote summary to $RESULTS_TXT"
 
 # # Define paths
 # TRACES_FILE="$results_dir/traces/trace_${MAIN_PROXY_PID}.csv"
-# METRICS_FILE="$results_dir/perf/aggregated_metrics.csv"
+# METRICS_FILE="$results_dir/perf/perf_metrics.csv"
 # ALIGNED_DIR="$results_dir/aligned"
 
 # # Create aligned directory
