@@ -1,0 +1,3 @@
+- The module is organized into three sub-directories: Measure_Flops for FLOPS/CPU/GPU measurement via ncu and nvidia-smi, Measure_gpu_dcgm for GPU telemetry logging and visualization, and Measure_plot_cpu_perf for CPU perf stat collection and plotting.
+- Each sub-module contains a shell script entry point (e.g., measure_flops.sh, run_nvidia_dcgm.sh, run_perf_plot.sh) that orchestrates data collection, often delegating visualization to paired Python scripts (plot_smi_output.py, plot_perf_metrics.py).
+- Dockerfiles in gpu and cpu sub-modules indicate containerized execution support, isolating dependencies like nvidia-smi, perf, and Python plotting libraries.

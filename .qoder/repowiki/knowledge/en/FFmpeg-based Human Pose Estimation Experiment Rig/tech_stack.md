@@ -1,0 +1,1 @@
+BCC/eBPF for kernel-level TCP socket filtering (`bcc_rx_bytes.py`, `bcc_tx_bytes.py`) and nvidia-smi polling for GPU telemetry; OpenVINO CPU tuning via `OV_THREADS`/`OV_MODE` env vars injected into the HPE container.

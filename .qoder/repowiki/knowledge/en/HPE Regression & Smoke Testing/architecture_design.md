@@ -1,0 +1,3 @@
+- The module is split into two distinct testing strategies: a standard `unittest` suite (`test_hpe_regressions.py`) for structural and logic verification, and a standalone smoke test script (`contact_sheet_smoke/run_contact_sheet_smoke.py`) for end-to-end visual validation.
+- Regression tests operate via static source code analysis of root-level modules (e.g., `main.py`, `base_hpe.py`), asserting specific implementation patterns like model routing lambdas and timeout loop logic without executing the full application.
+- The smoke test orchestrates external process execution of `main.py` for multiple HPE methods (MoveNet, OpenPose, etc.), capturing logs and generating a composite visual contact sheet using OpenCV to verify inference success across devices.

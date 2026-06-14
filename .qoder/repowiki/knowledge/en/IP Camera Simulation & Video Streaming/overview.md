@@ -1,0 +1,1 @@
+Provides Flask-based MJPEG video streaming from local MP4 files to simulate IP cameras for development and testing of vision systems.

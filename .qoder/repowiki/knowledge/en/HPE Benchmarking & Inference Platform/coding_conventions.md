@@ -1,0 +1,4 @@
+- Backend implementations inherit from the abstract `BaseHPE` class and must implement `load_model()`, `run_model()`, and `postprocess()` while relying on the base class for input handling and output serialization.
+- OpenVINO-based backends configure performance hints (thread count, pinning, streams) via environment variables (`OV_THREADS`, `OV_MODE`) read at initialization, allowing dynamic tuning without code changes.
+- All HPE outputs adhere to the COCO keypoint format, with results serialized into JSON or CSV files containing normalized and pixel-coordinate keypoints, bounding boxes, and confidence scores.
+- Experiment scripts enforce a strict cleanup-and-collect lifecycle, removing stale containers and volumes before each run and copying all telemetry CSVs and logs into a unique timestamped results directory.

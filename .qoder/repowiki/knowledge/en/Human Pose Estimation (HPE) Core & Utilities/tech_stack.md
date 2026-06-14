@@ -1,0 +1,3 @@
+- Optional NVIDIA hardware decoding via `PyNvCodec` (guarded import in `base_hpe.py`).
+- Video property probing via `ffprobe` subprocess and OpenCV `VideoCapture` in `utils/video_detection.py`.
+- Structured logging as JSONL parsed by `pandas` in `utils/log_parser.py`.

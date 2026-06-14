@@ -1,0 +1,4 @@
+- Services expose port 80 internally and rely on Docker Compose for host-port mapping or internal network routing.
+- Launch scripts (`*.launch.sh`) resolve target service IPs from domain names using `getent hosts` before executing the underlying binary.
+- Result artifacts are organized into timestamped directories containing `logs/`, `perf/`, and `traces/` subfolders for isolated experiment runs.
+- Container readiness is verified by polling the `manifest.mpd` endpoint using a fallback chain of `curl`, `wget`, and Bash `/dev/tcp`.

@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: measurement_utilities
+title: Hardware Performance Measurement & Visualization
+scope:
+    - Measure_Flops/
+    - Measure_gpu_dcgm/
+    - Measure_plot_cpu_perf/
+source_files: []
+depends_on: []
+related_to:
+    - path: monitor_hpe_experiment
+    - path: recent_dash_infra

@@ -1,0 +1,1 @@
+PyTorch for AlphaPose models; OpenVINO Runtime for MoveNet and Intel HPE models; Custom CUDA kernels for Deformable Convolutional Networks (DCN) and Non-Maximum Suppression (NMS).

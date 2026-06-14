@@ -1,0 +1,1 @@
+Orchestrates containerized Human Pose Estimation experiments by unifying multi-engine inference, RTSP streaming, and kernel-level telemetry into reproducible benchmarking rigs.

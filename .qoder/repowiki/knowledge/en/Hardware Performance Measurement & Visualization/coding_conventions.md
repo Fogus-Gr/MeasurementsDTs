@@ -1,0 +1,4 @@
+- Shell scripts use '#!/usr/bin/env bash' or '#!/bin/bash' shebangs and 'set -euo pipefail' for strict error handling.
+- Python plotting scripts create timestamped output directories (e.g., 'results_YYYYMMDD_HHMMSS') to store generated PNGs and CSVs.
+- Data collection scripts output CSV logs with explicit headers (e.g., 'timestamp,cpu_percent,mem_rss_kb') for consistent downstream parsing.
+- Background monitoring processes are managed via PID tracking and explicit 'kill' commands to ensure clean shutdown after workload completion.

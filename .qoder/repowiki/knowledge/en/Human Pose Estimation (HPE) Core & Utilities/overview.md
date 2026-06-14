@@ -1,0 +1,1 @@
+Provides the abstract base class for HPE inference, a CLI entry point for multi-model execution, and utilities for video property detection, COCO-format evaluation, and skeleton visualization.

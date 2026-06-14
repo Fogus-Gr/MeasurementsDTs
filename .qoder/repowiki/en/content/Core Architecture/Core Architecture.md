@@ -2,23 +2,16 @@
 
 <cite>
 **Referenced Files in This Document**
+- [main.py](file://main.py)
 - [base_hpe.py](file://base_hpe.py)
 - [openvino_base_hpe.py](file://openvino_base_hpe.py)
 - [movenet_hpe.py](file://movenet_hpe.py)
 - [alphapose_hpe.py](file://alphapose_hpe.py)
-- [main.py](file://main.py)
+- [utils/video_detection.py](file://utils/video_detection.py)
 - [utils/visualizer.py](file://utils/visualizer.py)
 - [utils/evaluator.py](file://utils/evaluator.py)
-- [optimizations/enhanced_openvino_hpe.py](file://optimizations/enhanced_openvino_hpe.py)
-- [optimizations/cpu_performance_optimizer.py](file://optimizations/cpu_performance_optimizer.py)
+- [README.md](file://README.md)
 </cite>
-
-## Update Summary
-**Changes Made**
-- Updated main_loop_with_timeout method documentation to reflect HTTP stream processing improvements
-- Added intelligent frame skipping and concurrent failure handling mechanisms
-- Enhanced timeout management and progress reporting for HTTP streams
-- Updated architecture diagrams to show improved HTTP stream processing flow
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -30,94 +23,116 @@
 7. [Performance Considerations](#performance-considerations)
 8. [Troubleshooting Guide](#troubleshooting-guide)
 9. [Conclusion](#conclusion)
+10. [Appendices](#appendices)
 
 ## Introduction
-This document describes the core architecture of the Human Pose Estimation (HPE) framework. It focuses on the abstract BaseHPE class design pattern that enables polymorphic behavior across different HPE implementations, the unified interface that allows switching between AlphaPose, OpenPose, HigherHRNet, EfficientHRNet, and MoveNet methods, and the modular design that separates model-specific logic from common functionality. It also documents the evaluation and visualization utilities and their role in the overall architecture.
-
-**Updated** The framework now features significantly enhanced HTTP stream processing capabilities with intelligent frame skipping, timeout management, and concurrent failure handling mechanisms.
+This document describes the core architecture of the Human Pose Estimation (HPE) system. It focuses on the high-level design patterns, including the BaseHPE abstract class pattern, the factory method for backend selection, and the pipeline architecture for video processing. It documents the component interactions between the main orchestrator, backend implementations, and utility modules, and explains the data flow from input detection through model inference to output generation. It also outlines the modular design that enables pluggable backends while maintaining consistent interfaces, system boundaries, integration patterns, and extensibility points for adding new HPE methods.
 
 ## Project Structure
-The HPE framework is organized around a shared base class and multiple specialized implementations. The main entry point selects the desired method and orchestrates the processing loop. Utilities provide visualization and evaluation outputs.
+The HPE system is organized around a small set of core modules:
+- Orchestrator: main.py
+- Abstract base class: base_hpe.py
+- Backend implementations: openvino_base_hpe.py, movenet_hpe.py, alphapose_hpe.py
+- Utilities: utils/visualizer.py, utils/evaluator.py, utils/video_detection.py
+- Documentation: README.md
 
 ```mermaid
 graph TB
-subgraph "Entry Point"
-MAIN["main.py"]
-end
-subgraph "Core Abstractions"
-BASE["base_hpe.BaseHPE"]
-VIS["utils.visualizer.render"]
-EVAL["utils.evaluator (JSON/CSV/Tx)"]
-end
-subgraph "Implementations"
-OVB["openvino_base_hpe.OpenVINOBaseHPE"]
-MOV["movenet_hpe.MoveNetHPE"]
-ALP["alphapose_hpe.AlphaPoseHPE"]
-OVB_OPT["optimizations.enhanced_openvino_hpe.OptimizedOpenVINOHPE"]
-end
-subgraph "Optimizations"
-CPU["optimizations.cpu_performance_optimizer.EPICCPUOptimizer"]
-end
-MAIN --> OVB
-MAIN --> MOV
-MAIN --> ALP
-OVB --> BASE
-MOV --> BASE
-ALP --> BASE
-OVB_OPT --> OVB
-OVB_OPT --> CPU
-BASE --> VIS
-BASE --> EVAL
+A["main.py<br/>CLI orchestrator"] --> B["base_hpe.py<br/>BaseHPE (abstract)"]
+A --> C["openvino_base_hpe.py<br/>OpenVINO backends"]
+A --> D["movenet_hpe.py<br/>MoveNet"]
+A --> E["alphapose_hpe.py<br/>AlphaPose"]
+B --> F["utils/visualizer.py<br/>render()"]
+B --> G["utils/evaluator.py<br/>COCO JSON/CSV + Tx"]
+A --> H["utils/video_detection.py<br/>detect_video_properties()"]
 ```
 
 **Diagram sources**
-- [main.py:22-99](file://main.py#L22-L99)
-- [base_hpe.py:36-630](file://base_hpe.py#L36-L630)
-- [openvino_base_hpe.py:55-395](file://openvino_base_hpe.py#L55-L395)
+- [main.py:51-242](file://main.py#L51-L242)
+- [base_hpe.py:98-675](file://base_hpe.py#L98-L675)
+- [openvino_base_hpe.py:56-412](file://openvino_base_hpe.py#L56-L412)
 - [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
-- [alphapose_hpe.py:33-334](file://alphapose_hpe.py#L33-L334)
-- [utils/visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
+- [alphapose_hpe.py:33-341](file://alphapose_hpe.py#L33-L341)
+- [utils/visualizer.py:4-53](file://utils/visualizer.py#L4-L53)
 - [utils/evaluator.py:11-114](file://utils/evaluator.py#L11-L114)
-- [optimizations/enhanced_openvino_hpe.py:25-333](file://optimizations/enhanced_openvino_hpe.py#L25-L333)
-- [optimizations/cpu_performance_optimizer.py:34-539](file://optimizations/cpu_performance_optimizer.py#L34-L539)
+- [utils/video_detection.py:42-221](file://utils/video_detection.py#L42-L221)
 
 **Section sources**
-- [main.py:22-99](file://main.py#L22-L99)
-- [base_hpe.py:36-630](file://base_hpe.py#L36-L630)
+- [README.md:20-44](file://README.md#L20-L44)
+- [main.py:190-242](file://main.py#L190-L242)
 
 ## Core Components
-- BaseHPE: An abstract base class that defines the unified interface for all HPE implementations. It encapsulates common input handling, preprocessing, inference orchestration, postprocessing, visualization, and evaluation. It also manages hardware acceleration paths (PyNvCodec vs. OpenCV) and timing metrics.
-- OpenVINOBaseHPE: A concrete implementation that integrates with OpenVINO's model API and pipelines. It supports multiple architectures (OpenPose, HigherHRNet, EfficientHRNet variants) and exposes configurable performance settings.
-- MoveNetHPE: A lightweight implementation leveraging OpenVINO for MoveNet multipose models with a fixed input size.
-- AlphaPoseHPE: A PyTorch-based implementation integrating AlphaPose's detector and pose estimation components, with GPU acceleration and optional multiprocessing.
-- OptimizedOpenVINOHPE: An extension of OpenVINOBaseHPE that applies CPU-specific optimizations for high-core-count systems, including NUMA-aware configuration and workload-specific tuning.
-- EPICCPUOptimizer: A utility that detects CPU capabilities and calculates optimal OpenVINO configurations for throughput or latency modes.
+- BaseHPE (abstract): Provides shared input detection, video capture initialization, padding/resizing, main loops, inference timing, rendering, and output accumulation. Backends implement load_model(), run_model(), and postprocess().
+- OpenVINO backends: OpenVINOBaseHPE supports OpenPose, HigherHRNet, and EfficientHRNet variants, with configurable CPU performance settings and robust video capture fallbacks.
+- MoveNet: MoveNetHPE implements a CPU-only OpenVINO runtime pipeline for multipose MoveNet.
+- AlphaPose: AlphaPoseHPE integrates a YOLO detector and a PyTorch pose model, with GPU acceleration and custom preprocessing.
 - Utilities:
-  - visualizer.render: Draws skeletons and optional bounding boxes and scores onto frames.
-  - evaluator: Aggregates pose results into COCO-compatible JSON/CSV and computes transmitted data volume metrics.
+  - utils/visualizer.py: Draws skeletons and bounding boxes onto frames.
+  - utils/evaluator.py: Serializes results to COCO-format JSON/CSV and measures transmitted data volume per interval.
+  - utils/video_detection.py: Detects video properties for HTTP/RTSP streams and local files.
 
 **Section sources**
-- [base_hpe.py:36-630](file://base_hpe.py#L36-L630)
-- [openvino_base_hpe.py:55-395](file://openvino_base_hpe.py#L55-L395)
+- [base_hpe.py:98-675](file://base_hpe.py#L98-L675)
+- [openvino_base_hpe.py:56-412](file://openvino_base_hpe.py#L56-L412)
 - [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
-- [alphapose_hpe.py:33-334](file://alphapose_hpe.py#L33-L334)
-- [optimizations/enhanced_openvino_hpe.py:25-333](file://optimizations/enhanced_openvino_hpe.py#L25-L333)
-- [optimizations/cpu_performance_optimizer.py:34-539](file://optimizations/cpu_performance_optimizer.py#L34-L539)
-- [utils/visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
+- [alphapose_hpe.py:33-341](file://alphapose_hpe.py#L33-L341)
+- [utils/visualizer.py:4-53](file://utils/visualizer.py#L4-L53)
 - [utils/evaluator.py:11-114](file://utils/evaluator.py#L11-L114)
+- [utils/video_detection.py:42-221](file://utils/video_detection.py#L42-L221)
 
 ## Architecture Overview
-The framework follows a layered design:
-- Entry point (main.py) selects the HPE method and constructs the appropriate implementation.
-- Each implementation inherits from BaseHPE and overrides model-specific methods (load_model, run_model, postprocess).
-- BaseHPE centralizes:
-  - Input source detection (image, directory, video, HTTP stream, webcam).
-  - Hardware acceleration selection (PyNvCodec GPU decoding or OpenCV CPU decoding).
-  - Preprocessing (padding and resizing) and postprocessing (keypoint scaling and bounding box computation).
-  - Inference orchestration and timing.
-  - Visualization and evaluation outputs.
+The system follows a layered architecture:
+- Presentation/Orchestration Layer: main.py parses CLI arguments, selects a backend via a factory method, and drives the processing loop.
+- Pipeline Layer: BaseHPE encapsulates the end-to-end pipeline: input detection, frame acquisition, preprocessing, inference, postprocessing, rendering, and output writing.
+- Backend Layer: Concrete backends implement model loading, inference, and postprocessing tailored to their frameworks (OpenVINO, PyTorch).
+- Utility Layer: Rendering and evaluation utilities are reused across backends.
 
-**Updated** The main_loop_with_timeout method now provides sophisticated HTTP stream processing with intelligent frame skipping, timeout management, and concurrent failure handling.
+```mermaid
+graph TB
+subgraph "Presentation/Orchestration"
+M["main.py<br/>parse_arguments()<br/>get_hpe_method()"]
+end
+subgraph "Pipeline"
+B["BaseHPE<br/>main_loop()/main_loop_with_timeout()<br/>process_frame()"]
+U1["utils/visualizer.py"]
+U2["utils/evaluator.py"]
+end
+subgraph "Backends"
+O["OpenVINOBaseHPE"]
+MV["MoveNetHPE"]
+AP["AlphaPoseHPE"]
+end
+subgraph "Utilities"
+VD["utils/video_detection.py"]
+end
+M --> B
+B --> O
+B --> MV
+B --> AP
+B --> U1
+B --> U2
+M --> VD
+```
+
+**Diagram sources**
+- [main.py:51-242](file://main.py#L51-L242)
+- [base_hpe.py:250-675](file://base_hpe.py#L250-L675)
+- [openvino_base_hpe.py:56-412](file://openvino_base_hpe.py#L56-L412)
+- [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
+- [alphapose_hpe.py:33-341](file://alphapose_hpe.py#L33-L341)
+- [utils/visualizer.py:4-53](file://utils/visualizer.py#L4-L53)
+- [utils/evaluator.py:11-114](file://utils/evaluator.py#L11-L114)
+- [utils/video_detection.py:42-221](file://utils/video_detection.py#L42-L221)
+
+## Detailed Component Analysis
+
+### BaseHPE Abstract Class Pattern
+BaseHPE defines a common contract and shared pipeline:
+- Input detection and initialization: Supports image, directory, video file, webcam, and HTTP/RTSP streams. Initializes video capture via OpenCV or PyNvCodec when available.
+- Preprocessing: Normalizes frames to model input sizes via padding and resizing.
+- Pipeline orchestration: main_loop() and main_loop_with_timeout() iterate frames, time processing, and coordinate inference and rendering.
+- Rendering and output: Uses utils/visualizer.py to draw skeletons and bounding boxes; writes annotated images/videos and accumulates COCO-format JSON/CSV via utils/evaluator.py.
+- Extensibility: Backends implement load_model(), run_model(), and postprocess().
 
 ```mermaid
 classDiagram
@@ -129,19 +144,15 @@ class BaseHPE {
 +process_frame(frame, frame_number)
 +pad_and_resize(frame)
 +set_padding()
-<<abstract>>
++load_model()
++run_model(padded)
++postprocess(predictions)
 }
 class OpenVINOBaseHPE {
 +model_type
 +load_model()
 +run_model(padded)
 +postprocess(predictions)
-+main_loop()
-}
-class OptimizedOpenVINOHPE {
-+load_model()
-+_configure_core(core)
-+get_performance_stats()
 }
 class MoveNetHPE {
 +load_model()
@@ -152,353 +163,251 @@ class AlphaPoseHPE {
 +load_model()
 +run_model(frame_input)
 +postprocess(predictions)
-+set_padding()
-+pad_and_resize(frame)
-}
-class EPICCPUOptimizer {
-+configure_openvino_core(core)
-+optimize_system_settings()
-+get_recommended_batch_size(model, resolution)
-}
-class Visualizer {
-+render(frame, bodies, LINES_BODY, score_thresh, show_scores, show_bounding_box)
-}
-class Evaluator {
-+append_COCO_format_json(...)
-+append_COCO_format_csv(...)
-+save_COCO_format_json(...)
-+save_COCO_format_csv(...)
-+save_Tx_csv_data(...)
 }
 BaseHPE <|-- OpenVINOBaseHPE
-OpenVINOBaseHPE <|-- OptimizedOpenVINOHPE
 BaseHPE <|-- MoveNetHPE
 BaseHPE <|-- AlphaPoseHPE
-OptimizedOpenVINOHPE --> EPICCPUOptimizer : "uses"
-BaseHPE --> Visualizer : "uses"
-BaseHPE --> Evaluator : "uses"
 ```
 
 **Diagram sources**
-- [base_hpe.py:36-630](file://base_hpe.py#L36-L630)
-- [openvino_base_hpe.py:55-395](file://openvino_base_hpe.py#L55-L395)
+- [base_hpe.py:98-675](file://base_hpe.py#L98-L675)
+- [openvino_base_hpe.py:56-412](file://openvino_base_hpe.py#L56-L412)
 - [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
-- [alphapose_hpe.py:33-334](file://alphapose_hpe.py#L33-L334)
-- [optimizations/enhanced_openvino_hpe.py:25-333](file://optimizations/enhanced_openvino_hpe.py#L25-L333)
-- [optimizations/cpu_performance_optimizer.py:34-539](file://optimizations/cpu_performance_optimizer.py#L34-L539)
-- [utils/visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
-- [utils/evaluator.py:11-114](file://utils/evaluator.py#L11-L114)
+- [alphapose_hpe.py:33-341](file://alphapose_hpe.py#L33-L341)
 
-## Detailed Component Analysis
+**Section sources**
+- [base_hpe.py:98-675](file://base_hpe.py#L98-L675)
 
-### BaseHPE: Abstract Design Pattern and Polymorphism
-BaseHPE defines a common contract for all HPE implementations:
-- Unified constructor parameters for input source, output configuration, and visualization toggles.
-- Input detection logic supporting images, directories, videos, HTTP streams, and webcams.
-- Hardware acceleration paths:
-  - PyNvCodec GPU decoding with NV12 to RGB conversion and tensor conversion.
-  - OpenCV CPU decoding with configurable backend for HTTP streams.
-- Centralized preprocessing and postprocessing:
-  - Padding and resizing to a target model input size.
-  - Postprocessing that converts normalized keypoints to original image coordinates and computes bounding boxes.
-- Inference orchestration:
-  - process_frame measures inference time, draws FPS, and renders results.
-  - Supports both dictionary outputs (PAFs/heatmaps) and direct pose arrays.
-- Evaluation and visualization:
-  - Aggregates COCO-format results and writes JSON/CSV.
-  - Renders skeletons and optional bounding boxes and scores.
-
-**Updated** The main_loop_with_timeout method now provides comprehensive HTTP stream processing with intelligent frame skipping, timeout management, and concurrent failure handling.
-
-Polymorphism is achieved by requiring subclasses to implement:
-- load_model: Model initialization and adapter creation.
-- run_model: Preprocess, run inference, and return predictions.
-- postprocess: Convert raw outputs to standardized Body objects.
+### Factory Method for Backend Selection
+The orchestrator constructs the appropriate backend instance based on the selected method. The factory maps method names to backend constructors and passes shared arguments (input source, output directory, flags for JSON/CSV/image/video saving, measurement interval).
 
 ```mermaid
 sequenceDiagram
-participant Main as "main.py"
-participant Impl as "Concrete HPE (OpenVINOBaseHPE/MoveNetHPE/AlphaPoseHPE)"
-participant Base as "BaseHPE"
-participant Utils as "Visualizer/Evaluator"
-Main->>Impl : construct with args
-Main->>Impl : load_model()
-Impl->>Base : BaseHPE.__init__(...)
-Base->>Base : detect input type<br/>initialize capture/decoders
-Main->>Base : main_loop()/main_loop_with_timeout()
-loop frames
-Base->>Base : process_frame(frame, frame_number)
-Base->>Impl : run_model(padded)
-Impl-->>Base : predictions
-Base->>Base : postprocess(predictions)
-Base->>Utils : render(frame, bodies, ...)
-Base->>Utils : append_COCO_format_*(...)
+participant CLI as "main.py"
+participant Factory as "get_hpe_method()"
+participant OV as "OpenVINOBaseHPE"
+participant MV as "MoveNetHPE"
+participant AP as "AlphaPoseHPE"
+CLI->>Factory : parse_arguments() and method choice
+alt method in ["openpose","hrnet","ae1","ae2","ae3"]
+Factory->>OV : construct with device and base args
+OV-->>CLI : backend instance
+else method == "movenet"
+Factory->>MV : construct with device and base args
+MV-->>CLI : backend instance
+else method == "alphapose"
+Factory->>AP : construct with device, detbatch, base args
+AP-->>CLI : backend instance
 end
-Base->>Utils : save_* outputs
 ```
 
 **Diagram sources**
-- [main.py:22-99](file://main.py#L22-L99)
-- [base_hpe.py:240-630](file://base_hpe.py#L240-L630)
-- [openvino_base_hpe.py:183-276](file://openvino_base_hpe.py#L183-L276)
-- [movenet_hpe.py:58-111](file://movenet_hpe.py#L58-L111)
-- [alphapose_hpe.py:69-294](file://alphapose_hpe.py#L69-L294)
-- [utils/visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
+- [main.py:207-237](file://main.py#L207-L237)
+- [openvino_base_hpe.py:65-94](file://openvino_base_hpe.py#L65-L94)
+- [movenet_hpe.py:20-31](file://movenet_hpe.py#L20-L31)
+- [alphapose_hpe.py:41-66](file://alphapose_hpe.py#L41-L66)
+
+**Section sources**
+- [main.py:207-237](file://main.py#L207-L237)
+
+### Pipeline Architecture for Video Processing
+The pipeline is consistent across backends:
+- Input detection: Determine whether input is image, directory, video file, webcam, or stream.
+- Capture and decode: Use OpenCV or PyNvCodec when available; fallback to MJPEG socket parsing for HTTP streams.
+- Preprocess: Pad and resize frames to model input dimensions.
+- Inference: Backend-specific run_model() returns raw predictions.
+- Postprocess: Convert raw predictions to Body objects with keypoints and bounding boxes.
+- Render and save: Draw skeletons and optionally write images/videos and COCO-format outputs.
+
+```mermaid
+flowchart TD
+Start(["Start main_loop/main_loop_with_timeout"]) --> Detect["Detect input type<br/>and initialize capture"]
+Detect --> Loop{"More frames?"}
+Loop --> |Yes| Pre["Pad and resize frame"]
+Pre --> Infer["run_model(padded)"]
+Infer --> Post["postprocess(predictions) -> List[Body]"]
+Post --> Render["render(frame, bodies, LINES_BODY)"]
+Render --> Save["Save image/video and append COCO/CSV"]
+Save --> Loop
+Loop --> |No| Finish(["Finish and persist outputs"])
+```
+
+**Diagram sources**
+- [base_hpe.py:250-675](file://base_hpe.py#L250-L675)
+- [utils/visualizer.py:4-53](file://utils/visualizer.py#L4-L53)
 - [utils/evaluator.py:35-114](file://utils/evaluator.py#L35-L114)
 
 **Section sources**
-- [base_hpe.py:36-630](file://base_hpe.py#L36-L630)
+- [base_hpe.py:250-675](file://base_hpe.py#L250-L675)
 
-### Enhanced HTTP Stream Processing in main_loop_with_timeout
-**New Section** The main_loop_with_timeout method provides sophisticated HTTP stream processing capabilities:
-
-#### Intelligent Frame Skipping
-- **Frame Detection**: Scans the incoming data buffer for complete JPEG frames using SOI (Start of Image) and EOI (End of Image) markers.
-- **Multiple Frame Handling**: Identifies and processes only the most recent complete frame when multiple frames are present in the buffer.
-- **Skip Reporting**: Logs the number of skipped frames to inform users about stream lag.
-
-#### Concurrent Failure Handling
-- **Failure Counting**: Tracks consecutive decode failures with a configurable maximum threshold.
-- **Graceful Degradation**: Stops processing gracefully after reaching the failure threshold.
-- **Buffer Management**: Removes processed frame data from the buffer to prevent memory accumulation.
-
-#### Timeout and Frame Limit Management
-- **Dynamic Termination**: Monitors both timeout duration and maximum frame count simultaneously.
-- **Progress Tracking**: Provides periodic progress updates during HTTP stream processing.
-- **Resource Cleanup**: Ensures CSV and JSON files are properly saved even on early termination.
-
-```mermaid
-flowchart TD
-HTTP_Start([HTTP Stream Processing]) --> BufferInit["Initialize Buffer & State"]
-BufferInit --> ReadLoop["Read Available Data Loop"]
-ReadLoop --> FindFrames["Find Complete Frames in Buffer"]
-FindFrames --> HasFrames{"Frames Found?"}
-HasFrames --> |Yes| ProcessLast["Process Only Last Frame"]
-HasFrames --> |No| CheckTimeout["Check Timeout/Max Frames"]
-ProcessLast --> DecodeFrame["Decode JPEG Frame"]
-DecodeFrame --> DecodeSuccess{"Decode Success?"}
-DecodeSuccess --> |Yes| UpdateState["Update State & Reset Failures"]
-DecodeSuccess --> |No| IncFailures["Increment Failure Counter"]
-IncFailures --> CheckFailures{"Failures >= Max?"}
-CheckFailures --> |Yes| StopProcessing["Stop Processing"]
-CheckFailures --> |No| Sleep["Small Sleep"]
-UpdateState --> CheckTimeout
-Sleep --> ReadLoop
-CheckTimeout --> TimeoutReached{"Timeout/Max Frames Reached?"}
-TimeoutReached --> |Yes| SaveResults["Save Results & Exit"]
-TimeoutReached --> |No| ReadLoop
-SaveResults --> HTTP_End([Processing Complete])
-```
-
-**Diagram sources**
-- [base_hpe.py:317-481](file://base_hpe.py#L317-L481)
-
-**Section sources**
-- [base_hpe.py:317-481](file://base_hpe.py#L317-L481)
-
-### OpenVINOBaseHPE: Unified Interface for OpenVINO Models
-OpenVINOBaseHPE provides a unified interface for OpenVINO-based models:
-- Model registry with input sizes and architecture types for OpenPose, HigherHRNet, and EfficientHRNet variants.
-- Device selection with GPU support checks and fallback to CPU.
-- OpenVINO core configuration with performance hints, threading, CPU pinning, and hyper-threading controls.
-- Preprocess/postprocess integration with ImageModel and adapter APIs.
-- Streaming URL handling with dynamic capture initialization and fallbacks.
-
-```mermaid
-flowchart TD
-Start([OpenVINOBaseHPE.load_model]) --> ReadXML["Read XML/weights"]
-ReadXML --> ConfigureCore["Configure OpenVINO core<br/>threads/streams/performance"]
-ConfigureCore --> CreateAdapter["Create OpenVINO adapter"]
-CreateAdapter --> CreateModel["Create ImageModel with config"]
-CreateModel --> LoadModel["Load model"]
-LoadModel --> End([Ready for inference])
-```
-
-**Diagram sources**
-- [openvino_base_hpe.py:183-260](file://openvino_base_hpe.py#L183-L260)
-
-**Section sources**
-- [openvino_base_hpe.py:55-395](file://openvino_base_hpe.py#L55-L395)
-
-### MoveNetHPE: Lightweight OpenVINO Implementation
-MoveNetHPE targets MoveNet multipose models:
-- Fixed input size (256x256) and GPU fallback to CPU.
-- Minimal preprocessing pipeline converting to RGB and NHWC layout.
-- Postprocess extracts keypoints, bounding boxes, and scores, scaling to original image coordinates.
-
-```mermaid
-sequenceDiagram
-participant MV as "MoveNetHPE"
-participant OV as "OpenVINO Core"
-MV->>MV : load_model()
-MV->>OV : read_model(xml)
-MV->>OV : compile_model(device)
-MV->>MV : run_model(padded)
-MV->>MV : postprocess(predictions)
-MV-->>MV : bodies (Body[])
-```
-
-**Diagram sources**
-- [movenet_hpe.py:58-111](file://movenet_hpe.py#L58-L111)
-
-**Section sources**
-- [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
-
-### AlphaPoseHPE: PyTorch-Based Implementation
-AlphaPoseHPE integrates AlphaPose's detector and pose estimation:
-- Loads detector and pose models from the AlphaPose ecosystem.
-- Handles image/directory inputs via a dedicated loader and video/webcam inputs via BaseHPE.
-- Performs GPU-accelerated detection and pose estimation with optional flipping and heatmap-to-coordinate conversion.
-- Overrides padding/resizing to preserve original resolution.
-
-```mermaid
-flowchart TD
-AP_Start([AlphaPoseHPE.load_model]) --> LoadDet["Load detector model"]
-LoadDet --> LoadPose["Load pose model weights"]
-LoadPose --> SetupTrans["Setup transforms"]
-SetupTrans --> AP_End([Ready for inference])
-AP_Run([run_model]) --> DetPath{"Image/dir?"}
-DetPath --> |Yes| UseDetLoader["Use DetectionLoader"]
-DetPath --> |No| GPUPath["Use GPU tensor path"]
-UseDetLoader --> PoseEst["Pose estimation"]
-GPUPath --> PoseEst
-PoseEst --> AP_Post([postprocess])
-```
-
-**Diagram sources**
-- [alphapose_hpe.py:69-334](file://alphapose_hpe.py#L69-L334)
-
-**Section sources**
-- [alphapose_hpe.py:33-334](file://alphapose_hpe.py#L33-L334)
-
-### OptimizedOpenVINOHPE and EPICCPUOptimizer: CPU Performance Tuning
-OptimizedOpenVINOHPE extends OpenVINOBaseHPE with CPU-specific optimizations:
-- Detects CPU capabilities and calculates optimal thread counts, streams, and performance hints.
-- Applies NUMA-aware configuration and workload-specific tuning.
-- Provides factory functions and benchmark utilities.
+### OpenVINO Backends
+OpenVINOBaseHPE centralizes OpenVINO model loading, CPU performance tuning, and postprocessing. It supports multiple architectures with different input sizes and GPU support policies. It ensures video capture initialization for streams and provides robust fallbacks.
 
 ```mermaid
 classDiagram
-class OptimizedOpenVINOHPE {
+class OpenVINOBaseHPE {
++model_type
 +load_model()
++run_model(padded)
++postprocess(predictions)
++_init_opencv_video_capture(input_src)
++_ensure_video_capture()
 +_configure_core(core)
-+get_performance_stats()
 }
-class EPICCPUOptimizer {
-+configure_openvino_core(core)
-+optimize_system_settings()
-+get_recommended_batch_size(model, resolution)
-}
-OptimizedOpenVINOHPE --> EPICCPUOptimizer : "uses"
 ```
 
 **Diagram sources**
-- [optimizations/enhanced_openvino_hpe.py:25-333](file://optimizations/enhanced_openvino_hpe.py#L25-L333)
-- [optimizations/cpu_performance_optimizer.py:34-539](file://optimizations/cpu_performance_optimizer.py#L34-L539)
+- [openvino_base_hpe.py:56-412](file://openvino_base_hpe.py#L56-L412)
 
 **Section sources**
-- [optimizations/enhanced_openvino_hpe.py:25-333](file://optimizations/enhanced_openvino_hpe.py#L25-L333)
-- [optimizations/cpu_performance_optimizer.py:34-539](file://optimizations/cpu_performance_optimizer.py#L34-L539)
+- [openvino_base_hpe.py:56-412](file://openvino_base_hpe.py#L56-L412)
 
-### Visualization and Evaluation Utilities
-- visualizer.render: Draws skeleton lines and keypoint circles, optionally showing scores and bounding boxes.
-- evaluator: Aggregates results into COCO-format JSON/CSV and computes transmitted data volume per millisecond interval.
+### MoveNet Backend
+MoveNetHPE implements a CPU-only pipeline using the OpenVINO Runtime. It initializes video capture for streams and files, loads the model, performs preprocessing, inference, and postprocessing to produce Body objects.
 
 ```mermaid
-flowchart TD
-Bodies["Bodies (list of Body)"] --> COCO["create_COCO_format(...)"]
-COCO --> AppendJSON["append_COCO_format_json(...)"]
-COCO --> AppendCSV["append_COCO_format_csv(...)"]
-AppendCSV --> Tx["append_Tx_csv_data(...)"]
-AppendJSON --> SaveJSON["save_COCO_format_json(...)"]
-AppendCSV --> SaveCSV["save_COCO_format_csv(...)"]
-Tx --> SaveTx["save_Tx_csv_data(...)"]
+classDiagram
+class MoveNetHPE {
++load_model()
++run_model(padded)
++postprocess(predictions)
++_init_opencv_video_capture(input_src)
+}
 ```
 
 **Diagram sources**
-- [utils/visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
-- [utils/evaluator.py:11-114](file://utils/evaluator.py#L11-L114)
+- [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
 
 **Section sources**
-- [utils/visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
-- [utils/evaluator.py:11-114](file://utils/evaluator.py#L11-L114)
+- [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
+
+### AlphaPose Backend
+AlphaPoseHPE integrates a YOLO detector and a PyTorch pose model. It supports GPU acceleration, batching, and custom preprocessing. It overrides padding behavior to avoid altering input resolution and handles both image/directory and video/webcam/stream inputs.
+
+```mermaid
+classDiagram
+class AlphaPoseHPE {
++load_model()
++run_model(frame_input)
++postprocess(predictions)
++set_padding()
++pad_and_resize(frame)
+}
+```
+
+**Diagram sources**
+- [alphapose_hpe.py:33-341](file://alphapose_hpe.py#L33-L341)
+
+**Section sources**
+- [alphapose_hpe.py:33-341](file://alphapose_hpe.py#L33-L341)
+
+### Data Flow: From Input to Output
+The end-to-end flow is standardized across backends:
+- Input detection: utils/video_detection.py can auto-detect video properties for HTTP/RTSP streams and local files.
+- Capture: BaseHPE initializes OpenCV or PyNvCodec capture depending on input type and availability.
+- Preprocess: pad_and_resize normalizes frames to model input size.
+- Inference: run_model executes backend-specific inference.
+- Postprocess: postprocess converts raw outputs to Body objects.
+- Rendering and persistence: utils/visualizer draws skeletons; utils/evaluator accumulates COCO-format JSON/CSV and measures Tx bandwidth.
+
+```mermaid
+sequenceDiagram
+participant CLI as "main.py"
+participant HPE as "BaseHPE"
+participant VIS as "utils/visualizer"
+participant EVAL as "utils/evaluator"
+participant BACK as "Backend (OpenVINO/MoveNet/AlphaPose)"
+CLI->>HPE : get_hpe_method() -> BaseHPE subclass
+CLI->>HPE : main_loop()/main_loop_with_timeout()
+HPE->>BACK : load_model()
+loop For each frame
+HPE->>BACK : run_model(padded)
+BACK-->>HPE : raw predictions
+HPE->>BACK : postprocess(predictions)
+BACK-->>HPE : List[Body]
+HPE->>VIS : render(frame, bodies, LINES_BODY)
+HPE->>EVAL : append COCO JSON/CSV
+end
+HPE->>EVAL : save outputs
+```
+
+**Diagram sources**
+- [main.py:51-242](file://main.py#L51-L242)
+- [base_hpe.py:250-675](file://base_hpe.py#L250-L675)
+- [utils/visualizer.py:4-53](file://utils/visualizer.py#L4-L53)
+- [utils/evaluator.py:35-114](file://utils/evaluator.py#L35-L114)
+- [openvino_base_hpe.py:191-282](file://openvino_base_hpe.py#L191-L282)
+- [movenet_hpe.py:58-111](file://movenet_hpe.py#L58-L111)
+- [alphapose_hpe.py:69-341](file://alphapose_hpe.py#L69-L341)
+
+**Section sources**
+- [base_hpe.py:250-675](file://base_hpe.py#L250-L675)
+- [utils/video_detection.py:42-221](file://utils/video_detection.py#L42-L221)
 
 ## Dependency Analysis
-The framework exhibits clean separation of concerns:
-- Entry point depends on concrete implementations and utilities.
-- Implementations depend on BaseHPE and model-specific libraries.
-- Optimizations depend on OpenVINOBaseHPE and CPU capability detection.
-- Utilities are standalone and consumed by BaseHPE.
+- main.py depends on BaseHPE subclasses and utility modules for logging, structured events, and video property detection.
+- BaseHPE depends on OpenCV, PyTorch (when applicable), and utility modules for rendering and evaluation.
+- Backends depend on their respective frameworks (OpenVINO Runtime or PyTorch) and model APIs.
+- Utilities are shared across backends and are decoupled from backend specifics.
 
 ```mermaid
-graph LR
-MAIN["main.py"] --> OVB["openvino_base_hpe.py"]
-MAIN --> MOV["movenet_hpe.py"]
-MAIN --> ALP["alphapose_hpe.py"]
-OVB --> BASE["base_hpe.py"]
-MOV --> BASE
-ALP --> BASE
-OVB_OPT["enhanced_openvino_hpe.py"] --> OVB
-OVB_OPT --> CPU["cpu_performance_optimizer.py"]
-BASE --> VIS["utils/visualizer.py"]
-BASE --> EVAL["utils/evaluator.py"]
+graph TB
+M["main.py"] --> B["base_hpe.py"]
+M --> UVD["utils/video_detection.py"]
+B --> UVIS["utils/visualizer.py"]
+B --> UE["utils/evaluator.py"]
+B --> OV["openvino_base_hpe.py"]
+B --> MV["movenet_hpe.py"]
+B --> AP["alphapose_hpe.py"]
 ```
 
 **Diagram sources**
-- [main.py:22-99](file://main.py#L22-L99)
-- [base_hpe.py:36-630](file://base_hpe.py#L36-L630)
-- [openvino_base_hpe.py:55-395](file://openvino_base_hpe.py#L55-L395)
-- [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
-- [alphapose_hpe.py:33-334](file://alphapose_hpe.py#L33-L334)
-- [optimizations/enhanced_openvino_hpe.py:25-333](file://optimizations/enhanced_openvino_hpe.py#L25-L333)
-- [optimizations/cpu_performance_optimizer.py:34-539](file://optimizations/cpu_performance_optimizer.py#L34-L539)
-- [utils/visualizer.py:4-49](file://utils/visualizer.py#L4-L49)
-- [utils/evaluator.py:11-114](file://utils/evaluator.py#L11-L114)
+- [main.py:10-14](file://main.py#L10-L14)
+- [base_hpe.py:22-24](file://base_hpe.py#L22-L24)
+- [openvino_base_hpe.py:16-21](file://openvino_base_hpe.py#L16-L21)
+- [movenet_hpe.py:3-7](file://movenet_hpe.py#L3-L7)
+- [alphapose_hpe.py:7](file://alphapose_hpe.py#L7-L22)
 
 **Section sources**
-- [main.py:22-99](file://main.py#L22-L99)
-- [base_hpe.py:36-630](file://base_hpe.py#L36-L630)
+- [main.py:10-14](file://main.py#L10-L14)
+- [base_hpe.py:22-24](file://base_hpe.py#L22-L24)
+- [openvino_base_hpe.py:16-21](file://openvino_base_hpe.py#L16-L21)
+- [movenet_hpe.py:3-7](file://movenet_hpe.py#L3-L7)
+- [alphapose_hpe.py:7](file://alphapose_hpe.py#L7-L22)
 
 ## Performance Considerations
-- Hardware acceleration:
-  - PyNvCodec GPU decoding reduces CPU overhead for video streams and files.
-  - OpenCV fallback ensures broad compatibility when GPU decoding is unavailable.
-- OpenVINO tuning:
-  - Performance hints (LATENCY/THROUGHPUT), thread counts, and streams can be configured via environment variables or constructor parameters.
-  - OptimizedOpenVINOHPE automatically selects optimal settings for EPIC-class CPUs.
-- Throughput vs. latency:
-  - Higher thread counts and multiple streams improve throughput but may increase latency.
-  - For real-time applications, LATENCY mode with fewer streams often yields better responsiveness.
-- Batch sizing:
-  - EPICCPUOptimizer estimates batch sizes considering memory and CPU constraints.
-- **Updated** HTTP stream optimization:
-  - Intelligent frame skipping prevents buffer overflow and maintains real-time performance.
-  - Concurrent failure handling ensures graceful degradation under network instability.
-  - Timeout management prevents resource leaks during long-running streams.
+- CPU tuning for OpenVINO backends: OpenVINOBaseHPE configures performance mode, threads, streams, CPU pinning, and hyper-threading via environment variables and constructor parameters.
+- Stream handling: For HTTP/RTSP streams, BaseHPE provides timeouts and max frame limits; OpenCV FFmpeg backend is preferred for lower latency; PyNvCodec is used when available for hardware-accelerated decoding.
+- Throughput vs latency: Performance mode can be tuned via environment variables to balance throughput and latency.
+- Output serialization: COCO JSON/CSV and Tx measurements are accumulated incrementally and persisted at the end of sessions.
+
+[No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
-- PyNvCodec not available:
-  - The framework falls back to OpenCV and prints warnings. Verify GPU drivers and PyNvCodec installation.
-- Unsupported input types:
-  - Ensure input paths are images, videos, or HTTP streams. Webcam indices must be numeric.
-- Streaming URL issues:
-  - Use FFmpeg backend for HTTP streams. Some URLs require buffering adjustments.
-- GPU device selection:
-  - MoveNet does not support GPU; the implementation forces CPU fallback.
-  - OpenVINO models may fall back to CPU if GPU is unsupported.
-- **Updated** HTTP stream processing issues:
-  - Frame skipping messages indicate stream lag; adjust camera settings or network bandwidth.
-  - Consecutive failure errors suggest network instability; check connection quality.
-  - Timeout errors indicate processing limitations; adjust timeout or max_frames parameters.
-  - Buffer overflow warnings indicate insufficient processing capacity; reduce input resolution or increase timeout.
+- Video property detection: utils/video_detection.py attempts to fetch streamer video info, probe source files, and fall back to OpenCV. Failures are logged and can be mitigated by providing explicit timeout and max_frames.
+- Stream errors: BaseHPE’s main_loop_with_timeout includes robustness for HTTP streams, including skipping old frames, decoding retries, and termination checks.
+- Logging: Structured logging is written to files for machine parsing and console output for human readability.
+- Device selection: Some backends restrict device usage (e.g., MoveNet and certain OpenVINO models); the code falls back to CPU when GPU is unsupported.
 
 **Section sources**
-- [base_hpe.py:97-189](file://base_hpe.py#L97-L189)
-- [openvino_base_hpe.py:87-90](file://openvino_base_hpe.py#L87-L90)
-- [movenet_hpe.py:28-31](file://movenet_hpe.py#L28-L31)
-- [main.py:30-45](file://main.py#L30-L45)
+- [utils/video_detection.py:42-221](file://utils/video_detection.py#L42-L221)
+- [base_hpe.py:331-549](file://base_hpe.py#L331-L549)
+- [main.py:31-49](file://main.py#L31-L49)
 
 ## Conclusion
-The HPE framework achieves a clean, extensible architecture through the BaseHPE abstraction and a unified interface across diverse implementations. By separating model-specific logic from common functionality—preprocessing, inference orchestration, postprocessing, visualization, and evaluation—the system supports easy addition of new methods and deployment flexibility across CPU and GPU environments. Optimizations tailored for high-core-count systems further enhance performance, enabling practical real-time deployments.
+The HPE system employs a clean separation of concerns: a shared BaseHPE pipeline with pluggable backends, a factory-driven backend selection, and reusable utilities for rendering and evaluation. The architecture supports diverse input sources, robust stream handling, and consistent output formats. Extensibility is achieved by implementing the minimal contract defined by BaseHPE, enabling straightforward addition of new HPE methods.
 
-**Updated** The enhanced HTTP stream processing capabilities with intelligent frame skipping, timeout management, and concurrent failure handling make the framework more robust for production deployments involving network-based video sources. These improvements ensure reliable operation under various network conditions while maintaining real-time performance characteristics essential for practical HPE applications.
+[No sources needed since this section summarizes without analyzing specific files]
+
+## Appendices
+
+### System Boundaries and Integration Patterns
+- Orchestration boundary: main.py is the single entry point for CLI-driven runs.
+- Pipeline boundary: BaseHPE encapsulates the processing loop and output persistence.
+- Backend boundary: Each backend manages its own model loading and inference specifics.
+- Utility boundary: Rendering and evaluation are cross-cutting concerns integrated via function calls.
+
+**Section sources**
+- [README.md:45-62](file://README.md#L45-L62)
+- [main.py:51-242](file://main.py#L51-L242)
+- [base_hpe.py:250-675](file://base_hpe.py#L250-L675)

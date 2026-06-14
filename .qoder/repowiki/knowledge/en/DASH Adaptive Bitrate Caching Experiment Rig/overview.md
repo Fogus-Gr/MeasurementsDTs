@@ -1,0 +1,1 @@
+A Docker-based measurement infrastructure for evaluating HTTP proxy caching and adaptive bitrate performance in DASH video streaming.

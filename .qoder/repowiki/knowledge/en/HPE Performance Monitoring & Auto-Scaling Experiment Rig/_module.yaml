@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: monitor_hpe_experiment
+title: HPE Performance Monitoring & Auto-Scaling Experiment Rig
+scope:
+    - monitor_hpe/
+source_files: []
+depends_on: []
+related_to: []

@@ -1,0 +1,4 @@
+- Entry points: Multiple standalone Flask applications (`app.py`, `app_ffmpeg.py`, `stream_video_server.py`) offering different streaming backends (OpenCV vs FFmpeg) and features (looping, adaptive quality).
+- Backend strategies: `app.py` uses OpenCV for frame extraction; `app_ffmpeg.py` spawns an FFmpeg subprocess to pipe MJPEG data, parsing JPEG markers manually; `stream_video_server.py` and `app_optimized.py` use OpenCV with varying timing controls.
+- Interface: Exposes `/video_feed` for MJPEG streams and `/` for a basic HTML viewer. `app_ffmpeg.py` adds a `/video_info` API endpoint.
+- Deployment: Containerized via `Dockerfile` using Gunicorn and `opencv-python-headless`, configured with environment variables for video path and port.

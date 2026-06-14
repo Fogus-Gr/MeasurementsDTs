@@ -1,0 +1,3 @@
+- Environment-variable-driven configuration: all tunables (method, device, CPU/memory limits, OpenVINO threads) are resolved in `run_experiment.sh` and passed through `.env` / docker-compose substitution rather than hardcoded in YAML.
+- Defensive readiness probing: the orchestrator waits for MediaMTX port 8554 and then confirms the `/stream` path is live via `ffprobe` or the MediaMTX REST API before launching the HPE consumer.
+- Graceful signal propagation: both `entrypoint.sh` files register traps to forward SIGTERM/SIGINT to background child processes (GPU metrics collector, TX tracer) and wait for them before exiting.

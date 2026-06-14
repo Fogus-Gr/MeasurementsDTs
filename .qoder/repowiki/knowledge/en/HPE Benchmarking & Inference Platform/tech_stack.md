@@ -1,0 +1,3 @@
+- **Inference Runtimes**: PyTorch 2.4.1 (CUDA 12.1) for AlphaPose; OpenVINO 2024.4.0 for MoveNet, OpenPose, HigherHRNet, and EfficientHRNet variants.
+- **Streaming & Tracing**: MediaMTX for RTSP brokering; FFmpeg with NVENC for hardware-accelerated streaming; BCC (BPF Compiler Collection) and bpftrace for eBPF-based kernel network tracing.
+- **Containerization**: Docker Compose with NVIDIA Container Toolkit for GPU passthrough; custom multi-stage Dockerfiles for minimizing image size while supporting CUDA and OpenVINO IR models.

@@ -1,0 +1,4 @@
+- Entry point `run_experiment.sh` auto-detects vCPUs via `nproc` and calculates method-specific resource limits (CPU/Memory/OpenVINO threads) for lightweight, heavy, and GPU-based HPE models.
+- Orchestrates a two-service Docker Compose stack (`docker-compose.yaml`): an HPE inference container (host PID, OpenVINO-optimized) and a monitor container (privileged, bpftrace-enabled).
+- The monitor service (`monitor_pid.sh`) tracks the HPE process via `/proc` stats and eBPF `sendto` tracepoints, writing metrics to a shared volume with file-locking safety.
+- Post-experiment processing uses `plot_graph.py` to visualize CPU and memory trends from the collected CSV data.

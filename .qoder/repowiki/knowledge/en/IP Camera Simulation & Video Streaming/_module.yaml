@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: dev_tools
+title: IP Camera Simulation & Video Streaming
+scope:
+    - dev_tools/
+source_files: []
+depends_on: []
+related_to:
+    - path: ffmpeg_hpe_experiment
+    - path: recent_dash_infra

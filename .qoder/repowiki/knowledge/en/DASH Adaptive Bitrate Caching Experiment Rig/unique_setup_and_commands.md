@@ -1,0 +1,3 @@
+- **Prerequisites**: Requires `bc` on the host for timestamp arithmetic and a Linux kernel supporting privileged packet capture.
+- **Execution**: Run via `./run_experiment.sh [label]`, which automatically handles `docker compose down`, builds images, waits for manifest readiness, and copies artifacts.
+- **Configuration**: Resource limits (CPU/Memory) and tracing parameters (interface, interval) are injected via environment variables (e.g., `HTTP_PROXY_CPU_LIMIT=2.0`, `DASH_TRACE_INTERFACE=docker0`).

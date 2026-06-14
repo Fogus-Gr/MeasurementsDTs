@@ -1,0 +1,1 @@
+Run `models/AlphaPose/build_extensions.sh` to compile custom C++/CUDA extensions (ROI Align, DCN, NMS) using gcc-9/g++-9 before inference.

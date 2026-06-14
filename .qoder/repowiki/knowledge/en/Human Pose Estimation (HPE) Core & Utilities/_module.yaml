@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: hpe_core
+title: Human Pose Estimation (HPE) Core & Utilities
+scope:
+    - utils/
+    - main.py
+    - base_hpe.py
+source_files: []
+depends_on: []
+related_to: []

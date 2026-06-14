@@ -1,0 +1,3 @@
+- Requires a host with at least 4 vCPUs; validated by `run_experiment.sh` before starting.
+- Execution: `./run_experiment.sh [method] [video]` automatically handles container lifecycle, resource pinning, and result aggregation.
+- Monitor container requires `SYS_ADMIN` and `IPC_LOCK` capabilities for bpftrace and memory locking.

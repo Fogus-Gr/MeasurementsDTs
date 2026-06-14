@@ -1,0 +1,3 @@
+- **Traffic Tracing**: `tcpdump` with `gawk` for userspace packet filtering and byte-accounting on Docker bridge interfaces.
+- **Performance Monitoring**: Direct `/proc` filesystem parsing for high-frequency (500ms) CPU and RSS sampling without external agents.
+- **Service Discovery**: Docker Compose internal DNS combined with runtime `docker inspect` and `getent hosts` for IP resolution.

@@ -1,0 +1,3 @@
+- Configuration-driven object instantiation using a 'TYPE' key in dictionaries resolved via a central Registry.
+- Abstract base classes define common interfaces for Detectors (`BaseDetector`) and Model Adapters (`ModelAdapter`) with concrete implementations in submodules.
+- Pretrained weights and model configurations are stored locally in `pretrained_models` directories within each engine's scope.

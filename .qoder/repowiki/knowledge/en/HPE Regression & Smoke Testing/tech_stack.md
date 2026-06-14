@@ -1,0 +1,1 @@
+Uses `unittest` for structural regression testing and `opencv-python` (cv2) for programmatic contact sheet generation in smoke tests.

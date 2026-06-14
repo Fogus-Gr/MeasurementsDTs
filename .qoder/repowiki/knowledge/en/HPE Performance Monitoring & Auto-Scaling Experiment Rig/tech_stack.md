@@ -1,0 +1,1 @@
+Uses bpftrace for high-frequency network TX monitoring and /proc polling for CPU/Memory metrics; OpenVINO environment variables (OV_THREADS, OV_MODE) control inference parallelism.

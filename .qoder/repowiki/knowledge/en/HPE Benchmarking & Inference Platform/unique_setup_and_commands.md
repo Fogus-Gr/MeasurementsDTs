@@ -1,0 +1,4 @@
+- **Model Weights**: Pretrained weights (`.pth`, `.bin`, `.xml`) are not included in the repository and must be manually downloaded via `gdown` or `wget` as specified in `ONBOARDING.md` before running inference.
+- **AlphaPose Extensions**: Cython and CUDA extensions for AlphaPose must be compiled locally or during the Docker build using `bash models/AlphaPose/build_extensions.sh`.
+- **Experiment Execution**: Benchmarks are launched via rig-specific scripts, e.g., `cd ffmpeg_hpe && ./run_experiment_bcc.sh alphapose`, which handle container lifecycle, health-checks, and result collection into timestamped directories.
+- **Kernel Requirements**: BCC tracing requires a Linux kernel ≥ 4.4 with `CONFIG_BPF_SYSCALL=y` and debug headers mounted into the tracer container (`/lib/modules`, `/usr/src`).

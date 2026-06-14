@@ -1,0 +1,1 @@
+A containerized benchmarking suite for evaluating Human Pose Estimation models (AlphaPose, MoveNet, OpenVINO variants) under realistic RTSP streaming conditions with kernel-level network and hardware telemetry.

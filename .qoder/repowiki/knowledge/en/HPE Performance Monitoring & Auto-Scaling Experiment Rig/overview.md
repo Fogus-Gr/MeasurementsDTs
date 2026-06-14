@@ -1,0 +1,1 @@
+Automates resource-aware benchmarking of Human Pose Estimation models using Docker, bpftrace monitoring, and dynamic CPU/memory allocation.

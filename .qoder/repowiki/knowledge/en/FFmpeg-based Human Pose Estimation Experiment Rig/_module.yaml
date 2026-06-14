@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: ffmpeg_hpe_experiment
+title: FFmpeg-based Human Pose Estimation Experiment Rig
+scope:
+    - ffmpeg_hpe/
+source_files: []
+depends_on: []
+related_to: []

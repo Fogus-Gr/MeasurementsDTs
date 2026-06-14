@@ -1,0 +1,4 @@
+- Entry point: `main.py` parses CLI arguments, selects an HPE backend via a strategy map (`MoveNetHPE`, `AlphaPoseHPE`, `OpenVINOBaseHPE`), and delegates to `BaseHPE.main_loop` or `main_loop_with_timeout`.
+- Abstraction layer: `base_hpe.py` defines `BaseHPE` (ABC) with concrete frame acquisition paths (OpenCV/FFmpeg, PyNvCodec GPU decode, HTTP/MJPEG socket fallback) and abstract hooks (`load_model`, `run_model`, `postprocess`) implemented by subclasses outside this scope.
+- Utility boundary: `utils/` isolates cross-cutting concerns—`video_detection.py` probes stream properties (ffprobe/OpenCV/streamer API), `evaluator.py` accumulates COCO keypoints and transmission metrics, `visualizer.py` renders skeletons/bboxes, and `log_parser.py` analyzes structured JSONL logs.
+- Dependency direction: core (`base_hpe`) depends on utils for rendering/evaluation; `main` depends on core and utils for orchestration; no circular imports detected.

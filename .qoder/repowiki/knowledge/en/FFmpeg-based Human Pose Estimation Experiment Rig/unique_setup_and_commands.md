@@ -1,0 +1,3 @@
+- Run an experiment: `./run_experiment.sh <method>` (e.g. `movenet`, `alphapose`). The script auto-installs `bc` if missing, validates the video file under `../videos/`, waits for the RTSP stream to be published, and aborts on non-zero HPE exit code.
+- Kernel prerequisites for BCC tracer: unprivileged BPF or root; required kernel config flags include `CONFIG_BPF_SYSCALL=y` and `CONFIG_BPF_JIT_ALWAYS_ON=y` (documented in `bpftrace-tracer/README.md`).
+- Results layout: each run creates a timestamped `results_<method>_<cores>_<device>_<video>_<ts>/` directory with subfolders for logs, perf CSVs, BCC traces, GPU metrics, and HPE output.

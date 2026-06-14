@@ -1,0 +1,2 @@
+- Regression tests verify implementation details by reading and parsing source files from the repository root using `pathlib.Path.read_text()` and string indexing.
+- Smoke test scripts resolve the repository root relative to the script's location (`Path(__file__).resolve().parents[2]`) to ensure correct execution context.

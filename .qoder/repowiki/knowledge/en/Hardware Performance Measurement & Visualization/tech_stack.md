@@ -1,0 +1,4 @@
+- Uses NVIDIA Nsight Compute (ncu) and nvidia-smi for GPU/FLOPS profiling.
+- Leverages Linux perf for CPU cycle and clock measurements.
+- Python 3 with pandas, matplotlib, and numpy for data parsing and visualization.
+- Containerization via Docker with CUDA base images for GPU modules and Ubuntu for CPU modules.

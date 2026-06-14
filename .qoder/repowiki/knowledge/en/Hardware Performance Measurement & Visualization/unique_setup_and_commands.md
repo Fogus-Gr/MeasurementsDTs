@@ -1,0 +1,3 @@
+- GPU modules require NVIDIA drivers and nvidia-smi/ncu availability; CPU module requires sudo access for perf stat.
+- Dockerfiles provide isolated environments: 'docker build -f Dockerfile.gpu_metrics .' for GPU metrics, 'docker build -f Dockerfile .' for CPU perf plotting.
+- Execution typically involves running the shell scripts directly or via Docker containers, e.g., './measure_flops.sh python3 script.py' or 'docker run --gpus all gpu_metrics_image'.

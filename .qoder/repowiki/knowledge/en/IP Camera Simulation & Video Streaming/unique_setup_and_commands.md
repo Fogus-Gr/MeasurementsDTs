@@ -1,0 +1,3 @@
+- Docker build: `docker build -t flask-ipcam-sim .`
+- Docker run: `docker run -v <host_video_dir>:/app/videos:ro -e VIDEO_PATH=/app/videos/<file.mp4> -p 8080:5000 flask-ipcam-sim`
+- Local execution: `python app.py` or `python app_ffmpeg.py` (requires FFmpeg in PATH).

@@ -1,0 +1,1 @@
+Provides regression tests and smoke test utilities to validate Human Pose Estimation model integration, routing logic, and visual output generation.

@@ -1,0 +1,1 @@
+Orchestrates containerized RTSP video streaming and HPE model benchmarking with dynamic resource allocation and kernel-level network tracing.

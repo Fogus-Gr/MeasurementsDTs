@@ -1,0 +1,4 @@
+- MJPEG streaming via multipart/x-mixed-replace responses with '--frame' boundary.
+- Video source path configured via VIDEO_PATH environment variable with hardcoded fallbacks.
+- Flask apps run on 0.0.0.0 with threaded=True to support concurrent stream requests.
+- Graceful handling of missing video files by generating test patterns or returning empty streams.

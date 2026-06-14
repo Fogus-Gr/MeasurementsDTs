@@ -1,0 +1,1 @@
+Flask for HTTP serving, OpenCV (headless) for frame decoding, FFmpeg/FFprobe for alternative streaming pipeline and metadata extraction, Gunicorn for production-ready WSGI serving in Docker.

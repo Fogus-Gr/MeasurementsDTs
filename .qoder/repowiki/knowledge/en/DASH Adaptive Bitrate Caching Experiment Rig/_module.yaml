@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: recent_dash_infra
+title: DASH Adaptive Bitrate Caching Experiment Rig
+scope:
+    - recent-dash/
+source_files: []
+depends_on: []
+related_to: []

@@ -1,0 +1,6 @@
+- **Orchestration Layer**: `docker-compose.yml` defines a five-service topology (`http_server`, `http_proxy`, `http_client`, `perf_monitor`, `trace_container`) with explicit resource limits and dependency ordering.
+- **Control Plane**: `run_experiment.sh` acts as the primary entry point, managing the full lifecycle: prerequisite checks, container startup, dynamic PID/IP resolution, readiness probing via `curl`/`wget`, and result aggregation into timestamped directories.
+- **Measurement Subsystems**: 
+  - `perf_monitor` uses host-PID namespace access to sample `/proc` CPU/RSS deltas for the proxy process.
+  - `trace_container` runs in privileged host-network mode, using `tcpdump` and `gawk` to filter and bucket TCP payload bytes for DASH-specific traffic flows (Server->Proxy and Proxy->Client).
+- **Application Layer**: Custom C++ binaries (`main`, `proxy`, `local`) from the `recent-dash-proposed-caching` repository are wrapped in Ubuntu-based Docker images (`HTTP-*.Dockerfile`) and launched via shell scripts that resolve service discovery via environment variables.

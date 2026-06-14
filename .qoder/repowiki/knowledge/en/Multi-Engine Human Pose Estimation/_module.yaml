@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: models
+title: Multi-Engine Human Pose Estimation
+scope:
+    - models/
+source_files: []
+depends_on: []
+related_to:
+    - path: hpe_core
+    - path: tests

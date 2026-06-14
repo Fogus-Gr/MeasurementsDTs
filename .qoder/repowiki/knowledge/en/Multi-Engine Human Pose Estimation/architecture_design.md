@@ -1,0 +1,5 @@
+- The module aggregates three distinct inference engines: AlphaPose (PyTorch-based), MoveNet (OpenVINO IR), and a generic OpenVINO Model API wrapper.
+- AlphaPose follows a modular design with a Registry pattern (`utils/registry.py`) for dynamically building SPPE models, losses, and datasets from configuration dictionaries (`models/builder.py`).
+- Detector APIs in AlphaPose (`detector/apis.py`) use a factory pattern to instantiate specific detectors (YOLO, YOLOX, EfficientDet) based on runtime options.
+- OpenVINO integration relies on an Adapter pattern (`model_api/adapters/model_adapter.py`) to abstract model loading and inference, wrapped by a high-level `Model` class (`model_api/models/model.py`) that handles preprocessing and postprocessing pipelines.
+- Custom CUDA/C++ extensions (DCN, ROI Align, NMS) are required for AlphaPose and built via `build_extensions.sh`.

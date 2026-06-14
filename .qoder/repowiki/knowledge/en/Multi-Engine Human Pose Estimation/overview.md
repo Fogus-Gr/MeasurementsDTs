@@ -1,0 +1,1 @@
+Integrates AlphaPose, MoveNet, and OpenVINO models for 2D/3D human pose estimation, detection, and tracking.
