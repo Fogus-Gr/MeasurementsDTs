@@ -79,7 +79,7 @@ The top-level folders fall into three categories:
 | Folder | Used by | Role in `docker-compose.yaml` |
 |---|---|---|
 | `rtsp-ipcam/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `h264-streaming-server` container |
-| `recent-dash/perf_monitor/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `perf_monitor` container |
+| `shared/perf_monitor/` | `ffmpeg_hpe/docker-compose.yaml`, `recent-dash/docker-compose.yml` | Builds the `perf_monitor` container |
 | `ffmpeg_hpe/bpftrace-tracer/` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `bcc-tracer` container |
 | `ffmpeg_hpe/Dockerfile.gpu_metrics` | `ffmpeg_hpe/docker-compose.yaml` | Builds the `gpu-metrics` container |
 | `Dockerfile_base` (repo root) | `ffmpeg_hpe/` + `monitor_hpe/` | Builds the `hpe` container (the inference engine) |

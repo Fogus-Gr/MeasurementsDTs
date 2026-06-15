@@ -254,7 +254,7 @@ Collects host-level performance metrics (CPU, memory, I/O) alongside the HPE run
 
 | Property | Value |
 |----------|-------|
-| Build context | `../recent-dash/perf_monitor` |
+| Build context | `../shared/perf_monitor` |
 | PID namespace | `host` |
 | User | `root` |
 | Privileged | `true` |

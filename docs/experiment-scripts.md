@@ -38,7 +38,7 @@ End-to-end orchestration of HPE inference with streaming, performance monitoring
    - Read CPU model from `lscpu`
    - Create results directory: `results_${method}_${cpu_model}_${timestamp}`
    - Create subdirectories: `logs/`, `traces/`, `perf/`
-4. **Cleanup stale artifacts** — remove old CSV files from `./results/`, `./traces/`, `./perf_monitor/output/`.
+4. **Cleanup stale artifacts** — remove old CSV files from `./results/` and `./traces/`.
 5. **Stop old containers** — `docker compose down -v --remove-orphans`.
 6. **Start streaming server** — poll healthcheck endpoint; wait up to **60 seconds** before continuing.
 7. **Extract server IP** — using `docker inspect`:

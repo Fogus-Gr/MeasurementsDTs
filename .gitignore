@@ -43,6 +43,9 @@ monitor/results_*
 Measure_rx_tx_bftrace/results_*
 /.DS_Store
 segments/
+!recent-dash/segments/
+recent-dash/segments/*
+!recent-dash/segments/.gitkeep
 captures/
 results_dash_*/
 videos/*

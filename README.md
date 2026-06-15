@@ -235,7 +235,7 @@ This branch extends the project into a containerised performance benchmarking pl
 
 ### Architecture
 
-Each experiment rig lives in its own folder with a `run_experiment.sh` (the single entry point) and a `docker-compose.yaml` (the service definitions). The script handles the full lifecycle:
+Each experiment rig lives in its own folder with an entry script (`run_experiment.sh` or `run_experiment_bcc.sh`) and a `docker-compose.yaml` (the service definitions). The script handles the full lifecycle:
 
 1. Clean up previous containers and CSV files
 2. Start the streaming server and wait for its healthcheck
@@ -247,7 +247,7 @@ Each experiment rig lives in its own folder with a `run_experiment.sh` (the sing
 
 ```mermaid
 graph TD
-    A[run_experiment.sh] --> B[docker-compose.yaml]
+    A[run_experiment.sh / run_experiment_bcc.sh] --> B[docker-compose.yaml]
     B --> C[hpe\nruns main.py against a live stream]
     B --> D[h264-streaming-server\nserves video over HTTP/H.264]
     B --> E[perf_monitor\nsamples CPU/memory/network]
@@ -262,7 +262,7 @@ graph TD
 |---|---|---|---|---|---|
 | `monitor_hpe/` | `run_experiment.sh` | Local video file (volume mount) | ✅ | CPU%, RSS memory | Baseline inference cost — no network |
 | `ffmpeg_hpe/` | `run_experiment.sh` `run_experiment_bcc.sh` | Live H.264 HTTP stream (port 8089) | ✅ | CPU%, RSS, GPU, BCC RX bytes | Full streaming benchmark — main rig |
-| `recent-dash/` | `run_experiment.sh` | DASH segments via HTTP proxy | ❌ | CPU%, RSS, bpftrace RX/TX | HTTP caching proxy research — not HPE |
+| `recent-dash/` | `run_experiment.sh` | DASH segments via HTTP proxy | ❌ | CPU%, RSS, DASH-only proxy RX/TX | HTTP caching proxy research — not HPE |
 | `rtsp-ipcam/` | `start_server.sh` | — (is the server) | ❌ | — | Shared H.264 streaming server used by `ffmpeg_hpe/` |
 | `Measure_Flops/` | `measure_flops.sh` | Any HPE command | ✅ | GPU FLOPS, TOPS, memory BW | One-shot Nsight Compute profiling |
 | `Measure_gpu_dcgm/` | `run_nvidia_dcgm.sh` | — (sidecar) | ❌ | GPU util, temp, power | Standalone GPU telemetry collector |
@@ -287,7 +287,7 @@ cd monitor_hpe && ./run_experiment.sh
 The main experiment rig. Five containers:
 - `h264-streaming-server` (from `rtsp-ipcam/`) — Python + FFmpeg HTTP server serving a video file as a raw H.264 stream on port 8089
 - `hpe` — runs `main.py --method <X> --input http://<server-ip>:8089/stream.h264`
-- `perf_monitor` (from `recent-dash/perf_monitor/`) — samples CPU/memory/network
+- `perf_monitor` (from `shared/perf_monitor/`) — samples CPU/memory/network
 - `gpu-metrics` — polls `nvidia-smi` every 500ms
 - `bcc-tracer` (optional, commented out) — eBPF/BCC kernel tracing of network traffic
 
@@ -298,12 +298,12 @@ cd ffmpeg_hpe && ./run_experiment_bcc.sh <method>
 
 #### `recent-dash/` — DASH/HTTP caching experiment
 
-A separate experiment measuring a DASH video streaming proxy — not HPE inference. Three containers:
+A separate experiment measuring a DASH video streaming proxy — not HPE inference. It expects untracked DASH assets restored under `recent-dash/segments/`, including `manifest.mpd`. Three application containers:
 - `http_server` — serves MPEG-DASH segments
 - `http_proxy` — caching proxy between server and client
-- `http_client` — simulates a DASH player
+- `http_client` — exposes the DASH manifest URL; a DASH-capable player such as VLC or `mpv` must fetch it to generate traffic
 
-Uses the same monitoring sidecars (`perf_monitor`, `bpftrace`). The observability infrastructure (Prometheus + Grafana + Coroot) is defined in `docker-compose.infra.yml`.
+Uses `perf_monitor` from `shared/perf_monitor/` plus a DASH-specific packet tracer. The tracer writes `traces/trace.csv` with `proxy_rx_video_bytes` and `proxy_tx_video_bytes`, filtered to `server:80 -> proxy` and `proxy:80 -> client`. The observability infrastructure (Prometheus + Grafana + Coroot) is defined in `docker-compose.infra.yml`.
 
 ```bash
 cd recent-dash && ./run_experiment.sh
@@ -337,16 +337,16 @@ See `optimizations/README.md` and `OPTIMIZATION_PLAN.md` for configuration detai
 
 ### Root-level Dockerfiles
 
-Six Dockerfiles at the repo root represent iteration history on the HPE container image. Only `Dockerfile_base` is actively used by the experiment rigs.
+Only `Dockerfile_base` remains at the repo root and is actively used by the experiment rigs. Historical Dockerfiles have been moved to `archive/dockerfiles/`.
 
 | File | Purpose |
 |---|---|
 | `Dockerfile_base` | Current base image used by `monitor_hpe/` and `ffmpeg_hpe/` |
-| `Dockerfile.hpe` | Earlier variant |
-| `Dockerfile_with_opencv` | Adds a custom OpenCV build |
-| `Dockerfile_cuda_ffmpeg_hpe` | CUDA + FFmpeg + HPE combined |
-| `Dockerfile_combined_multistage_app` | Multi-stage build attempt |
-| `Dockerfile_optimized_multistage_v4` | Latest multi-stage optimised build |
+| `archive/dockerfiles/Dockerfile.hpe` | Earlier variant |
+| `archive/dockerfiles/Dockerfile_with_opencv` | Adds a custom OpenCV build |
+| `archive/dockerfiles/Dockerfile_cuda_ffmpeg_hpe` | CUDA + FFmpeg + HPE combined |
+| `archive/dockerfiles/Dockerfile_combined_multistage_app` | Multi-stage build attempt |
+| `archive/dockerfiles/Dockerfile_optimized_multistage_v4` | Latest multi-stage optimised build |
 
 ### Network Monitoring Architecture
 
@@ -414,7 +414,7 @@ These are confirmed issues in the codebase. Fixes marked ✅ are already applied
 
 ### Notes
 
-- `run_experiment.sh` scripts are the single source of truth for how an experiment runs — they handle timing, healthchecks, log collection, and cleanup.
+- `run_experiment*.sh` scripts are the single source of truth for how an experiment runs — they handle timing, healthchecks, log collection, and cleanup.
 - Results are written to a timestamped directory (`results_<container_type>_<cpu_model>_<timestamp>/`) so runs never overwrite each other.
 - The eBPF/bpftrace tracer (`bcc-tracer`) requires a kernel with BPF support (`CONFIG_BPF=y`, kernel ≥ 4.4) and debug symbols. It is present in `ffmpeg_hpe/` but commented out in docker-compose by default.
 - `recent-dash/` is a separate research thread (DASH caching) that shares the monitoring infrastructure but is unrelated to HPE inference.

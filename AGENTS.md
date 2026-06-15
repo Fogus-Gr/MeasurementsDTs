@@ -49,7 +49,7 @@ Measure_gpu_dcgm/              # Standalone: GPU power/temp/util via nvidia-smi
 Measure_plot_cpu_perf/         # Standalone: CPU cycles via perf stat
 optimizations/                 # OpenVINO CPU thread/stream tuning for 4-vCPU cloud instances
 Dockerfile_base                # Active HPE container image (used by monitor_hpe/ and ffmpeg_hpe/)
-Dockerfile_optimized_multistage_v4  # Latest multi-stage build iteration
+archive/dockerfiles/           # Archived Dockerfile iterations and stale variants
 docker-compose.yml             # GPU observability stack (DCGM + Prometheus + Grafana)
 ```
 
@@ -127,9 +127,9 @@ into timestamped directories inside each rig folder. Do not hardcode other
 output paths.
 
 ### Docker Images
-`Dockerfile_base` is the active HPE container image. The other Dockerfiles at
-the repo root are iteration history — do not use them for new work without
-checking whether `Dockerfile_base` already covers the need.
+`Dockerfile_base` is the active HPE container image. The archived Dockerfiles
+under `archive/dockerfiles/` are iteration history — do not use them for new
+work without checking whether `Dockerfile_base` already covers the need.
 
 ### Network Monitoring — TX vs RX Tool Split
 
@@ -194,8 +194,8 @@ issues.
   `raw_result` is falsy — needs a guard.
 - `export_pose_results.py`: global accumulator never reset between runs —
   `reset_results()` exists but is never called.
-- The eBPF/bpftrace tracer (`bcc-tracer`) in `ffmpeg_hpe/` and `recent-dash/`
-  is commented out — requires a kernel with debug symbols and is fragile.
+- `recent-dash/` uses a separate host-networked packet tracer for DASH-only
+  proxy RX/TX; do not apply `ffmpeg_hpe` BCC assumptions to that rig.
 - Several root-level files (`full_shell_history.txt`, `hist.txt`, `bug.md`,
   `*.bak`, `original.py`) are development artefacts that need cleanup.
 
