@@ -121,7 +121,7 @@ class BaseHPE(ABC):
                                 self.img_w = 640
                             if self.img_h == 0:
                                 self.img_h = 480
-            elif input_src.endswith('.mp4') or input_src.endswith('.avi') or input_src.endswith('.mov'): # Check for video files
+            elif input_src.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm', '.gif')): # Check for video files
                 self.input_type = "video"
                 if nvc is None:
                     print("[ERROR] PyNvCodec not available. Falling back to OpenCV for video decoding.")
@@ -330,7 +330,7 @@ class BaseHPE(ABC):
             while True:
                 try:
                     # Check timeout
-                    if time.time() - start_time > timeout_seconds:
+                    if timeout_seconds > 0 and time.time() - start_time > timeout_seconds:
                         print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
                         break
                     
@@ -374,7 +374,7 @@ class BaseHPE(ABC):
             
             while True:
                 # Check timeout
-                if time.time() - start_time > timeout_seconds:
+                if timeout_seconds > 0 and time.time() - start_time > timeout_seconds:
                     print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
                     break
                 

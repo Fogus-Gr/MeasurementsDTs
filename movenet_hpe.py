@@ -31,7 +31,7 @@ class MoveNetHPE(BaseHPE):
 
     def _init_opencv_video_capture(self, input_src):
         """Initialize OpenCV video capture for fallback when PyNvCodec is not available."""
-        if input_src.isdigit():
+        if isinstance(input_src, int) or (isinstance(input_src, str) and input_src.isdigit()):
             # Webcam input
             self.cap = cv2.VideoCapture(int(input_src))
         else:
