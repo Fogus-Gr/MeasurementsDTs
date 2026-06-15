@@ -25,10 +25,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2.0'  # Adjust based on your needs
+          cpus: "${STREAMER_CPUS:-1.0}"  # Reserve one core for the streamer on a 4-vCPU host.
           memory: 1G
         reservations:
-          cpus: '1.0'
+          cpus: "${STREAMER_RESERVATION_CPUS:-1.0}"
           memory: 512M
     security_opt:
       - no-new-privileges:true
@@ -54,14 +54,13 @@ services:
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
       # CPU optimization for OpenVINO backends (openpose / efficienthrnet*).
-      # Sized for an 8-vCPU host with hpe cgroup cap of 6.0 (see deploy.resources.limits.cpus below).
-      # Leaves 2 vCPUs for streamer + aux services.
-      - OV_MODE=throughput
-      - OV_STREAMS=1
-      - OV_THREADS=6
-      - OMP_NUM_THREADS=6
-      - MKL_NUM_THREADS=6
-      - OPENBLAS_NUM_THREADS=6
+      # Tuned for a 4-vCPU host and overridable via ffmpeg_hpe/.env.
+      - OV_MODE=${OV_MODE:-latency}
+      - OV_STREAMS=${OV_STREAMS:-1}
+      - OV_THREADS=${OV_THREADS:-3}
+      - OMP_NUM_THREADS=${OMP_NUM_THREADS:-3}
+      - MKL_NUM_THREADS=${MKL_NUM_THREADS:-3}
+      - OPENBLAS_NUM_THREADS=${OPENBLAS_NUM_THREADS:-3}
       # - HPE_INPUT=http://h264-streaming-server:8089/stream.h264
       - OPENCV_FFMPEG_OPEN_TIMEOUT=300000 # Increase timeout for FFMPEG
       - OPENCV_FFMPEG_READ_TIMEOUT=300000  # Increase read timeout for FFMPEG
@@ -78,7 +77,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '6.0'  # 8-vCPU host: hpe gets 6, streamer 1, aux services share remainder
+          cpus: "${HPE_CPUS:-3.0}"  # HPE gets three cores on a 4-vCPU host.
           memory: 16G    # Adjust based on your model requirements
         reservations:
           devices:
