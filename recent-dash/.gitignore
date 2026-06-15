@@ -1,4 +1,5 @@
 /.DS_Store
-segments/
+segments/*
+!segments/.gitkeep
 captures/
 results_dash_*/

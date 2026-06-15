@@ -31,6 +31,8 @@ RUN mkdir -p /opt/segments
 #  && 7z e /opt/segments.7z -o/opt/segments/ \
 #  && rm -rf /opt/segments.7z
 ADD segments/ /opt/segments/
+RUN test -f /opt/segments/manifest.mpd || \
+    (echo "Missing DASH assets. Restore recent-dash/segments/manifest.mpd before building." >&2; exit 1)
 
 # This image is used to:
 #  - Launch the HTTP server (CDN server hosting the video segments)

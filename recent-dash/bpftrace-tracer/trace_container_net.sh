@@ -1,64 +1,76 @@
 #!/bin/bash
-echo "trace_container_net.sh started, monitoring network interface" >&2
-set -ex
+echo "trace_container_net.sh started, monitoring DASH video traffic" >&2
+set -eo pipefail
 
-# Get network information from environment variables
-NETIF=${NETIF:-"eth0"}  # Default to eth0 if not specified
-echo "Monitoring interface: $NETIF" >&2
+NETIF=${NETIF:-any}
+TRACE_INTERVAL_MS=${TRACE_INTERVAL_MS:-10}
 
-# Calculate UNIX epoch offset in ms
-EPOCH_MS=$(($(date +%s%3N) - $(cat /proc/uptime | awk '{print int($1)*1000 }')))
-echo "EPOCH_MS calculated as $EPOCH_MS" >&2
-
-# Create bpftrace script
-BT_SCRIPT=$(mktemp /tmp/trace_net_XXXX.bt)
-trap "rm -f $BT_SCRIPT" EXIT
-
-cat > "$BT_SCRIPT" <<'EOF'
-// Variables are automatically initialized to 0 when first used
-
-tracepoint:net:net_dev_queue
-/str(args->name) == "NETIF_VALUE"/
-{
-  @tx += args->len;
-}
-
-tracepoint:net:netif_receive_skb
-/str(args->name) == "NETIF_VALUE"/
-{
-  @rx += args->len;
-}
-
-interval:ms:10
-{
-  $ts = EPOCH_MS_VALUE + (nsecs / 1000000);  // Add epoch offset
-  printf("%llu,%llu,%llu\n", $ts, @rx, @tx);
-  clear(@rx); clear(@tx);
-}
-EOF
-
-# Replace placeholders
-sed -i "s/NETIF_VALUE/$NETIF/g" "$BT_SCRIPT"
-sed -i "s/EPOCH_MS_VALUE/$EPOCH_MS/g" "$BT_SCRIPT"
-
-echo "bpftrace script written to $BT_SCRIPT" >&2
-
-# Run bpftrace and write output to trace.csv
-mkdir -p /opt/tracer/output
-echo "timestamp_ms,rx_bytes,tx_bytes" > /opt/tracer/output/trace.csv
-echo "Starting bpftrace..." >&2
-
-if ! bpftrace "$BT_SCRIPT" >> /opt/tracer/output/trace.csv; then
-  echo "ERROR: bpftrace failed to run properly" >&2
+if [ -z "$DASH_SERVER_IP" ] || [ -z "$DASH_PROXY_IP" ] || [ -z "$DASH_CLIENT_IP" ]; then
+  echo "[ERROR] DASH_SERVER_IP, DASH_PROXY_IP, and DASH_CLIENT_IP are required." >&2
   exit 1
 fi
 
-echo "bpftrace finished, trace written to /opt/tracer/output/trace.csv" >&2
-
-# Check if the trace file has data
-if [ "$(wc -l < "/opt/tracer/output/trace.csv")" -le 1 ]; then
-  echo "[WARNING] Trace file appears to be empty (only header)" >&2
+if [ "$NETIF" = "auto" ]; then
+  NETIF=$(ip route | awk '/default/ {print $5; exit}')
+fi
+if [ -z "$NETIF" ]; then
+  NETIF=$(ip -o link show | awk -F': ' '$2 != "lo" {sub(/@.*/, "", $2); print $2; exit}')
+fi
+if [ "$NETIF" != "any" ] && { [ -z "$NETIF" ] || ! ip link show "$NETIF" >/dev/null 2>&1; }; then
+  echo "[ERROR] Could not detect network interface. Set NETIF to any or a valid interface." >&2
+  ip -br link >&2 || true
+  exit 1
 fi
 
-# Keep container running until stopped
-tail -f /dev/null
+mkdir -p /opt/tracer/output
+echo "timestamp_ms,proxy_rx_video_bytes,proxy_tx_video_bytes" > /opt/tracer/output/trace.csv
+
+FILTER="tcp and (((src host ${DASH_SERVER_IP} and src port 80 and dst host ${DASH_PROXY_IP}) or (src host ${DASH_PROXY_IP} and src port 80 and dst host ${DASH_CLIENT_IP})))"
+
+echo "Monitoring interface: $NETIF" >&2
+echo "DASH server: $DASH_SERVER_IP  proxy: $DASH_PROXY_IP  client: $DASH_CLIENT_IP" >&2
+echo "tcpdump filter: $FILTER" >&2
+
+# Count TCP payload bytes for DASH HTTP responses only:
+# - server:80 -> proxy = proxy RX from origin
+# - proxy:80 -> client = proxy TX to player
+tcpdump -i "$NETIF" -n -tt -l -s 96 "$FILTER" 2>/opt/tracer/output/tcpdump.err | \
+gawk -v interval_ms="$TRACE_INTERVAL_MS" \
+     -v server="$DASH_SERVER_IP" \
+     -v proxy="$DASH_PROXY_IP" \
+     -v client="$DASH_CLIENT_IP" '
+function emit_until(bucket) {
+  while (current_bucket != "" && bucket > current_bucket) {
+    printf "%d,%d,%d\n", current_bucket, rx_bytes, tx_bytes
+    fflush()
+    rx_bytes = 0
+    tx_bytes = 0
+    current_bucket += interval_ms
+  }
+}
+/ length [0-9]+/ {
+  ts_ms = int($1 * 1000)
+  bucket = int(ts_ms / interval_ms) * interval_ms
+  if (current_bucket == "") {
+    current_bucket = bucket
+  }
+  emit_until(bucket)
+
+  src = $3
+  dst = $5
+  sub(/:$/, "", dst)
+  sub(/\.[0-9]+$/, "", src)
+  sub(/\.[0-9]+$/, "", dst)
+
+  len = $NF + 0
+  if (src == server && dst == proxy) {
+    rx_bytes += len
+  } else if (src == proxy && dst == client) {
+    tx_bytes += len
+  }
+}
+END {
+  if (current_bucket != "") {
+    printf "%d,%d,%d\n", current_bucket, rx_bytes, tx_bytes
+  }
+}' >> /opt/tracer/output/trace.csv

@@ -12,6 +12,11 @@ services:
       - "coroot.monitored=true"
       - "coroot.service.type=streaming"
       - "coroot.logs.enabled=true"
+    deploy:
+      resources:
+        limits:
+          cpus: '${HTTP_SERVER_CPU_LIMIT:-0.5}'
+          memory: ${HTTP_SERVER_MEMORY_LIMIT:-512M}
 
   http_proxy:
     image: dash-caching:proxy_fixed_dl
@@ -30,6 +35,11 @@ services:
       - "coroot.monitored=true"
       - "coroot.service.type=streaming"
       - "coroot.logs.enabled=true"
+    deploy:
+      resources:
+        limits:
+          cpus: '${HTTP_PROXY_CPU_LIMIT:-1.0}'
+          memory: ${HTTP_PROXY_MEMORY_LIMIT:-1G}
 
   http_client:
     image: dash-caching:client
@@ -48,16 +58,23 @@ services:
       - "coroot.monitored=true"
       - "coroot.service.type=streaming"
       - "coroot.logs.enabled=true"
+    deploy:
+      resources:
+        limits:
+          cpus: '${HTTP_CLIENT_CPU_LIMIT:-0.5}'
+          memory: ${HTTP_CLIENT_MEMORY_LIMIT:-512M}
 
   perf_monitor:
     build:
-      context: .
-      dockerfile: perf_monitor/Dockerfile
+      context: ../shared/perf_monitor
+      dockerfile: Dockerfile
     volumes:
       - ./results:/output:rw
       - ./pids:/pids:ro
     environment:
       - OUTPUT_DIR=/output
+      - PID_FILE=/pids/dash.pid
+      - INTERVAL=${PERF_MONITOR_INTERVAL_SECONDS:-0.5}
     pid: host
     cap_add:
       - SYS_ADMIN
@@ -66,6 +83,11 @@ services:
       - SYS_PTRACE  # Add this for process monitoring
     privileged: true
     user: root  # Ensure running as root
+    deploy:
+      resources:
+        limits:
+          cpus: '${PERF_MONITOR_CPU_LIMIT:-0.25}'
+          memory: ${PERF_MONITOR_MEMORY_LIMIT:-256M}
 
   trace_container:
     image: bpftrace-container:latest
@@ -84,7 +106,11 @@ services:
       - apparmor:unconfined
       - seccomp:unconfined
     environment:
-      - NETIF=eth0  # Use the container's default interface
+      - NETIF=${DASH_TRACE_INTERFACE:-any}  # Capture Docker bridge traffic by default
+      - DASH_SERVER_IP=${DASH_SERVER_IP:-}
+      - DASH_PROXY_IP=${DASH_PROXY_IP:-}
+      - DASH_CLIENT_IP=${DASH_CLIENT_IP:-}
+      - TRACE_INTERVAL_MS=${TRACE_INTERVAL_MS:-10}
     volumes:
       - /sys/kernel/debug:/sys/kernel/debug  # Required for bpftrace
       - /lib/modules:/lib/modules:ro  # Required for bpftrace
@@ -95,6 +121,11 @@ services:
     working_dir: /opt/tracer
     entrypoint: ["/bin/bash", "-c"]
     command: ./trace_container_net.sh
+    deploy:
+      resources:
+        limits:
+          cpus: '${TRACE_CONTAINER_CPU_LIMIT:-0.5}'
+          memory: ${TRACE_CONTAINER_MEMORY_LIMIT:-256M}
 
   # mpv:
   # build: ./mpv

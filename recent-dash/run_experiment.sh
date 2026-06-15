@@ -1,27 +1,31 @@
 #!/bin/bash
 set -e
 
-# Add near the beginning of your script to ensure bc is installed
+# bc is required for timestamp/startup timing. Install it on the host first.
 if ! command -v bc &> /dev/null; then
-    echo "Installing bc (required for timestamp alignment)..."
-    apt-get update && apt-get install -y bc || yum install -y bc
+  echo "[ERROR] Missing required host command: bc" >&2
+  echo "Install bc before running this experiment." >&2
+  exit 1
 fi
 
-# Define the measure_container_startup function FIRST
+if [ ! -f "segments/manifest.mpd" ]; then
+  echo "[ERROR] Missing DASH assets: recent-dash/segments/manifest.mpd" >&2
+  echo "Restore the migrated DASH segments into recent-dash/segments/ before running this rig." >&2
+  exit 1
+fi
+
 measure_container_startup() {
   local container_name=$1
   local start_time=$2
-  local container_id=$(docker ps -qf "name=dash-caching-$container_name")
-  
+  local container_id
+  container_id=$(docker ps -qf "name=dash-caching-$container_name")
+
   if [ -n "$container_id" ]; then
-    # Get container creation time from Docker
-    local created_at=$(docker inspect --format='{{.Created}}' $container_id)
-    local started_at=$(docker inspect --format='{{.State.StartedAt}}' $container_id)
-    
-    # Calculate time to instantiate (in seconds)
-    local current_time=$(date +%s.%N)
-    local time_diff=$(echo "$current_time - $start_time" | bc)
-    
+    local current_time
+    local time_diff
+    current_time=$(date +%s.%N)
+    time_diff=$(echo "$current_time - $start_time" | bc)
+
     echo "Container $container_name instantiation time: $time_diff seconds" >> "$results_dir/container_timing.txt"
     echo "[DEBUG] $container_name took $time_diff seconds to instantiate"
   else
@@ -29,258 +33,241 @@ measure_container_startup() {
   fi
 }
 
-# Get current timestamp and CPU info for results directory
+wait_for_container() {
+  local container_name=$1
+  local waited=0
+  local container_id=""
+
+  while [ "$waited" -lt "$readiness_timeout_seconds" ]; do
+    container_id=$(docker ps -qf "name=dash-caching-$container_name")
+    if [ -n "$container_id" ]; then
+      echo "$container_id"
+      return 0
+    fi
+    echo "[DEBUG] Waiting for $container_name container... (${waited}s elapsed)" >&2
+    sleep "$readiness_poll_seconds"
+    waited=$((waited + readiness_poll_seconds))
+  done
+
+  echo "[ERROR] Timed out waiting for $container_name container after ${readiness_timeout_seconds}s" >&2
+  return 1
+}
+
+http_url_ok() {
+  local url=$1
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS --max-time 2 "$url" >/dev/null
+    return $?
+  fi
+  if command -v wget >/dev/null 2>&1; then
+    wget -q --timeout=2 -O /dev/null "$url"
+    return $?
+  fi
+
+  local rest=${url#http://}
+  local host_port=${rest%%/*}
+  local path="/${rest#*/}"
+  local host=${host_port%%:*}
+  local port=${host_port##*:}
+  if [ "$host" = "$port" ]; then
+    port=80
+  fi
+
+  exec 3<>"/dev/tcp/$host/$port" || return 1
+  printf 'GET %s HTTP/1.0\r\nHost: %s\r\n\r\n' "$path" "$host" >&3
+  local status=""
+  IFS= read -r status <&3 || true
+  exec 3<&-
+  exec 3>&-
+  [[ "$status" =~ ^HTTP/[0-9.]+[[:space:]](2|3)[0-9][0-9] ]]
+}
+
+wait_for_http_url() {
+  local name=$1
+  local url=$2
+  local waited=0
+
+  while [ "$waited" -lt "$readiness_timeout_seconds" ]; do
+    if http_url_ok "$url"; then
+      echo "[DEBUG] $name ready at $url"
+      return 0
+    fi
+    echo "[DEBUG] Waiting for $name at $url... (${waited}s elapsed)"
+    sleep "$readiness_poll_seconds"
+    waited=$((waited + readiness_poll_seconds))
+  done
+
+  echo "[ERROR] Timed out waiting for $name at $url after ${readiness_timeout_seconds}s" >&2
+  return 1
+}
+
 timestamp=$(date +%Y%m%d_%H%M%S)
 cpu_model=$(lscpu | grep "Model name" | sed 's/.*: *//g' | tr -s ' ' '_' | tr -d ',()/')
 start_time=$(date +%s)
 
-# Container type from first argument (default to "dash")
 container_type=${1:-dash}
-arguments=${2:-""}  # Optional second argument
+experiment_duration_seconds=${EXPERIMENT_DURATION_SECONDS:-500}
+readiness_timeout_seconds=${READINESS_TIMEOUT_SECONDS:-60}
+readiness_poll_seconds=${READINESS_POLL_SECONDS:-2}
 
-# Create a uniquely named results directory
 results_dir="results_${container_type}_${cpu_model}_${timestamp}"
-mkdir -p "$results_dir"
-mkdir -p "$results_dir/logs"
-mkdir -p "$results_dir/traces"
-mkdir -p "$results_dir/perf"
+mkdir -p "$results_dir/logs" "$results_dir/traces" "$results_dir/perf"
 
 echo "[DEBUG] Working directory: $(pwd)"
-# echo "[DEBUG] Files in current directory:"
-# ls -la
-
-# Clean up old CSV files before starting a new experiment
 echo "Cleaning up old CSV files..."
-rm -f ./results/*.csv ./traces/*.csv ./perf_monitor/output/*.csv 2>/dev/null || true
+rm -f ./results/*.csv ./traces/*.csv 2>/dev/null || true
 
 echo "Preparing results directory: $results_dir"
 
-# Compose file name
 COMPOSE_FILE="docker-compose.yml"
-PROXY_SERVICE="http_proxy"
 
-# Stop and remove existing containers
 echo "Stopping and removing existing containers..."
-docker compose -f $COMPOSE_FILE down --remove-orphans
+docker compose -f "$COMPOSE_FILE" down --remove-orphans
 
-# Create a file to store timing information
 touch "$results_dir/container_timing.txt"
 echo "Container Instantiation Timing:" > "$results_dir/container_timing.txt"
 
-# Start main containers with timing
 main_containers_start=$(date +%s.%N)
-echo "Building and starting fresh containers..."
-echo "[DEBUG] Starting all services except trace_container..."
-docker compose -f $COMPOSE_FILE up http_server http_proxy http_client -d
-echo "[DEBUG] Sleeping 2 seconds to allow containers to start..."
-sleep 4
+echo "Building and starting fresh DASH containers..."
+docker compose -f "$COMPOSE_FILE" up -d http_server http_proxy http_client
 
-# Measure main container startup times
+SERVER_CONTAINER=$(wait_for_container "http_server")
+PROXY_CONTAINER=$(wait_for_container "http_proxy")
+CLIENT_CONTAINER=$(wait_for_container "http_client")
+
 measure_container_startup "http_server" "$main_containers_start"
-measure_container_startup "http_proxy" "$main_containers_start" 
+measure_container_startup "http_proxy" "$main_containers_start"
 measure_container_startup "http_client" "$main_containers_start"
 
-# Start and measure perf_monitor container
-perf_monitor_start=$(date +%s.%N)
-echo "[DEBUG] Starting performance monitoring..."
-docker compose -f $COMPOSE_FILE up -d perf_monitor
-PERF_MONITOR_CONTAINER=$(docker ps -qf "name=dash-caching-perf_monitor")
-measure_container_startup "perf_monitor" "$perf_monitor_start"
+CLIENT_PORT=$(docker port "$CLIENT_CONTAINER" 80 | cut -d ":" -f 2)
+if [ -z "$CLIENT_PORT" ]; then
+  echo "[ERROR] Could not resolve DASH client host port." >&2
+  exit 1
+fi
+CLIENT_URL="http://localhost:$CLIENT_PORT/manifest.mpd"
+wait_for_http_url "DASH client manifest" "$CLIENT_URL"
 
-# Start and measure trace_container
-trace_container_start=$(date +%s.%N)
-echo "[DEBUG] Starting trace_container..."
-docker compose -f $COMPOSE_FILE up -d trace_container
-TRACE_CONTAINER=$(docker ps -qf "name=dash-caching-trace_container")
-measure_container_startup "trace_container" "$trace_container_start"
-
-# # Get proxy PIDs
-# echo "[DEBUG] Getting proxy PIDs inside the container..."
-# PROXY_PIDS=$(docker exec $PROXY_CONTAINER pgrep -f "proxy")
-# echo "[DEBUG] PROXY_PIds detected: $PROXY_PIDS"
-
-
-# Early in the script - detect and update PIDs immediately
-echo "[DEBUG] Getting proxy container ID..."
-PROXY_CONTAINER=$(docker ps -qf "name=dash-caching-http_proxy")
 echo "[DEBUG] Proxy container ID: $PROXY_CONTAINER"
-
-# Get all PIDs inside the proxy container
 echo "[DEBUG] Getting all PIDs inside the proxy container..."
-PROXY_PIDS=$(docker top $PROXY_CONTAINER -eo pid | awk 'NR>1 {print $1}')
+PROXY_PIDS=$(docker top "$PROXY_CONTAINER" -eo pid | awk 'NR>1 {print $1}')
 echo "[DEBUG] All PIDs detected: $PROXY_PIDS"
 
-# IMPORTANT: Update dash.pid IMMEDIATELY after detection
+DASH_SERVER_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$SERVER_CONTAINER")
+DASH_PROXY_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$PROXY_CONTAINER")
+DASH_CLIENT_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CLIENT_CONTAINER")
+if [ -z "$DASH_SERVER_IP" ] || [ -z "$DASH_PROXY_IP" ] || [ -z "$DASH_CLIENT_IP" ]; then
+  echo "[ERROR] Could not resolve DASH container IPs for video-byte tracing." >&2
+  exit 1
+fi
+export DASH_SERVER_IP DASH_PROXY_IP DASH_CLIENT_IP
+echo "[DEBUG] DASH trace endpoints: server=$DASH_SERVER_IP proxy=$DASH_PROXY_IP client=$DASH_CLIENT_IP"
+
 mkdir -p ./pids
 echo "$PROXY_PIDS" | grep -v "^1$" | sort -u > ./pids/dash.pid
 echo "[DEBUG] Updated dash.pid contents:"
 cat ./pids/dash.pid
 
-# Rebuild perf_monitor image without cache before starting it
-echo "[DEBUG] Rebuilding perf_monitor image without cache..."
-docker compose -f $COMPOSE_FILE build --no-cache perf_monitor
+echo "[DEBUG] Building perf_monitor image..."
+docker compose -f "$COMPOSE_FILE" build perf_monitor
 
-# Now start the performance monitoring container
+perf_monitor_start=$(date +%s.%N)
 echo "[DEBUG] Starting performance monitoring..."
-docker compose -f $COMPOSE_FILE up -d perf_monitor
+docker compose -f "$COMPOSE_FILE" up -d perf_monitor
 PERF_MONITOR_CONTAINER=$(docker ps -qf "name=dash-caching-perf_monitor")
 echo "[DEBUG] perf_monitor container ID: $PERF_MONITOR_CONTAINER"
+measure_container_startup "perf_monitor" "$perf_monitor_start"
 
-# Start the trace container
+trace_container_start=$(date +%s.%N)
 echo "[DEBUG] Starting trace_container..."
-docker compose -f $COMPOSE_FILE up -d trace_container
+docker compose -f "$COMPOSE_FILE" up -d trace_container
 TRACE_CONTAINER=$(docker ps -qf "name=dash-caching-trace_container")
 echo "[DEBUG] trace_container container ID: $TRACE_CONTAINER"
+measure_container_startup "trace_container" "$trace_container_start"
 
-# Get the port for the DASH client
-CLIENT_CONTAINER=$(docker ps -qf "name=dash-caching-http_client")
-CLIENT_PORT=$(docker port $CLIENT_CONTAINER 80 | cut -d ":" -f 2)
 echo "[DEBUG] DASH client mapped port: $CLIENT_PORT"
+echo "DASH URL: $CLIENT_URL"
 
-# Print URL for DASH client
-echo "DASH URL: http://localhost:$CLIENT_PORT/manifest.mpd"
-
-# Wait for user input to end the experiment
-echo "Press ENTER to end the experiment..."
-# Add a timeout and be more explicit about input handling
-if [ -t 0 ]; then  # Check if stdin is a terminal
-  read -p "WAITING FOR USER INPUT > " -r
-  echo "[DEBUG] User input received, ending experiment..."
-else
-  echo "[DEBUG] Running in non-interactive mode, waiting 60 seconds..."
-  sleep 500
-fi
+echo "Running experiment for ${experiment_duration_seconds} seconds..."
+sleep "$experiment_duration_seconds"
 echo "[DEBUG] Ending the experiment..."
 
-# NOW collect the performance data AFTER the experiment has run
 echo "[DEBUG] Collecting performance data after experiment completion..."
 if [ -n "$PERF_MONITOR_CONTAINER" ]; then
-  if docker exec $PERF_MONITOR_CONTAINER ls -la /output/aggregated_metrics.csv 2>/dev/null; then
-    echo "[DEBUG] Found aggregated_metrics.csv, copying performance monitoring data..."
-    docker cp "$PERF_MONITOR_CONTAINER:/output/aggregated_metrics.csv" "$results_dir/perf/performance_data.csv"
+  if docker exec "$PERF_MONITOR_CONTAINER" ls -la /output/perf_metrics.csv 2>/dev/null; then
+    docker cp "$PERF_MONITOR_CONTAINER:/output/perf_metrics.csv" "$results_dir/perf/perf_metrics.csv"
     chmod -R u+rw "$results_dir"
-    echo "Copied perf_monitor output to $results_dir/perf/performance_data.csv"
+    echo "Copied perf_monitor output to $results_dir/perf/perf_metrics.csv"
   else
-    echo "[WARNING] Could not find aggregated_metrics.csv in perf_monitor container."
+    echo "[WARNING] Could not find perf_metrics.csv in perf_monitor container."
   fi
 fi
 
-# Copy trace files AFTER experiment
 if [ -n "$TRACE_CONTAINER" ]; then
+  docker exec "$TRACE_CONTAINER" pkill -INT tcpdump 2>/dev/null || true
+  sleep 1
   echo "[DEBUG] Copying network trace data from trace_container..."
   docker cp "$TRACE_CONTAINER:/opt/tracer/output/trace.csv" "$results_dir/traces/trace.csv"
   echo "Copied trace file to $results_dir/traces/trace.csv"
 fi
 
-# Collect container logs before stopping
 echo "[DEBUG] Collecting container logs..."
 containers=("http_server" "http_proxy" "http_client" "perf_monitor" "trace_container")
 for container in "${containers[@]}"; do
-  container_id=$(docker ps -qf "name=dash-caching-$container")
+  container_id=$(docker ps -aqf "name=dash-caching-$container")
   if [ -n "$container_id" ]; then
-    echo "[DEBUG] Saving logs for $container container..."
-    docker logs $container_id > "$results_dir/logs/$container.log" 2>&1
+    docker logs "$container_id" > "$results_dir/logs/$container.log" 2>&1
     echo "Saved logs for $container to $results_dir/logs/$container.log"
   else
     echo "[WARNING] Container $container not found, skipping log collection."
   fi
 done
 
-# Stop and clean up
 echo "[DEBUG] Stopping and cleaning up containers..."
-docker compose -f $COMPOSE_FILE down
+docker compose -f "$COMPOSE_FILE" down --remove-orphans
 
-# Calculate and display script duration
 end_time=$(date +%s)
 duration=$((end_time - start_time))
 echo "Experiment completed in $duration seconds."
-
-# Print final message with results directory
 echo "Results are saved in the directory: $results_dir"
 
-# === Add summary block here ===
 RESULTS_TXT="$results_dir/results.txt"
 HTTP_SERVER_LOG="$results_dir/logs/http_server.log"
 DOCKER_COMPOSE_FILE="docker-compose.yml"
 
-# 1. Extract DASH video resolutions
-RESOLUTIONS=$(grep -oP '/video_\\K[0-9]+(?=_)' "$HTTP_SERVER_LOG" | sort -u | tr '\n' ' ')
+RESOLUTIONS=$(grep -oP '/video_\\K[0-9]+(?=_)' "$HTTP_SERVER_LOG" 2>/dev/null | sort -u | tr '\n' ' ')
 if [ -z "$RESOLUTIONS" ]; then
   RESOLUTIONS="Not found"
 fi
 
-# 2. Extract SERVICE_ADDITIONAL_PARAMETERS for http_proxy
 PROXY_PARAMS=$(awk '/http_proxy:/,/- [A-Za-z_]+:/{if ($0 ~ /SERVICE_ADDITIONAL_PARAMETERS/) print $0}' "$DOCKER_COMPOSE_FILE" | head -1 | sed 's/.*SERVICE_ADDITIONAL_PARAMETERS=//')
 if [ -z "$PROXY_PARAMS" ]; then
   PROXY_PARAMS="Not found"
 fi
 
-# 3. Get machine characteristics
 CPU_MODEL=$(lscpu | grep "Model name" | sed 's/.*: *//g')
 CPU_CORES=$(lscpu | grep "^CPU(s):" | awk '{print $2}')
 MEM_TOTAL=$(free -h | awk '/^Mem:/ {print $2}')
 
-# 4. Write to results.txt
 {
   echo "==== Experiment Summary ===="
   echo "http_proxy SERVICE_ADDITIONAL_PARAMETERS: $PROXY_PARAMS"
+  echo "DASH URL: $CLIENT_URL"
+  echo "DASH trace endpoints: server=$DASH_SERVER_IP proxy=$DASH_PROXY_IP client=$DASH_CLIENT_IP"
   echo "Machine CPU Model: $CPU_MODEL"
   echo "Machine CPU Cores: $CPU_CORES"
   echo "Machine Total Memory: $MEM_TOTAL"
   echo "Experiment Directory: $results_dir"
   echo "Experiment Timestamp: $(date)"
-  
-  # Add container timing information
   echo ""
   echo "==== Container Instantiation Timing ===="
   if [ -f "$results_dir/container_timing.txt" ]; then
-    # Skip the first line which is just the header
     tail -n +2 "$results_dir/container_timing.txt"
   else
     echo "No container timing information available"
   fi
+  echo ""
+  echo "==== DASH Resolutions Seen In Server Log ===="
+  echo "$RESOLUTIONS"
 } > "$RESULTS_TXT"
 
 echo "Wrote summary to $RESULTS_TXT"
-
-# echo "Aligning timestamps in CSV files..."
-
-# # Define paths
-# TRACES_FILE="$results_dir/traces/trace_${MAIN_PROXY_PID}.csv"
-# METRICS_FILE="$results_dir/perf/aggregated_metrics.csv"
-# ALIGNED_DIR="$results_dir/aligned"
-
-# # Create aligned directory
-# mkdir -p "$ALIGNED_DIR"
-
-# # Check if both files exist
-# if [ -f "$TRACES_FILE" ] && [ -f "$METRICS_FILE" ]; then
-#     # Get first timestamp from each file (skip header line)
-#     TRACE_FIRST_TS=$(awk -F, 'NR==2 {print $1; exit}' "$TRACES_FILE")
-#     METRIC_FIRST_TS=$(awk -F, 'NR==2 {print $1; exit}' "$METRICS_FILE")
-    
-#     if [ -n "$TRACE_FIRST_TS" ] && [ -n "$METRIC_FIRST_TS" ]; then
-#         # Calculate offset (requires bc)
-#         TS_OFFSET=$(echo "$METRIC_FIRST_TS - $TRACE_FIRST_TS" | bc)
-#         echo "Timestamp offset between files: $TS_OFFSET ms"
-        
-#         # Create version with relative time (seconds since start of first file)
-#         awk -F, -v first_ts="$TRACE_FIRST_TS" 'BEGIN {OFS=","} 
-#             NR==1 {print "seconds_elapsed", substr($0, index($0,",")+1); next} 
-#             {printf "%.3f,%s\n", ($1-first_ts)/1000, substr($0, index($0,",")+1)}' \
-#             "$TRACES_FILE" > "$ALIGNED_DIR/traces_relative.csv"
-            
-#         awk -F, -v first_ts="$TRACE_FIRST_TS" 'BEGIN {OFS=","} 
-#             NR==1 {print "seconds_elapsed", substr($0, index($0,",")+1); next} 
-#             {printf "%.3f,%s\n", ($1-first_ts)/1000, substr($0, index($0,",")+1)}' \
-#             "$METRICS_FILE" > "$ALIGNED_DIR/metrics_relative.csv"
-            
-#         echo "Created aligned files with relative timestamps in $ALIGNED_DIR"
-#     else
-#         echo "Could not extract timestamps from data files."
-#     fi
-# else
-#     echo "Missing trace or metrics files for timestamp alignment."
-# fi
-
-# echo "Experiment finished."

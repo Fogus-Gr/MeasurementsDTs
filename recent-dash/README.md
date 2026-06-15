@@ -1,19 +1,174 @@
+# recent-dash Experiment Rig
 
-# Build info
+`recent-dash` is a DASH/HTTP adaptive bitrate caching experiment rig. It is
+separate from the HPE/RTSP rigs: no HPE model runs here, no pose-estimation
+output is produced, and the measured component is the HTTP proxy/cache path
+between the DASH server and the DASH player.
 
-First we build the images
-```
-sudo docker compose build
+## Prerequisites
+
+Install these on the host before running the rig:
+
+- Docker with Compose v2
+- `bc`, used by `run_experiment.sh` for startup/timestamp timing
+- Linux host support for privileged packet capture when using `trace_container`
+
+The tracer image includes `tcpdump`, `gawk`, `iproute2`, `procps`, and
+`net-tools`.
+
+## DASH Segments
+
+The DASH assets are intentionally not committed. Restore the migrated assets
+into:
+
+```text
+recent-dash/segments/
 ```
 
-Then we start the containers
-```
-sudo docker compose up
+The runner and HTTP server image expect at least:
+
+```text
+recent-dash/segments/manifest.mpd
 ```
 
-# Stream
-To connect using the VLC
-1. You need the exposed host port that the HTTP Client server is listening on
-2. Open VLC and select Media > Open video stream
-3. Insert the URL `http://<SERVER_IP>:<EXPOSED_HTTP_CLIENT_PORT>/manifest.mpd`
-4. Click play and enjoy.
+`recent-dash/segments/.gitkeep` is tracked only to preserve the restore
+location after clone or migration. Do not commit the actual segment files.
+
+## Services
+
+`docker-compose.yml` starts five services:
+
+| Service | Purpose |
+|---|---|
+| `http_server` | Origin HTTP server for DASH content. |
+| `http_proxy` | DASH caching/ABR proxy under measurement. |
+| `http_client` | HTTP client endpoint that exposes the DASH manifest URL. |
+| `perf_monitor` | Reads proxy PIDs from `./pids/dash.pid` and writes CPU/RSS samples to `perf_metrics.csv`. |
+| `trace_container` | Captures DASH-only TCP payload bytes and writes `trace.csv`. |
+
+## Run
+
+```bash
+cd recent-dash
+./run_experiment.sh
+```
+
+The default run duration is 500 seconds. Override it with:
+
+```bash
+EXPERIMENT_DURATION_SECONDS=120 ./run_experiment.sh
+```
+
+Readiness checks wait up to 60 seconds by default and poll every 2 seconds:
+
+```bash
+READINESS_TIMEOUT_SECONDS=90 READINESS_POLL_SECONDS=3 ./run_experiment.sh
+```
+
+Optional first argument changes the result-directory label:
+
+```bash
+./run_experiment.sh dash
+```
+
+## Runner Flow
+
+The runner performs one complete experiment lifecycle:
+
+1. Checks host prerequisites and verifies `segments/manifest.mpd` exists.
+2. Creates a timestamped result directory.
+3. Cleans previous transient CSV files from local output folders.
+4. Runs `docker compose down --remove-orphans`.
+5. Starts `http_server`, `http_proxy`, and `http_client`.
+6. Waits for the containers and client manifest URL to become ready.
+7. Detects proxy host PIDs and writes `./pids/dash.pid`.
+8. Resolves Docker-network IPs for server, proxy, and client.
+9. Starts `perf_monitor` and `trace_container`.
+10. Prints the DASH manifest URL.
+11. The player is separate: point VLC, mpv, or another DASH-capable player at the printed URL so the proxy actually carries traffic.
+12. Sleeps for `EXPERIMENT_DURATION_SECONDS`.
+13. Copies CSVs and logs into the timestamped result directory.
+14. Stops the compose stack and writes `results.txt`.
+
+## Traffic Generation
+
+The rig does not generate DASH traffic by itself. The player is what requests
+the manifest and segment files, which is why the tracer stays empty if no player
+connects.
+
+Use one of these:
+
+- Open the printed URL in VLC on the host.
+- Run a local `mpv` player using `Dockerfile_mpv` if you want a containerized player.
+- Use any other DASH-capable player that can fetch the manifest URL.
+
+## DASH-Only Network Tracing
+
+The rig traces DASH video bytes by filtering TCP payloads on the DASH HTTP
+response paths. It does not count all interface traffic.
+
+| Direction | Meaning | CSV column |
+|---|---|---|
+| origin server `:80` -> proxy | bytes received by proxy from origin | `proxy_rx_video_bytes` |
+| proxy `:80` -> client | bytes sent by proxy to player | `proxy_tx_video_bytes` |
+
+The tracer writes:
+
+```text
+timestamp_ms,proxy_rx_video_bytes,proxy_tx_video_bytes
+```
+
+Defaults:
+
+```bash
+DASH_TRACE_INTERFACE=any
+TRACE_INTERVAL_MS=10
+```
+
+`any` is the default because DASH traffic flows over Docker bridge interfaces
+while the tracer runs with host networking. Override only when you know the
+exact interface:
+
+```bash
+DASH_TRACE_INTERFACE=docker0 TRACE_INTERVAL_MS=50 ./run_experiment.sh
+```
+
+## Resource Limits
+
+Compose applies conservative local resource limits. Each can be overridden from
+the environment.
+
+| Service | CPU env var | Default | Memory env var | Default |
+|---|---|---:|---|---:|
+| `http_server` | `HTTP_SERVER_CPU_LIMIT` | `0.5` | `HTTP_SERVER_MEMORY_LIMIT` | `512M` |
+| `http_proxy` | `HTTP_PROXY_CPU_LIMIT` | `1.0` | `HTTP_PROXY_MEMORY_LIMIT` | `1G` |
+| `http_client` | `HTTP_CLIENT_CPU_LIMIT` | `0.5` | `HTTP_CLIENT_MEMORY_LIMIT` | `512M` |
+| `perf_monitor` | `PERF_MONITOR_CPU_LIMIT` | `0.25` | `PERF_MONITOR_MEMORY_LIMIT` | `256M` |
+| `trace_container` | `TRACE_CONTAINER_CPU_LIMIT` | `0.5` | `TRACE_CONTAINER_MEMORY_LIMIT` | `256M` |
+
+`perf_monitor` also accepts:
+
+| Variable | Default | Meaning |
+|---|---:|---|
+| `PERF_MONITOR_INTERVAL_SECONDS` | `0.5` | Sampling interval for `/proc` CPU deltas. |
+
+## Result Files
+
+Each run creates:
+
+```text
+results_<label>_<cpu_model>_<timestamp>/
+  container_timing.txt
+  logs/
+  perf/
+    perf_metrics.csv
+  traces/
+    trace.csv
+  results.txt
+```
+
+During a run, open the printed URL in VLC, `mpv`, or another DASH-capable player:
+
+```text
+http://localhost:<EXPOSED_HTTP_CLIENT_PORT>/manifest.mpd
+```
