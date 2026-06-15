@@ -111,7 +111,7 @@ Results directories are always timestamped so runs never overwrite each other.
 4. Document required model files in `README.md` under "Download pretrained models".
 
 ### Adding a New Experiment Rig
-1. Create a new folder with `run_experiment.sh` and `docker-compose.yaml`.
+1. Create a new folder with an entry script (`run_experiment.sh` or `run_experiment_bcc.sh`) and `docker-compose.yaml`.
 2. Follow the existing lifecycle pattern (cleanup -> start server -> start HPE ->
    start sidecars -> wait -> collect -> teardown).
 3. Write results to a timestamped subdirectory.
@@ -224,7 +224,7 @@ cd ffmpeg_hpe   && ./run_experiment_bcc.sh movenet
 cd recent-dash  && ./run_experiment.sh
 ```
 
-**OpenVINO threading:** The `ffmpeg_hpe` rig uses `OV_MODE=throughput`, `OV_STREAMS=1`, `OV_THREADS=6` in `docker-compose.yaml`. Without `OV_THREADS`, the code auto-sizes using cgroup-aware CPU detection (`sched_getaffinity`).
+**OpenVINO threading:** The `ffmpeg_hpe` rig uses `ffmpeg_hpe/.env` defaults (`OV_MODE=latency`, `OV_STREAMS=1`, `OV_THREADS=3`, plus matching `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, and `OPENBLAS_NUM_THREADS`) via `docker-compose.yaml`. Without `OV_THREADS`, the code auto-sizes using cgroup-aware CPU detection (`sched_getaffinity`).
 
 ### Standalone measurement tools
 ```bash

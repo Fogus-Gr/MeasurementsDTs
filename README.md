@@ -39,7 +39,7 @@ Two things in one:
 | `alphapose_hpe.py` | AlphaPose backend (PyTorch + YOLO detector) |
 | `utils/evaluator.py` | COCO-format JSON/CSV serialisation and Tx bandwidth measurement |
 | `utils/visualizer.py` | OpenCV skeleton and keypoint rendering |
-| `ffmpeg_hpe/run_experiment.sh` | Main benchmarking entry point — orchestrates the full experiment lifecycle |
+| `ffmpeg_hpe/run_experiment_bcc.sh` | Main benchmarking entry point for the BCC rig — orchestrates the full experiment lifecycle |
 | `ffmpeg_hpe/docker-compose.yaml` | Defines all services for the streaming benchmark rig |
 
 ### How the HPE pipeline works
@@ -85,21 +85,22 @@ The `hpe` service in `ffmpeg_hpe/docker-compose.yaml` is configured with explici
 
 | Setting | Value | Notes |
 |---------|-------|-------|
-| `cpus` | `6.0` | 8-vCPU host: hpe gets 6, streamer 1, aux services share remainder |
+| `cpus` | `3.0` | 4-vCPU host: hpe gets 3, streamer gets 1, tuning defaults live in `ffmpeg_hpe/.env` |
 | `shm_size` | `8gb` | Required for large model inference |
 
 **OpenVINO Threading Configuration:**
 
 | Env Variable | Default | Tuned Value | Notes |
 |-------------|---------|------------|-------|
-| `OV_MODE` | `latency` | `throughput` | Optimized for batch/streaming workloads |
+| `OV_MODE` | `latency` | `latency` | Low-core-count default for this rig |
 | `OV_STREAMS` | OpenVINO default | `1` | Single stream for consistent latency |
-| `OV_THREADS` | `auto (cpus-2)` | `6` | Explicit override; auto-fallback uses `sched_getaffinity` |
-| `OMP_NUM_THREADS` | OpenMP default | `6` | Matches OV_THREADS |
-| `MKL_NUM_THREADS` | MKL default | `6` | Matches OV_THREADS |
-| `OPENBLAS_NUM_THREADS` | OpenBLAS default | `6` | Matches OV_THREADS |
+| `OV_THREADS` | `auto (cpus-2)` | `3` | Matches the 3-core HPE cap |
+| `OMP_NUM_THREADS` | OpenMP default | `3` | Matches OV_THREADS |
+| `MKL_NUM_THREADS` | MKL default | `3` | Matches OV_THREADS |
+| `OPENBLAS_NUM_THREADS` | OpenBLAS default | `3` | Matches OV_THREADS |
 
 **Auto-sizing fallback:** If `OV_THREADS` is not set, the code auto-calculates using `os.sched_getaffinity(0)` (cgroup-aware) minus 2 for headroom, defaulting to 1 minimum. Explicit env var always takes priority.
+These defaults are defined in `ffmpeg_hpe/.env` and can be overridden per host without editing the compose file.
 
 ### Branch structure
 
@@ -291,8 +292,8 @@ The main experiment rig. Five containers:
 - `bcc-tracer` (optional, commented out) — eBPF/BCC kernel tracing of network traffic
 
 ```bash
-cd ffmpeg_hpe && ./run_experiment.sh <method>
-# e.g. ./run_experiment.sh movenet
+cd ffmpeg_hpe && ./run_experiment_bcc.sh <method>
+# e.g. ./run_experiment_bcc.sh movenet
 ```
 
 #### `recent-dash/` — DASH/HTTP caching experiment
