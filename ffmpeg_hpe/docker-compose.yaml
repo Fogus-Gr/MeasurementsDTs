@@ -94,7 +94,7 @@ services:
     # Add explicit DNS configuration
     dns_search: .
     command: >
-      python3 main.py --method ${HPE_METHOD} --input ${HPE_INPUT} --csv --output_dir /output/ --device ${HPE_DEVICE} --measurement_interval_ms 10
+      python3 main.py --method ${HPE_METHOD} --input ${HPE_INPUT} --csv --output_dir /output/ --device ${HPE_DEVICE} --measurement_interval_ms 10 ${HPE_EXTRA_ARGS:-}
 
   gpu-metrics:
     build:

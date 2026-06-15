@@ -87,7 +87,7 @@ rm -f ./results/*.csv ./traces/*.csv ./perf_monitor/output/*.csv 2>/dev/null || 
 rm -f ./csv/*.csv 2>/dev/null || true
 rm -rf ./tracer_output/* 2>/dev/null || true
 
-echo "Preparing results directory: $results_dir"
+echo "Preparing experiment workspace..."
 
 # Step 6: Compose file and container names
 docker_compose_file="docker-compose.yaml"
@@ -98,10 +98,6 @@ H264_CONTAINER_NAME="h264-streaming-server"
 echo "Stopping and removing existing containers..."
 docker compose -f $docker_compose_file down -v --remove-orphans
 docker rm -f hpe bcc-tracer 2>/dev/null || true
-
-# Initialize timing file
-touch "$results_dir/container_timing.txt"
-echo "Container Instantiation Timing:" > "$results_dir/container_timing.txt"
 
 # Step 8: Start the streaming server
 echo "Starting h264-streaming-server..."
@@ -129,12 +125,14 @@ echo "[DEBUG] Using direct IP for stream: $STREAM_URL"
 arguments="$*"  # Capture all arguments
 
 export HPE_METHOD="${1:-movenet}"
+shift || true
+export HPE_EXTRA_ARGS="$*"
 export HPE_INPUT="http://h264-streaming-server:8089/stream.h264"
 export HPE_DEVICE="${HPE_DEVICE:-CPU}"
 # Method-specific defaults
-if [[ "$1" == "alphapose" || "$arguments" == *"--method alphapose"* ]]; then
+if [[ "$HPE_METHOD" == "alphapose" || "$arguments" == *"--method alphapose"* ]]; then
   export HPE_DEVICE="GPU"  # AlphaPose default
-elif [[ "$1" == "hrnet"* ]]; then
+elif [[ "$HPE_METHOD" == "hrnet"* ]]; then
   export HPE_DEVICE="CPU"
 fi
 
@@ -149,6 +147,7 @@ echo "Selected configuration:"
 echo "Method: $HPE_METHOD"
 echo "Device: $HPE_DEVICE"
 echo "Input: $HPE_INPUT"
+echo "Extra args: ${HPE_EXTRA_ARGS:-<none>}"
 
 # Resolve device type from configuration
 device_type="${HPE_DEVICE:-CPU}"
@@ -160,6 +159,10 @@ fi
 results_dir="results_${container_type}_${cpu_threads}cores_${device_type}_${VIDEO_FILE_BASENAME}_${timestamp}"
 mkdir -p "$results_dir/logs" "$results_dir/traces/bcc" "$results_dir/perf"
 echo "Results directory: $results_dir"
+
+# Initialize timing file after results_dir is known.
+touch "$results_dir/container_timing.txt"
+echo "Container Instantiation Timing:" > "$results_dir/container_timing.txt"
 
 # Step 11: Start HPE container
 hpe_start=$(date +%s.%N)
