@@ -17,6 +17,9 @@ iperf-test/pcap/*
 *.csv
 
 # Compiled Cython/C++ files
+models/AlphaPose/alphapose/models/layers/dcn/build/
+models/AlphaPose/alphapose/utils/roi_align/build/
+models/AlphaPose/detector/nms/build/
 *.cpp
 *.so
 *.cu
