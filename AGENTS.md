@@ -73,7 +73,19 @@ files.
 All output goes to `out/` by default (also gitignored). Do not hardcode other
 output paths.
 
-### Known TODOs in Code
+### Current Project Gaps
+- `unit_tests/` currently contains sample media only; there are no automated
+  tests yet. Prefer small `unittest` smoke tests before adding new test
+  dependencies.
+- There is no linter / formatter config and no CI workflow. Match local style
+  instead of introducing broad formatting churn.
+- `.devcontainer/devcontainer.json` exists, but it is not a complete
+  dependency setup for this project.
+- `requirements.txt` is currently pip-style but README setup uses
+  `conda install --file requirements.txt`; verify installer changes carefully
+  and keep README, requirements files, and AGENTS.md aligned.
+
+### Known Issues and TODOs
 - `movenet_hpe.py`: keypoint-level score filtering not yet applied to body
   score (marked `# TODO`).
 - `alphapose_hpe.py`: batch parallelism for directory input not implemented;
@@ -82,6 +94,11 @@ output paths.
   MoveNet (marked `# TODO`).
 - `openvino_base_hpe.py → run_model`: `results` variable may be unbound if
   `raw_result` is falsy — needs a guard.
+- `utils/export_pose_results.py`: `reset_results()` exists but is not called
+  before each run, so module-level accumulators can leak state across multiple
+  runs in one process.
+- `alphapose_hpe.py → postprocess`: `Body` keypoint arrays should preserve all
+  17 COCO joints so downstream rendering/export can index consistently.
 
 ## Running the Project
 
@@ -102,8 +119,8 @@ python3 main.py --method movenet --input http://<your-ip>:8080/video_feed --save
 
 ## Environment Setup
 
-Requires a Conda environment — the devcontainer does **not** install
-dependencies automatically.
+Requires a Conda environment for the documented GPU-capable setup. The
+devcontainer does **not** install all dependencies automatically.
 
 ```bash
 conda create -n hpe python=3.8.10 -y
