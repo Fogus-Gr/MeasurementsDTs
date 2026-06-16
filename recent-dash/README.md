@@ -36,13 +36,14 @@ location after clone or migration. Do not commit the actual segment files.
 
 ## Services
 
-`docker-compose.yml` starts five services:
+`docker-compose.yml` starts six services:
 
 | Service | Purpose |
 |---|---|
 | `http_server` | Origin HTTP server for DASH content. |
 | `http_proxy` | DASH caching/ABR proxy under measurement. |
-| `http_client` | HTTP client endpoint that exposes the DASH manifest URL. |
+| `http_client` | Player-facing HTTP endpoint that exposes the DASH manifest and segment files. |
+| `mpv` | Headless DASH player container that fetches the manifest from `http_client` and drives traffic. |
 | `perf_monitor` | Reads proxy PIDs from `./pids/dash.pid` and writes CPU/RSS samples to `perf_metrics.csv`. |
 | `trace_container` | Captures DASH-only TCP payload bytes and writes `trace.csv`. |
 
@@ -80,15 +81,16 @@ The runner performs one complete experiment lifecycle:
 3. Cleans previous transient CSV files from local output folders.
 4. Runs `docker compose down --remove-orphans`.
 5. Starts `http_server`, `http_proxy`, and `http_client`.
-6. Waits for the containers and client manifest URL to become ready.
+6. Waits for the published proxy and client manifest URLs to become ready.
 7. Detects proxy host PIDs and writes `./pids/dash.pid`.
 8. Resolves Docker-network IPs for server, proxy, and client.
-9. Starts `perf_monitor` and `trace_container`.
-10. Prints the DASH manifest URL.
-11. The player is separate: point VLC, mpv, or another DASH-capable player at the printed URL so the proxy actually carries traffic.
-12. Sleeps for `EXPERIMENT_DURATION_SECONDS`.
-13. Copies CSVs and logs into the timestamped result directory.
-14. Stops the compose stack and writes `results.txt`.
+9. Starts `perf_monitor`.
+10. Starts the containerized `mpv` player unless `ENABLE_DASH_PLAYER=0`.
+11. Resolves the player container IP, starts `trace_container`, and records `proxy -> http_client` traffic.
+12. Prints the proxy URL and player URL.
+13. Sleeps for `EXPERIMENT_DURATION_SECONDS`.
+14. Copies CSVs and logs into the timestamped result directory.
+15. Stops the compose stack and writes `results.txt`.
 
 ## Traffic Generation
 
@@ -98,9 +100,10 @@ connects.
 
 Use one of these:
 
-- Open the printed URL in VLC on the host.
-- Run a local `mpv` player using `Dockerfile_mpv` if you want a containerized player.
-- Use any other DASH-capable player that can fetch the manifest URL.
+- Let the default containerized `mpv` service fetch the manifest and segments
+  from `http_client`.
+- Set `ENABLE_DASH_PLAYER=0` if you want to use a host player against
+  `http://localhost:8881/manifest.mpd`.
 
 ## DASH-Only Network Tracing
 
@@ -110,7 +113,7 @@ response paths. It does not count all interface traffic.
 | Direction | Meaning | CSV column |
 |---|---|---|
 | origin server `:80` -> proxy | bytes received by proxy from origin | `proxy_rx_video_bytes` |
-| proxy `:80` -> client | bytes sent by proxy to player | `proxy_tx_video_bytes` |
+| proxy `:80` -> player | bytes sent by proxy to the DASH player | `proxy_tx_video_bytes` |
 
 The tracer writes:
 
@@ -167,8 +170,9 @@ results_<label>_<cpu_model>_<timestamp>/
   results.txt
 ```
 
-During a run, open the printed URL in VLC, `mpv`, or another DASH-capable player:
+If you disable the containerized player, open the printed URL in VLC, `mpv`,
+or another DASH-capable player:
 
 ```text
-http://localhost:<EXPOSED_HTTP_CLIENT_PORT>/manifest.mpd
+http://localhost:8881/manifest.mpd
 ```

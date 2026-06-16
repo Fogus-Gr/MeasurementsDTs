@@ -298,10 +298,11 @@ cd ffmpeg_hpe && ./run_experiment_bcc.sh <method>
 
 #### `recent-dash/` — DASH/HTTP caching experiment
 
-A separate experiment measuring a DASH video streaming proxy — not HPE inference. It expects untracked DASH assets restored under `recent-dash/segments/`, including `manifest.mpd`. Three application containers:
+A separate experiment measuring a DASH video streaming proxy — not HPE inference. It expects untracked DASH assets restored under `recent-dash/segments/`, including `manifest.mpd`. The rig starts three application containers plus a headless `mpv` player container by default:
 - `http_server` — serves MPEG-DASH segments
 - `http_proxy` — caching proxy between server and client
 - `http_client` — exposes the DASH manifest URL; a DASH-capable player such as VLC or `mpv` must fetch it to generate traffic
+- `mpv` — headless containerized DASH player that fetches the manifest by default
 
 Uses `perf_monitor` from `shared/perf_monitor/` plus a DASH-specific packet tracer. The tracer writes `traces/trace.csv` with `proxy_rx_video_bytes` and `proxy_tx_video_bytes`, filtered to `server:80 -> proxy` and `proxy:80 -> client`. The observability infrastructure (Prometheus + Grafana + Coroot) is defined in `docker-compose.infra.yml`.
 
