@@ -42,7 +42,7 @@ location after clone or migration. Do not commit the actual segment files.
 |---|---|
 | `http_server` | Origin HTTP server for DASH content. |
 | `http_proxy` | DASH caching/ABR proxy under measurement. |
-| `http_client` | Player-facing HTTP endpoint that exposes the DASH manifest and segment files. |
+| `http_client` | Player-facing HTTP endpoint that exposes the DASH manifest. |
 | `mpv` | Headless DASH player container that fetches the manifest from `http_client` and drives traffic. |
 | `perf_monitor` | Reads proxy PIDs from `./pids/dash.pid` and writes CPU/RSS samples to `perf_metrics.csv`. |
 | `trace_container` | Captures DASH-only TCP payload bytes and writes `trace.csv`. |
@@ -97,6 +97,11 @@ The runner performs one complete experiment lifecycle:
 The rig does not generate DASH traffic by itself. The player is what requests
 the manifest and segment files, which is why the tracer stays empty if no player
 connects.
+
+Do not mount the full `segments/` tree into `http_client`. That makes the player
+serve the DASH assets locally and bypasses the proxy. The experiment needs the
+player to fetch the manifest from `http_client` and the media segments through
+`http_proxy`.
 
 Use one of these:
 
@@ -155,6 +160,10 @@ the environment.
 |---|---:|---|
 | `PERF_MONITOR_INTERVAL_SECONDS` | `0.5` | Sampling interval for `/proc` CPU deltas. |
 
+The trace output also includes `served_segments.log`, a request log with the
+segment names observed during the run. `results.txt` derives the unique
+resolution IDs from that same log.
+
 ## Result Files
 
 Each run creates:
@@ -167,6 +176,7 @@ results_<label>_<cpu_model>_<timestamp>/
     perf_metrics.csv
   traces/
     trace.csv
+    served_segments.log
   results.txt
 ```
 

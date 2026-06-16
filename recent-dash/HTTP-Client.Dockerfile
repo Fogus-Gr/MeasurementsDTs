@@ -43,7 +43,6 @@ RUN mkdir -p /opt/http_local/public
 WORKDIR /opt/http_local
 
 # Copy files from the build image
-COPY segments/manifest.mpd /opt/http_local/public/manifest.mpd
 COPY --from=dash_caching_files /opt/recent-dash-proposed-caching/local/local /opt/http_local/local
 
 # Setup launching script

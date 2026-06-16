@@ -55,6 +55,9 @@ services:
       - "80"
     ports:
       - "80"
+    volumes:
+      # Mount only the manifest so segment fetches still travel through the proxy.
+      - ./segments/manifest.mpd:/opt/http_local/public/manifest.mpd:ro
     environment:
       - HTTP_PROXY_DOMAIN=http_proxy
       - HTTP_PROXY_PORT=80

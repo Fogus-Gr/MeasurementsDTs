@@ -104,6 +104,24 @@ wait_for_http_url() {
   return 1
 }
 
+wait_for_trace_ready() {
+  local container_id=$1
+  local waited=0
+
+  while [ "$waited" -lt "$readiness_timeout_seconds" ]; do
+    if docker logs "$container_id" 2>&1 | grep -q "tcpdump filter:"; then
+      echo "[DEBUG] trace_container is ready to capture DASH traffic"
+      return 0
+    fi
+    echo "[DEBUG] Waiting for trace_container readiness... (${waited}s elapsed)" >&2
+    sleep "$readiness_poll_seconds"
+    waited=$((waited + readiness_poll_seconds))
+  done
+
+  echo "[ERROR] Timed out waiting for trace_container readiness after ${readiness_timeout_seconds}s" >&2
+  return 1
+}
+
 timestamp=$(date +%Y%m%d_%H%M%S)
 cpu_model=$(lscpu | grep "Model name" | sed 's/.*: *//g' | tr -s ' ' '_' | tr -d ',()/')
 start_time=$(date +%s)
@@ -124,7 +142,7 @@ mkdir -p "$results_dir/logs" "$results_dir/traces" "$results_dir/perf"
 
 echo "[DEBUG] Working directory: $(pwd)"
 echo "Cleaning up old CSV files..."
-rm -f ./results/*.csv ./traces/*.csv 2>/dev/null || true
+rm -f ./results/*.csv ./traces/*.csv ./traces/*.log ./traces/*.err 2>/dev/null || true
 
 echo "Preparing results directory: $results_dir"
 
@@ -194,6 +212,14 @@ PERF_MONITOR_CONTAINER=$(docker ps -qf "name=dash-caching-perf_monitor")
 echo "[DEBUG] perf_monitor container ID: $PERF_MONITOR_CONTAINER"
 measure_container_startup "perf_monitor" "$perf_monitor_start"
 
+trace_container_start=$(date +%s.%N)
+echo "[DEBUG] Starting trace_container..."
+docker compose -f "$COMPOSE_FILE" up -d trace_container
+TRACE_CONTAINER=$(docker ps -qf "name=dash-caching-trace_container")
+echo "[DEBUG] trace_container container ID: $TRACE_CONTAINER"
+measure_container_startup "trace_container" "$trace_container_start"
+wait_for_trace_ready "$TRACE_CONTAINER"
+
 PLAYER_CONTAINER=""
 DASH_PLAYER_IP=""
 if [ "$enable_dash_player" != "0" ]; then
@@ -217,13 +243,6 @@ else
 fi
 echo "DASH player URL: $DASH_PLAYER_URL"
 
-trace_container_start=$(date +%s.%N)
-echo "[DEBUG] Starting trace_container..."
-docker compose -f "$COMPOSE_FILE" up -d trace_container
-TRACE_CONTAINER=$(docker ps -qf "name=dash-caching-trace_container")
-echo "[DEBUG] trace_container container ID: $TRACE_CONTAINER"
-measure_container_startup "trace_container" "$trace_container_start"
-
 echo "Running experiment for ${experiment_duration_seconds} seconds..."
 sleep "$experiment_duration_seconds"
 echo "[DEBUG] Ending the experiment..."
@@ -245,6 +264,10 @@ if [ -n "$TRACE_CONTAINER" ]; then
   echo "[DEBUG] Copying network trace data from trace_container..."
   docker cp "$TRACE_CONTAINER:/opt/tracer/output/trace.csv" "$results_dir/traces/trace.csv"
   echo "Copied trace file to $results_dir/traces/trace.csv"
+  if [ -f "./traces/served_segments.log" ]; then
+    cp "./traces/served_segments.log" "$results_dir/traces/served_segments.log"
+    echo "Copied served segment log to $results_dir/traces/served_segments.log"
+  fi
 fi
 
 echo "[DEBUG] Collecting container logs..."
@@ -271,12 +294,23 @@ echo "Experiment completed in $duration seconds."
 echo "Results are saved in the directory: $results_dir"
 
 RESULTS_TXT="$results_dir/results.txt"
-HTTP_SERVER_LOG="$results_dir/logs/http_server.log"
+SEGMENTS_LOG="$results_dir/traces/served_segments.log"
 DOCKER_COMPOSE_FILE="docker-compose.yml"
 
-RESOLUTIONS=$(grep -oP '/video_\\K[0-9]+(?=_)' "$HTTP_SERVER_LOG" 2>/dev/null | sort -u | tr '\n' ' ')
-if [ -z "$RESOLUTIONS" ]; then
-  RESOLUTIONS="Not found"
+RESOLUTIONS="Not found"
+if [ -f "$SEGMENTS_LOG" ]; then
+  RESOLUTIONS=$(cut -d',' -f2 "$SEGMENTS_LOG" 2>/dev/null | grep -oP 'video_\K[0-9]+' | sort -u | tr '\n' ' ')
+  if [ -z "$RESOLUTIONS" ]; then
+    RESOLUTIONS="Not found"
+  fi
+fi
+
+SEGMENTS_OBSERVED="Not found"
+if [ -f "$SEGMENTS_LOG" ]; then
+  SEGMENTS_OBSERVED=$(cut -d',' -f2 "$SEGMENTS_LOG" 2>/dev/null | sort -u | tr '\n' ' ')
+  if [ -z "$SEGMENTS_OBSERVED" ]; then
+    SEGMENTS_OBSERVED="Not found"
+  fi
 fi
 
 PROXY_PARAMS=$(awk '/http_proxy:/,/- [A-Za-z_]+:/{if ($0 ~ /SERVICE_ADDITIONAL_PARAMETERS/) print $0}' "$DOCKER_COMPOSE_FILE" | head -1 | sed 's/.*SERVICE_ADDITIONAL_PARAMETERS=//')
@@ -316,8 +350,11 @@ MEM_TOTAL=$(free -h | awk '/^Mem:/ {print $2}')
     echo "No container timing information available"
   fi
   echo ""
-  echo "==== DASH Resolutions Seen In Server Log ===="
+  echo "==== DASH Resolutions Seen In Request Log ===="
   echo "$RESOLUTIONS"
+  echo ""
+  echo "==== DASH Segments Seen In Request Log ===="
+  echo "$SEGMENTS_OBSERVED"
 } > "$RESULTS_TXT"
 
 echo "Wrote summary to $RESULTS_TXT"
