@@ -55,7 +55,7 @@ results_dir="results_${container_type}_${cpu_model}_${timestamp}"
 mkdir -p "$results_dir/logs" "$results_dir/traces" "$results_dir/perf"
 
 # Step 5: Clean up old CSV files before starting a new experiment
-rm -f ./results/*.csv ./traces/*.csv ./perf_monitor/output/*.csv 2>/dev/null || true
+rm -f ./results/*.csv ./traces/*.csv 2>/dev/null || true
 rm -f ./csv/*.csv 2>/dev/null || true
 
 echo "Preparing results directory: $results_dir"
@@ -201,7 +201,7 @@ done
 # Step 18: Collect performance data after experiment completion
 mkdir -p "$results_dir/perf"
 if [ -n "$PERF_MONITOR_CONTAINER" ]; then
-  # recent-dash/perf_monitor writes perf_metrics.csv; ffmpeg_hpe/monitor_pid.sh writes pid_metrics.csv
+  # shared/perf_monitor writes perf_metrics.csv; ffmpeg_hpe/monitor_pid.sh writes pid_metrics.csv
   for perf_file in perf_metrics.csv pid_metrics.csv network_stats.csv; do
     if docker exec $PERF_MONITOR_CONTAINER ls -la /output/$perf_file 2>/dev/null || false; then
       docker cp "$PERF_MONITOR_CONTAINER:/output/$perf_file" "$results_dir/perf/$perf_file" && \

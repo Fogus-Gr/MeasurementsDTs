@@ -83,7 +83,7 @@ mkdir -p ./logs ./traces/bcc ./perf
 
 # Step 5: Enhanced cleanup including BCC tracer outputs
 echo "[DEBUG] Cleaning previous run artifacts..."
-rm -f ./results/*.csv ./traces/*.csv ./perf_monitor/output/*.csv 2>/dev/null || true
+rm -f ./results/*.csv ./traces/*.csv 2>/dev/null || true
 rm -f ./csv/*.csv 2>/dev/null || true
 rm -rf ./tracer_output/* 2>/dev/null || true
 
