@@ -10,7 +10,7 @@ services:
       - "${SERVER_PORT}:${SERVER_PORT}"
     volumes:
       # Mount your video files directory
-      - /home/user/MeasurementsDTs/videos/rangeOfMotion/hd_00_00.mp4:/app/videos/hd_00_00.mp4:ro
+      - ${VIDEO_HOST_PATH:-../videos/rangeOfMotion/hd_00_00.mp4}:/app/videos/hd_00_00.mp4:ro
     environment:
       - SERVER_PORT=${SERVER_PORT}
       - VIDEO_FILE=/app/videos/hd_00_00.mp4

@@ -1,4 +1,5 @@
 import os
+import sys
 import cv2
 import numpy as np
 import torch
@@ -288,14 +289,14 @@ class AlphaPoseHPE(BaseHPE):
                 pose_coord[:, 1] /= orig_h
                 
                 person_keypoints = np.hstack((pose_coord, pose_score.reshape(-1, 1)))
-                keypoints_array.append(person_keypoints)
+                keypoints_array.append((person_keypoints, bbox))
             
             return keypoints_array
         
     def postprocess(self, predictions):
         bodies = []
 
-        for person_keypoints in predictions:
+        for person_keypoints, det_box in predictions:
             normalized_kps = person_keypoints[:, :2]    # x, y coordinates normalized in [0,1]
             scores = person_keypoints[:, 2]
             valid_scores = scores > self.score_thresh
@@ -303,18 +304,32 @@ class AlphaPoseHPE(BaseHPE):
             if np.any(valid_scores):
                 valid_kps = normalized_kps[valid_scores]
 
-                # Calculate bounding box in normalized coordinates - TODO note: this is not calculated by the model
-                xmin, ymin = valid_kps.min(axis=0)
-                xmax, ymax = valid_kps.max(axis=0)
-                
                 # Rescale normalized keypoints to padded dimensions
                 keypoints = valid_kps * np.array([self.padding.padded_w, self.padding.padded_h])
                 keypoints = np.array(keypoints)
-                
+
+                # Use detector bounding box scaled to padded-frame coordinates
+                if det_box is not None:
+                    scale_x = self.padding.padded_w / self.img_w if self.img_w > 0 else 1.0
+                    scale_y = self.padding.padded_h / self.img_h if self.img_h > 0 else 1.0
+                    x1, y1, x2, y2 = det_box
+                    xmin = int(x1 * scale_x)
+                    ymin = int(y1 * scale_y)
+                    xmax = int(x2 * scale_x)
+                    ymax = int(y2 * scale_y)
+                else:
+                    # Fallback: derive from visible keypoints
+                    print("[WARNING] AlphaPose: no detector box, falling back to keypoint bbox", file=sys.stderr)
+                    kp_min = valid_kps.min(axis=0)
+                    kp_max = valid_kps.max(axis=0)
+                    xmin = int(kp_min[0] * self.padding.padded_w)
+                    ymin = int(kp_min[1] * self.padding.padded_h)
+                    xmax = int(kp_max[0] * self.padding.padded_w)
+                    ymax = int(kp_max[1] * self.padding.padded_h)
+
                 body = Body(
                     score=np.mean(scores[valid_scores]),  # Average score of valid keypoints
-                    xmin=int(xmin * self.padding.padded_w), ymin=int(ymin * self.padding.padded_h),
-                    xmax=int(xmax * self.padding.padded_w), ymax=int(ymax * self.padding.padded_h),
+                    xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax,
                     keypoints_score=scores[valid_scores],
                     keypoints=keypoints.astype(float),
                     keypoints_norm=normalized_kps

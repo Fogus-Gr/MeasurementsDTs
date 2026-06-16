@@ -217,6 +217,8 @@ class BaseHPE(ABC):
         return True
     
     def main_loop(self):
+        from utils.evaluator import reset_results
+        reset_results()
         # Load model if not already loaded
         if not hasattr(self, 'model') or self.model is None:
             print("Loading model...")
@@ -294,6 +296,8 @@ class BaseHPE(ABC):
 
     def main_loop_with_timeout(self, timeout_seconds=300, max_frames=0):
         """Enhanced main loop with timeout and frame count detection for HTTP streams"""
+        from utils.evaluator import reset_results
+        reset_results()
         # Load model if not already loaded
         if not hasattr(self, 'model') or self.model is None:
             print("Loading model...")

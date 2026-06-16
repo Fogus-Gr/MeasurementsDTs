@@ -260,15 +260,10 @@ class OpenVINOBaseHPE(BaseHPE):
         inputs, preprocessing_meta = self.model.preprocess(model_input)
         raw_result = self.model.infer_sync(inputs)
 
-        results = None
-        if raw_result:
-            results = self.model.postprocess(raw_result, preprocessing_meta)
-
-        poses = []
-        scores = []
-        if results:
-            poses, scores = results
-
+        if not raw_result:
+            return [], []
+        results = self.model.postprocess(raw_result, preprocessing_meta)
+        poses, scores = results if results else ([], [])
         return poses, scores
 
     def postprocess(self, predictions):
@@ -320,6 +315,8 @@ class OpenVINOBaseHPE(BaseHPE):
 
     def main_loop(self):
         """Override main_loop to handle streaming URLs properly"""
+        from utils.evaluator import reset_results
+        reset_results()
         # Load model if not already loaded
         if not hasattr(self, 'model') or self.model is None:
             print("Loading model...")
