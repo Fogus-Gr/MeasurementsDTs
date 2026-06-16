@@ -2,4 +2,6 @@
 segments/*
 !segments/.gitkeep
 captures/
+pids/
+traces/
 results_dash_*/

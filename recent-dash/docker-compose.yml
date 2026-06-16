@@ -12,6 +12,9 @@ services:
       - "coroot.monitored=true"
       - "coroot.service.type=streaming"
       - "coroot.logs.enabled=true"
+    networks:
+      default:
+        ipv4_address: ${DASH_SERVER_IP:-172.28.0.2}
     deploy:
       resources:
         limits:
@@ -22,6 +25,8 @@ services:
     image: dash-caching:proxy_fixed_dl
     expose:
       - "80"
+    ports:
+      - "${HTTP_PROXY_HOST_PORT:-8881}:80"
     environment:
       - HTTP_SERVER_DOMAIN=http_server
       - HTTP_SERVER_PORT=80
@@ -35,6 +40,9 @@ services:
       - "coroot.monitored=true"
       - "coroot.service.type=streaming"
       - "coroot.logs.enabled=true"
+    networks:
+      default:
+        ipv4_address: ${DASH_PROXY_IP:-172.28.0.3}
     deploy:
       resources:
         limits:
@@ -58,11 +66,33 @@ services:
       - "coroot.monitored=true"
       - "coroot.service.type=streaming"
       - "coroot.logs.enabled=true"
+    networks:
+      default:
+        ipv4_address: ${DASH_CLIENT_IP:-172.28.0.4}
     deploy:
       resources:
         limits:
           cpus: '${HTTP_CLIENT_CPU_LIMIT:-0.5}'
           memory: ${HTTP_CLIENT_MEMORY_LIMIT:-512M}
+
+  mpv:
+    build:
+      context: .
+      dockerfile: Dockerfile_mpv
+    image: dash-caching:mpv
+    depends_on:
+      - http_client
+    restart: unless-stopped
+    environment:
+      - DASH_PLAYER_URL=http://http_client/manifest.mpd
+      - DASH_PLAYER_WARMUP_SECONDS=${DASH_PLAYER_WARMUP_SECONDS:-30}
+      - DASH_PLAYER_RETRY_DELAY_SECONDS=${DASH_PLAYER_RETRY_DELAY_SECONDS:-1}
+      - DASH_PLAYER_START_DELAY_SECONDS=${DASH_PLAYER_START_DELAY_SECONDS:-5}
+    deploy:
+      resources:
+        limits:
+          cpus: '${MPV_CPU_LIMIT:-0.25}'
+          memory: ${MPV_MEMORY_LIMIT:-256M}
 
   perf_monitor:
     build:
@@ -110,6 +140,7 @@ services:
       - DASH_SERVER_IP=${DASH_SERVER_IP:-}
       - DASH_PROXY_IP=${DASH_PROXY_IP:-}
       - DASH_CLIENT_IP=${DASH_CLIENT_IP:-}
+      - DASH_PLAYER_IP=${DASH_PLAYER_IP:-}
       - TRACE_INTERVAL_MS=${TRACE_INTERVAL_MS:-10}
     volumes:
       - /sys/kernel/debug:/sys/kernel/debug  # Required for bpftrace
@@ -131,4 +162,11 @@ services:
   # build: ./mpv
   # entrypoint: >
   #   mpv --vo=null --ao=pcm --no-terminal
-  #   http://dash-server:32901/manifest.mpd
+  #   http://http_client/manifest.mpd
+
+networks:
+  default:
+    name: dash-caching_default
+    ipam:
+      config:
+        - subnet: ${DASH_SUBNET:-172.28.0.0/24}

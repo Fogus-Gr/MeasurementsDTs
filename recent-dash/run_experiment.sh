@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$SCRIPT_DIR"
+
 # bc is required for timestamp/startup timing. Install it on the host first.
 if ! command -v bc &> /dev/null; then
   echo "[ERROR] Missing required host command: bc" >&2
@@ -109,6 +112,12 @@ container_type=${1:-dash}
 experiment_duration_seconds=${EXPERIMENT_DURATION_SECONDS:-500}
 readiness_timeout_seconds=${READINESS_TIMEOUT_SECONDS:-60}
 readiness_poll_seconds=${READINESS_POLL_SECONDS:-2}
+enable_dash_player=${ENABLE_DASH_PLAYER:-1}
+DASH_SERVER_IP=${DASH_SERVER_IP:-172.28.0.2}
+DASH_PROXY_IP=${DASH_PROXY_IP:-172.28.0.3}
+DASH_CLIENT_IP=${DASH_CLIENT_IP:-172.28.0.4}
+DASH_PLAYER_URL="http://http_client/manifest.mpd"
+export DASH_SERVER_IP DASH_PROXY_IP DASH_CLIENT_IP DASH_PLAYER_URL
 
 results_dir="results_${container_type}_${cpu_model}_${timestamp}"
 mkdir -p "$results_dir/logs" "$results_dir/traces" "$results_dir/perf"
@@ -139,6 +148,18 @@ measure_container_startup "http_server" "$main_containers_start"
 measure_container_startup "http_proxy" "$main_containers_start"
 measure_container_startup "http_client" "$main_containers_start"
 
+echo "[DEBUG] Proxy container ID: $PROXY_CONTAINER"
+PROXY_PORT=$(docker port "$PROXY_CONTAINER" 80 | cut -d ":" -f 2)
+if [ -z "$PROXY_PORT" ]; then
+  echo "[ERROR] Could not resolve DASH proxy host port." >&2
+  exit 1
+fi
+PROXY_URL="http://localhost:$PROXY_PORT/manifest.mpd"
+wait_for_http_url "DASH proxy manifest" "$PROXY_URL"
+
+echo "[DEBUG] Getting all PIDs inside the proxy container..."
+PROXY_PIDS=$(docker top "$PROXY_CONTAINER" -eo pid | awk 'NR>1 {print $1}')
+echo "[DEBUG] All PIDs detected: $PROXY_PIDS"
 CLIENT_PORT=$(docker port "$CLIENT_CONTAINER" 80 | cut -d ":" -f 2)
 if [ -z "$CLIENT_PORT" ]; then
   echo "[ERROR] Could not resolve DASH client host port." >&2
@@ -146,11 +167,6 @@ if [ -z "$CLIENT_PORT" ]; then
 fi
 CLIENT_URL="http://localhost:$CLIENT_PORT/manifest.mpd"
 wait_for_http_url "DASH client manifest" "$CLIENT_URL"
-
-echo "[DEBUG] Proxy container ID: $PROXY_CONTAINER"
-echo "[DEBUG] Getting all PIDs inside the proxy container..."
-PROXY_PIDS=$(docker top "$PROXY_CONTAINER" -eo pid | awk 'NR>1 {print $1}')
-echo "[DEBUG] All PIDs detected: $PROXY_PIDS"
 
 DASH_SERVER_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$SERVER_CONTAINER")
 DASH_PROXY_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$PROXY_CONTAINER")
@@ -161,6 +177,7 @@ if [ -z "$DASH_SERVER_IP" ] || [ -z "$DASH_PROXY_IP" ] || [ -z "$DASH_CLIENT_IP"
 fi
 export DASH_SERVER_IP DASH_PROXY_IP DASH_CLIENT_IP
 echo "[DEBUG] DASH trace endpoints: server=$DASH_SERVER_IP proxy=$DASH_PROXY_IP client=$DASH_CLIENT_IP"
+echo "[DEBUG] DASH proxy URL: $PROXY_URL"
 
 mkdir -p ./pids
 echo "$PROXY_PIDS" | grep -v "^1$" | sort -u > ./pids/dash.pid
@@ -168,7 +185,7 @@ echo "[DEBUG] Updated dash.pid contents:"
 cat ./pids/dash.pid
 
 echo "[DEBUG] Building perf_monitor image..."
-docker compose -f "$COMPOSE_FILE" build perf_monitor
+docker compose -f "$COMPOSE_FILE" build perf_monitor trace_container
 
 perf_monitor_start=$(date +%s.%N)
 echo "[DEBUG] Starting performance monitoring..."
@@ -177,15 +194,35 @@ PERF_MONITOR_CONTAINER=$(docker ps -qf "name=dash-caching-perf_monitor")
 echo "[DEBUG] perf_monitor container ID: $PERF_MONITOR_CONTAINER"
 measure_container_startup "perf_monitor" "$perf_monitor_start"
 
+PLAYER_CONTAINER=""
+DASH_PLAYER_IP=""
+if [ "$enable_dash_player" != "0" ]; then
+  player_start=$(date +%s.%N)
+  echo "[DEBUG] Starting DASH player container..."
+  docker compose -f "$COMPOSE_FILE" up -d mpv
+  PLAYER_CONTAINER=$(wait_for_container "mpv")
+  echo "[DEBUG] mpv container ID: $PLAYER_CONTAINER"
+  DASH_PLAYER_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$PLAYER_CONTAINER")
+  if [ -z "$DASH_PLAYER_IP" ]; then
+    echo "[ERROR] Could not resolve DASH player container IP." >&2
+    exit 1
+  fi
+  export DASH_PLAYER_IP
+  echo "[DEBUG] DASH player IP: $DASH_PLAYER_IP"
+  echo "[DEBUG] DASH player URL: $DASH_PLAYER_URL"
+  echo "[DEBUG] DASH trace endpoints: server=$DASH_SERVER_IP proxy=$DASH_PROXY_IP client=$DASH_CLIENT_IP player=$DASH_PLAYER_IP"
+  measure_container_startup "mpv" "$player_start"
+else
+  echo "[DEBUG] DASH player container disabled by ENABLE_DASH_PLAYER=0"
+fi
+echo "DASH player URL: $DASH_PLAYER_URL"
+
 trace_container_start=$(date +%s.%N)
 echo "[DEBUG] Starting trace_container..."
 docker compose -f "$COMPOSE_FILE" up -d trace_container
 TRACE_CONTAINER=$(docker ps -qf "name=dash-caching-trace_container")
 echo "[DEBUG] trace_container container ID: $TRACE_CONTAINER"
 measure_container_startup "trace_container" "$trace_container_start"
-
-echo "[DEBUG] DASH client mapped port: $CLIENT_PORT"
-echo "DASH URL: $CLIENT_URL"
 
 echo "Running experiment for ${experiment_duration_seconds} seconds..."
 sleep "$experiment_duration_seconds"
@@ -212,6 +249,9 @@ fi
 
 echo "[DEBUG] Collecting container logs..."
 containers=("http_server" "http_proxy" "http_client" "perf_monitor" "trace_container")
+if [ -n "$PLAYER_CONTAINER" ]; then
+  containers+=("mpv")
+fi
 for container in "${containers[@]}"; do
   container_id=$(docker ps -aqf "name=dash-caching-$container")
   if [ -n "$container_id" ]; then
@@ -251,8 +291,18 @@ MEM_TOTAL=$(free -h | awk '/^Mem:/ {print $2}')
 {
   echo "==== Experiment Summary ===="
   echo "http_proxy SERVICE_ADDITIONAL_PARAMETERS: $PROXY_PARAMS"
-  echo "DASH URL: $CLIENT_URL"
-  echo "DASH trace endpoints: server=$DASH_SERVER_IP proxy=$DASH_PROXY_IP client=$DASH_CLIENT_IP"
+  echo "DASH proxy URL: $PROXY_URL"
+  echo "DASH player URL: $DASH_PLAYER_URL"
+  if [ -n "$PLAYER_CONTAINER" ]; then
+    echo "DASH player container: mpv"
+  else
+    echo "DASH player container: disabled"
+  fi
+  if [ -n "$DASH_PLAYER_IP" ]; then
+    echo "DASH trace endpoints: server=$DASH_SERVER_IP proxy=$DASH_PROXY_IP client=$DASH_CLIENT_IP player=$DASH_PLAYER_IP"
+  else
+    echo "DASH trace endpoints: server=$DASH_SERVER_IP proxy=$DASH_PROXY_IP client=$DASH_CLIENT_IP player=disabled"
+  fi
   echo "Machine CPU Model: $CPU_MODEL"
   echo "Machine CPU Cores: $CPU_CORES"
   echo "Machine Total Memory: $MEM_TOTAL"

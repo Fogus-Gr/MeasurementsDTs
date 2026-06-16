@@ -10,6 +10,8 @@ if [ -z "$DASH_SERVER_IP" ] || [ -z "$DASH_PROXY_IP" ] || [ -z "$DASH_CLIENT_IP"
   exit 1
 fi
 
+DASH_GATEWAY_IP=${DASH_GATEWAY_IP:-${DASH_CLIENT_IP%.*}.1}
+
 if [ "$NETIF" = "auto" ]; then
   NETIF=$(ip route | awk '/default/ {print $5; exit}')
 fi
@@ -25,20 +27,21 @@ fi
 mkdir -p /opt/tracer/output
 echo "timestamp_ms,proxy_rx_video_bytes,proxy_tx_video_bytes" > /opt/tracer/output/trace.csv
 
-FILTER="tcp and (((src host ${DASH_SERVER_IP} and src port 80 and dst host ${DASH_PROXY_IP}) or (src host ${DASH_PROXY_IP} and src port 80 and dst host ${DASH_CLIENT_IP})))"
+FILTER="tcp and (((src host ${DASH_SERVER_IP} and src port 80 and dst host ${DASH_PROXY_IP}) or (src host ${DASH_PROXY_IP} and src port 80 and (dst host ${DASH_CLIENT_IP} or dst host ${DASH_GATEWAY_IP}))))"
 
 echo "Monitoring interface: $NETIF" >&2
-echo "DASH server: $DASH_SERVER_IP  proxy: $DASH_PROXY_IP  client: $DASH_CLIENT_IP" >&2
+echo "DASH server: $DASH_SERVER_IP  proxy: $DASH_PROXY_IP  client: $DASH_CLIENT_IP  gateway: $DASH_GATEWAY_IP" >&2
 echo "tcpdump filter: $FILTER" >&2
 
 # Count TCP payload bytes for DASH HTTP responses only:
 # - server:80 -> proxy = proxy RX from origin
-# - proxy:80 -> client = proxy TX to player
+# - proxy:80 -> client/gateway = proxy TX to player-facing client path
 tcpdump -i "$NETIF" -n -tt -l -s 96 "$FILTER" 2>/opt/tracer/output/tcpdump.err | \
 gawk -v interval_ms="$TRACE_INTERVAL_MS" \
      -v server="$DASH_SERVER_IP" \
      -v proxy="$DASH_PROXY_IP" \
-     -v client="$DASH_CLIENT_IP" '
+     -v client="$DASH_CLIENT_IP" \
+     -v gateway="$DASH_GATEWAY_IP" '
 function emit_until(bucket) {
   while (current_bucket != "" && bucket > current_bucket) {
     printf "%d,%d,%d\n", current_bucket, rx_bytes, tx_bytes
@@ -48,7 +51,11 @@ function emit_until(bucket) {
     current_bucket += interval_ms
   }
 }
-/ length [0-9]+/ {
+{
+  if (!match($0, /IP ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+ > ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+:.* length ([0-9]+)/, m)) {
+    next
+  }
+
   ts_ms = int($1 * 1000)
   bucket = int(ts_ms / interval_ms) * interval_ms
   if (current_bucket == "") {
@@ -56,16 +63,12 @@ function emit_until(bucket) {
   }
   emit_until(bucket)
 
-  src = $3
-  dst = $5
-  sub(/:$/, "", dst)
-  sub(/\.[0-9]+$/, "", src)
-  sub(/\.[0-9]+$/, "", dst)
-
-  len = $NF + 0
+  src = m[1]
+  dst = m[2]
+  len = m[3] + 0
   if (src == server && dst == proxy) {
     rx_bytes += len
-  } else if (src == proxy && dst == client) {
+  } else if (src == proxy && (dst == client || dst == gateway)) {
     tx_bytes += len
   }
 }
