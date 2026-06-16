@@ -26,12 +26,43 @@ fi
 
 mkdir -p /opt/tracer/output
 echo "timestamp_ms,proxy_rx_video_bytes,proxy_tx_video_bytes" > /opt/tracer/output/trace.csv
+REQUEST_LOG=/opt/tracer/output/served_segments.log
+: > "$REQUEST_LOG"
+
+cleanup() {
+  pkill -INT tcpdump 2>/dev/null || true
+}
+trap cleanup INT TERM EXIT
 
 FILTER="tcp and (((src host ${DASH_SERVER_IP} and src port 80 and dst host ${DASH_PROXY_IP}) or (src host ${DASH_PROXY_IP} and src port 80 and (dst host ${DASH_CLIENT_IP} or dst host ${DASH_GATEWAY_IP}))))"
+REQUEST_FILTER="tcp and dst port 80 and (dst host ${DASH_CLIENT_IP} or dst host ${DASH_PROXY_IP})"
 
 echo "Monitoring interface: $NETIF" >&2
 echo "DASH server: $DASH_SERVER_IP  proxy: $DASH_PROXY_IP  client: $DASH_CLIENT_IP  gateway: $DASH_GATEWAY_IP" >&2
 echo "tcpdump filter: $FILTER" >&2
+
+# Capture the player request paths so the results show which DASH segments were
+# actually requested during the experiment.
+echo "request capture filter: $REQUEST_FILTER" >&2
+tcpdump -i "$NETIF" -n -tt -l -s 0 -A "$REQUEST_FILTER" 2>/opt/tracer/output/tcpdump_requests.err | \
+gawk '
+function record(path) {
+  gsub(/\r$/, "", path)
+  if (path ~ /^\/video_[^[:space:]]+$/) {
+    printf "%s,%s\n", current_ts_ms, substr(path, 2)
+    fflush()
+  }
+}
+{
+  if (match($0, /^([0-9]+\.[0-9]+) /, m)) {
+    current_ts_ms = int(m[1] * 1000)
+  }
+  if (match($0, /GET[[:space:]]+([^[:space:]]+)[[:space:]]+HTTP\/[0-9.]+/, req)) {
+    path = req[1]
+    sub(/^https?:\/\/[^/]+/, "", path)
+    record(path)
+  }
+}' >> "$REQUEST_LOG" &
 
 # Count TCP payload bytes for DASH HTTP responses only:
 # - server:80 -> proxy = proxy RX from origin
