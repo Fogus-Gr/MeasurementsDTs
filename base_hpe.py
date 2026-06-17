@@ -6,6 +6,7 @@ import glob
 import time
 import torch
 import numpy as np
+import requests
 
 try:
     import PyNvCodec as nvc
@@ -363,10 +364,7 @@ class BaseHPE(ABC):
                     print(f"[ERROR] PyNvCodec decoding error: {e}")
                     break # Exit loop on error
 
-        else:   # OpenCV video/webcam/stream fallback
-            if self.cap is None:
-                print(f"[ERROR] Video capture not initialized for {self.__class__.__name__}. This HPE implementation may not support video inputs.")
-                return
+        elif self.cap is not None:   # OpenCV video/webcam/stream fallback
             print("Starting processing video/webcam data with OpenCV. Press CTR+C to exit")
             
             consecutive_failures = 0
@@ -404,6 +402,58 @@ class BaseHPE(ABC):
                     elapsed = time.time() - start_time
                     fps = frame_number / elapsed if elapsed > 0 else 0
                     print(f"Processed {frame_number} frames in {elapsed:.1f}s (avg {fps:.1f} FPS)")
+        else:
+            if not isinstance(self.input_src, str) or not self.input_src.startswith("http"):
+                print(f"[ERROR] Video capture not initialized for {self.__class__.__name__}. This HPE implementation may not support video inputs.")
+                return
+
+            print("Starting processing video/webcam data from HTTP stream. Press CTR+C to exit")
+            response = requests.get(self.input_src, stream=True, timeout=30)
+            buffer = b""
+            consecutive_failures = 0
+            max_consecutive_failures = 10
+
+            for chunk in response.iter_content(chunk_size=65536):
+                if timeout_seconds > 0 and time.time() - start_time > timeout_seconds:
+                    print(f"Timeout reached ({timeout_seconds}s) - stopping processing")
+                    break
+
+                if max_frames > 0 and frame_number >= max_frames:
+                    print(f"Max frames reached ({max_frames}) - stopping processing")
+                    break
+
+                if not chunk:
+                    continue
+
+                buffer += chunk
+                while True:
+                    start = buffer.find(b'\xff\xd8')
+                    end = buffer.find(b'\xff\xd9', start + 2) if start != -1 else -1
+                    if start == -1 or end == -1:
+                        if start > 0:
+                            buffer = buffer[start:]
+                        break
+
+                    frame_data = buffer[start:end + 2]
+                    buffer = buffer[end + 2:]
+                    frame = cv2.imdecode(np.frombuffer(frame_data, np.uint8), cv2.IMREAD_COLOR)
+                    if frame is None:
+                        consecutive_failures += 1
+                        if consecutive_failures >= max_consecutive_failures:
+                            print("Too many decode failures, stopping.")
+                            break
+                        continue
+
+                    consecutive_failures = 0
+                    self.process_frame(frame, frame_number)
+                    frame_number += 1
+
+                    if max_frames > 0 and frame_number >= max_frames:
+                        print(f"Max frames reached ({max_frames}) - stopping processing")
+                        break
+
+                if consecutive_failures >= max_consecutive_failures:
+                    break
 
         print(f"Processing completed. Total frames processed: {frame_number}")
         print(f"Total time: {time.time() - start_time:.1f}s")
