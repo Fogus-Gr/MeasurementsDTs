@@ -9,6 +9,12 @@
 - [main.py](file://main.py)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Updated OpenVINOBaseHPE postprocessing section to document the critical fix for coordinate projection issues
+- Added documentation for the conditional coordinate transformation logic that prevents double-coordinate scaling
+- Enhanced troubleshooting guidance for coordinate-related issues in OpenPose and HigherHRNet models
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
@@ -22,6 +28,8 @@
 
 ## Introduction
 This document explains the model implementation patterns used across Human Pose Estimation (HPE) implementations in this codebase. It focuses on how different HPE implementations inherit from a shared BaseHPE abstraction and override abstract methods to provide specific functionality. It documents the strategy pattern enabling runtime selection among AlphaPose, OpenPose, HigherHRNet, EfficientHRNet variants, and MoveNet. It also details differences in model loading, preprocessing, inference execution, and postprocessing across implementations, and how each subclass adapts to model-specific data formats, tensor shapes, and output processing. Finally, it demonstrates how the unified interface enables seamless switching between algorithms without changing client code and outlines the extensibility mechanism for adding new HPE implementations.
+
+**Updated** Critical reliability improvements have been implemented to address fundamental coordinate projection issues in OpenPose and HigherHRNet models, specifically fixing double-coordinate scaling problems in the postprocessing pipeline.
 
 ## Project Structure
 The HPE implementations live alongside a shared base class and a main entry that selects the desired algorithm at runtime.
@@ -44,21 +52,21 @@ D --> A
 ```
 
 **Diagram sources**
-- [base_hpe.py:36-546](file://base_hpe.py#L36-L546)
+- [base_hpe.py:36-558](file://base_hpe.py#L36-L558)
 - [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
-- [openvino_base_hpe.py:55-653](file://openvino_base_hpe.py#L55-L653)
+- [openvino_base_hpe.py:55-400](file://openvino_base_hpe.py#L55-L400)
 - [alphapose_hpe.py:33-334](file://alphapose_hpe.py#L33-L334)
 - [main.py:64-94](file://main.py#L64-L94)
 
 **Section sources**
 - [main.py:64-94](file://main.py#L64-L94)
-- [base_hpe.py:36-546](file://base_hpe.py#L36-L546)
+- [base_hpe.py:36-558](file://base_hpe.py#L36-L558)
 
 ## Core Components
 - BaseHPE: Defines the unified interface and shared orchestration logic for input handling, preprocessing, inference, postprocessing, rendering, and saving outputs. It declares abstract methods for model loading, inference, and postprocessing, ensuring all subclasses implement them consistently.
 - MoveNetHPE: Implements OpenVINO-based multipose MoveNet with fixed 256x256 input and a dedicated postprocessor that decodes per-person keypoints, bounding boxes, and scores from a flattened tensor.
-- OpenVINOBaseHPE: Provides a strategy for selecting among multiple OpenVINO models (OpenPose, HigherHRNet, EfficientHRNet variants) via a configuration map. It centralizes model loading, preprocessing, inference, and postprocessing using the OpenVINO Model API.
-- AlphaPoseHPE: Integrates the AlphaPose stack (detector + pose model) with custom preprocessing and postprocessing tailored to AlphaPose’s heatmap-to-coordinate conversion and optional detector integration.
+- OpenVINOBaseHPE: Provides a strategy for selecting among multiple OpenVINO models (OpenPose, HigherHRNet, EfficientHRNet variants) via a configuration map. It centralizes model loading, preprocessing, inference, and postprocessing using the OpenVINO Model API. **Updated** Includes critical fixes for coordinate projection reliability issues.
+- AlphaPoseHPE: Integrates the AlphaPose stack (detector + pose model) with custom preprocessing and postprocessing tailored to AlphaPose's heatmap-to-coordinate conversion and optional detector integration.
 
 Key shared capabilities:
 - Unified input handling supporting images, directories, videos, HTTP streams, and webcams.
@@ -67,9 +75,9 @@ Key shared capabilities:
 - Optional JSON/COCO export and CSV metrics collection.
 
 **Section sources**
-- [base_hpe.py:36-546](file://base_hpe.py#L36-L546)
+- [base_hpe.py:36-558](file://base_hpe.py#L36-L558)
 - [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
-- [openvino_base_hpe.py:55-653](file://openvino_base_hpe.py#L55-L653)
+- [openvino_base_hpe.py:55-400](file://openvino_base_hpe.py#L55-L400)
 - [alphapose_hpe.py:33-334](file://alphapose_hpe.py#L33-L334)
 
 ## Architecture Overview
@@ -99,7 +107,7 @@ Base->>Base : render/save/export
 **Diagram sources**
 - [main.py:22-46](file://main.py#L22-L46)
 - [main.py:64-94](file://main.py#L64-L94)
-- [base_hpe.py:207-519](file://base_hpe.py#L207-L519)
+- [base_hpe.py:207-558](file://base_hpe.py#L207-L558)
 
 ## Detailed Component Analysis
 
@@ -153,13 +161,13 @@ AlphaPoseHPE --> BaseHPE : "inherits"
 ```
 
 **Diagram sources**
-- [base_hpe.py:36-546](file://base_hpe.py#L36-L546)
+- [base_hpe.py:36-558](file://base_hpe.py#L36-L558)
 - [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
-- [openvino_base_hpe.py:55-653](file://openvino_base_hpe.py#L55-L653)
+- [openvino_base_hpe.py:55-400](file://openvino_base_hpe.py#L55-L400)
 - [alphapose_hpe.py:33-334](file://alphapose_hpe.py#L33-L334)
 
 **Section sources**
-- [base_hpe.py:36-546](file://base_hpe.py#L36-L546)
+- [base_hpe.py:36-558](file://base_hpe.py#L36-L558)
 
 ### MoveNetHPE: OpenVINO Multipose MoveNet
 - Strategy pattern usage:
@@ -195,7 +203,7 @@ MN-->>App : bodies
 
 **Diagram sources**
 - [movenet_hpe.py:58-111](file://movenet_hpe.py#L58-L111)
-- [base_hpe.py:405-519](file://base_hpe.py#L405-L519)
+- [base_hpe.py:417-558](file://base_hpe.py#L417-L558)
 
 **Section sources**
 - [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
@@ -208,13 +216,16 @@ MN-->>App : bodies
   - Creates OpenVINO Core, applies performance hints (latency/throughput), CPU pinning, and hyper-threading.
   - Builds an OpenVINO model adapter and loads the selected model via the Model API.
 - Preprocessing:
-  - Delegates to model.preprocess to align with the model’s expected input format and aspect ratio.
+  - Delegates to model.preprocess to align with the model's expected input format and aspect ratio.
 - Inference:
   - Runs inference via model.infer_sync and retrieves poses and scores.
 - Postprocessing:
-  - Converts normalized keypoints to original image coordinates, computes bounding boxes, and creates Body objects.
+  - **Updated** Converts normalized keypoints to original image coordinates with conditional transformation logic to prevent double-coordinate scaling in OpenPose and HigherHRNet models.
+  - Computes bounding boxes and creates Body objects with proper coordinate handling.
 - Rendering:
   - Uses shared skeleton connections for drawing.
+
+**Critical Reliability Improvement**: The postprocessing logic now includes conditional coordinate transformation that prevents double-coordinate scaling for OpenPose and HigherHRNet models. This addresses fundamental coordinate projection issues that could cause incorrect pose detection results.
 
 ```mermaid
 flowchart TD
@@ -226,7 +237,8 @@ Read --> Build["Build ImageModel with config"]
 Build --> Pre["model.preprocess(padded)"]
 Pre --> Infer["model.infer_sync(inputs)"]
 Infer --> Post["model.postprocess(raw_result, meta)"]
-Post --> Bodies["Convert to Body objects"]
+Post --> Conditional["Conditional Coordinate Transformation<br/>(OpenPose & HigherHRNet excluded)"]
+Conditional --> Bodies["Convert to Body objects"]
 Bodies --> End(["Return poses, scores"])
 ```
 
@@ -236,7 +248,7 @@ Bodies --> End(["Return poses, scores"])
 - [openvino_base_hpe.py:278-314](file://openvino_base_hpe.py#L278-L314)
 
 **Section sources**
-- [openvino_base_hpe.py:55-653](file://openvino_base_hpe.py#L55-L653)
+- [openvino_base_hpe.py:55-400](file://openvino_base_hpe.py#L55-L400)
 
 ### AlphaPoseHPE: Integrated Detector + Pose Model
 - Strategy pattern usage:
@@ -276,7 +288,7 @@ AP-->>App : bodies
 
 **Diagram sources**
 - [alphapose_hpe.py:69-334](file://alphapose_hpe.py#L69-L334)
-- [base_hpe.py:405-519](file://base_hpe.py#L405-L519)
+- [base_hpe.py:417-558](file://base_hpe.py#L417-L558)
 
 **Section sources**
 - [alphapose_hpe.py:33-334](file://alphapose_hpe.py#L33-L334)
@@ -304,11 +316,11 @@ Base-->>User : rendered outputs + metrics
 **Diagram sources**
 - [main.py:22-46](file://main.py#L22-L46)
 - [main.py:64-94](file://main.py#L64-L94)
-- [base_hpe.py:207-519](file://base_hpe.py#L207-L519)
+- [base_hpe.py:207-558](file://base_hpe.py#L207-L558)
 
 **Section sources**
 - [main.py:64-94](file://main.py#L64-L94)
-- [base_hpe.py:207-519](file://base_hpe.py#L207-L519)
+- [base_hpe.py:207-558](file://base_hpe.py#L207-L558)
 
 ### Extensibility Mechanism
 To add a new HPE implementation:
@@ -328,11 +340,11 @@ Runtime --> Use["Unified Interface Usage"]
 ```
 
 **Diagram sources**
-- [base_hpe.py:36-546](file://base_hpe.py#L36-L546)
+- [base_hpe.py:36-558](file://base_hpe.py#L36-L558)
 - [main.py:64-94](file://main.py#L64-L94)
 
 **Section sources**
-- [base_hpe.py:36-546](file://base_hpe.py#L36-L546)
+- [base_hpe.py:36-558](file://base_hpe.py#L36-L558)
 - [main.py:64-94](file://main.py#L64-L94)
 
 ## Dependency Analysis
@@ -381,16 +393,16 @@ AP --> CV
 - OpenVINOBaseHPE:
   - Configurable performance mode (latency/throughput), CPU threads, streams, CPU pinning, and hyper-threading.
   - Uses the OpenVINO Model API for optimized preprocessing and inference.
+  - **Updated** Critical coordinate transformation fixes improve reliability without impacting performance.
 - AlphaPoseHPE:
   - GPU-accelerated detection and cropping; supports multi-GPU via DataParallel.
   - Heatmap-to-coordinate conversion performed on CPU; consider offloading if feasible.
-
-[No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
 - MoveNetHPE:
   - If GPU is requested but not supported by the model, the implementation falls back to CPU and prints an informational message.
 - OpenVINOBaseHPE:
+  - **Updated** For coordinate projection issues in OpenPose and HigherHRNet models: The conditional coordinate transformation logic automatically handles coordinate scaling to prevent double-scaling errors. If you encounter incorrect pose coordinates, verify that the model_type is correctly set and that the conditional transformation logic is being applied.
   - For HTTP streams, ensure FFmpeg backend is available; the implementation initializes video capture lazily for streaming URLs.
   - If model loading fails, verify the XML path and device compatibility.
 - AlphaPoseHPE:
@@ -404,4 +416,6 @@ AP --> CV
 - [alphapose_hpe.py:57-66](file://alphapose_hpe.py#L57-L66)
 
 ## Conclusion
-The HPE implementations leverage a clean inheritance pattern from BaseHPE to enforce a consistent interface while allowing each algorithm to specialize in model loading, preprocessing, inference, and postprocessing. The runtime selection strategy in main.py enables seamless switching between AlphaPose, OpenPose, HigherHRNet, EfficientHRNet variants, and MoveNet without altering client code. The documented differences in model-specific data formats, tensor shapes, and output processing illustrate how each subclass adapts to its underlying framework. The extensibility mechanism further simplifies adding new HPE implementations by adhering to the shared abstract methods and integrating into the selection map.
+The HPE implementations leverage a clean inheritance pattern from BaseHPE to enforce a consistent interface while allowing each algorithm to specialize in model loading, preprocessing, inference, and postprocessing. The runtime selection strategy in main.py enables seamless switching between AlphaPose, OpenPose, HigherHRNet, EfficientHRNet variants, and MoveNet without altering client code. The documented differences in model-specific data formats, tensor shapes, and output processing illustrate how each subclass adapts to its underlying framework. 
+
+**Updated** The critical reliability improvements in the OpenVINOBaseHPE postprocessing pipeline address fundamental coordinate projection issues in OpenPose and HigherHRNet models by implementing conditional coordinate transformation logic that prevents double-coordinate scaling. This ensures accurate pose detection results while maintaining the unified interface approach that enables seamless switching between different HPE algorithms. The extensibility mechanism further simplifies adding new HPE implementations by adhering to the shared abstract methods and integrating into the selection map.

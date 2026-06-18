@@ -19,14 +19,20 @@
 - [Measure_gpu_dcgm/run_nvidia_dcgm.sh](file://Measure_gpu_dcgm/run_nvidia_dcgm.sh)
 - [utils/evaluator.py](file://utils/evaluator.py)
 - [utils/visualizer.py](file://utils/visualizer.py)
+- [docs/hpe-aspect-ratio-support.md](file://docs/hpe-aspect-ratio-support.md)
+- [docs/hpe-regression-investigation-2026-06-07.md](file://docs/hpe-regression-investigation-2026-06-07.md)
+- [optimizations/README.md](file://optimizations/README.md)
+- [optimizations/enhanced_openvino_hpe.py](file://optimizations/enhanced_openvino_hpe.py)
+- [optimizations/optimized_main.py](file://optimizations/optimized_main.py)
+- [optimizations/cpu_performance_optimizer.py](file://optimizations/cpu_performance_optimizer.py)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Added comprehensive PoseMonitor system integration into BaseHPE and main classes
-- Documented real-time frame processing metrics and memory usage tracking capabilities
-- Updated architecture diagrams to reflect PoseMonitor integration
-- Enhanced monitoring capabilities with pose-specific metrics collection
+- Added comprehensive documentation for HPE model aspect ratio support and coordinate projection fixes
+- Integrated CPU performance optimization documentation for 4-vCPU cloud configurations
+- Updated monitoring architecture to include aspect ratio handling considerations
+- Enhanced troubleshooting guidance with coordinate projection and model-specific optimization recommendations
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -34,29 +40,35 @@
 3. [Core Components](#core-components)
 4. [Architecture Overview](#architecture-overview)
 5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Dependency Analysis](#dependency-analysis)
-7. [Performance Considerations](#performance-considerations)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Conclusion](#conclusion)
-10. [Appendices](#appendices)
+6. [Aspect Ratio and Coordinate Handling](#aspect-ratio-and-coordinate-handling)
+7. [CPU Performance Optimization](#cpu-performance-optimization)
+8. [Dependency Analysis](#dependency-analysis)
+9. [Performance Considerations](#performance-considerations)
+10. [Troubleshooting Guide](#troubleshooting-guide)
+11. [Conclusion](#conclusion)
+12. [Appendices](#appendices)
 
 ## Introduction
-This document explains the monitoring and analytics capabilities integrated into the Human Pose Estimation (HPE) framework. The system now includes a comprehensive PoseMonitor system that provides real-time frame processing metrics and memory usage tracking. It covers:
+This document explains the monitoring and analytics capabilities integrated into the Human Pose Estimation (HPE) framework. The system now includes comprehensive support for model-specific aspect ratio handling, coordinate projection fixes, and CPU performance optimization for 4-vCPU cloud configurations. It covers:
 - Real-time metrics collection for CPU, memory, network throughput, and GPU utilization
 - Pose-specific monitoring with FPS, inference time, and coordinate tracking
 - Prometheus and Grafana integration for system performance monitoring
+- Model-specific aspect ratio support and coordinate projection fixes
+- CPU performance optimization for EPIC 7551P processors in 4-vCPU cloud environments
 - Evaluation utilities for COCO-format metrics and visualization tools for pose results
 - Configuration of monitoring stacks, metric collection processes, and dashboard setup
 - Performance dashboards, alerting mechanisms, and troubleshooting workflows
 - Guidance on interpreting metrics, identifying bottlenecks, and optimizing system performance
 
 ## Project Structure
-The monitoring and analytics stack spans several components with integrated PoseMonitor capabilities:
+The monitoring and analytics stack spans several components with integrated PoseMonitor capabilities and enhanced model-specific optimizations:
 - A lightweight monitoring container that traces a target PID using bpftrace and exports CPU/memory/net metrics to CSV
 - An experiment orchestration script that starts the HPE pipeline, the monitor, and collects artifacts
 - A Prometheus configuration that scrapes exporters for GPU and system metrics
 - A Docker Compose stack for HPE with GPU metrics logging and optional BPF/BCC tracing
 - A comprehensive PoseMonitor system that tracks frame processing metrics in real-time
+- Model-specific aspect ratio handling documentation and coordinate projection fixes
+- CPU performance optimization system for 4-vCPU cloud configurations
 - Utility modules for evaluating pose metrics and visualizing results
 
 ```mermaid
@@ -66,36 +78,54 @@ A["pose_monitor.py<br/>Real-time metrics tracking"]
 B["BaseHPE.process_frame<br/>Integrated monitoring"]
 C["Main application<br/>Pose metrics logging"]
 end
+subgraph "Aspect Ratio & Coordinate Handling"
+D["hpe-aspect-ratio-support.md<br/>Model-specific aspect ratio docs"]
+E["hpe-regression-investigation-2026-06-07.md<br/>Coordinate projection fixes"]
+F["OpenPose/HigherHRNet<br/>Fixed coordinate scaling"]
+end
+subgraph "CPU Performance Optimization"
+G["optimizations/README.md<br/>4-vCPU optimization guide"]
+H["enhanced_openvino_hpe.py<br/>Optimized OpenVINO HPE"]
+I["optimized_main.py<br/>CLI with CPU optimization"]
+end
 subgraph "Traditional Monitoring Stack"
-D["monitor_hpe/monitor_pid.sh"]
-E["monitor_hpe/docker-compose.yaml"]
-F["recent-dash/prometheus.yml"]
-G["recent-dash/docker-compose.yml"]
+J["monitor_hpe/monitor_pid.sh"]
+K["monitor_hpe/docker-compose.yaml"]
+L["recent-dash/prometheus.yml"]
+M["recent-dash/docker-compose.yml"]
 end
 subgraph "HPE Pipeline"
-H["ffmpeg_hpe/docker-compose.yaml"]
-I["ffmpeg_hpe/run_nvidia_dcgm.sh"]
-J["Measure_gpu_dcgm/run_nvidia_dcgm.sh"]
+N["ffmpeg_hpe/docker-compose.yaml"]
+O["ffmpeg_hpe/run_nvidia_dcgm.sh"]
+P["Measure_gpu_dcgm/run_nvidia_dcgm.sh"]
 end
 subgraph "Evaluation and Visualization"
-K["utils/evaluator.py"]
-L["utils/visualizer.py"]
+Q["utils/evaluator.py"]
+R["utils/visualizer.py"]
 end
 A --> B
 B --> C
-E --> D
-G --> F
+E --> F
 H --> I
-H --> J
-D --> K
-I --> K
+G --> H
 J --> K
+L --> M
+N --> O
+N --> P
+J --> Q
+O --> Q
+P --> Q
 ```
 
 **Diagram sources**
 - [pose_monitor.py:1-170](file://pose_monitor.py#L1-L170)
 - [base_hpe.py:482-600](file://base_hpe.py#L482-L600)
 - [main.py:51-188](file://main.py#L51-L188)
+- [docs/hpe-aspect-ratio-support.md:1-28](file://docs/hpe-aspect-ratio-support.md#L1-L28)
+- [docs/hpe-regression-investigation-2026-06-07.md:1-215](file://docs/hpe-regression-investigation-2026-06-07.md#L1-L215)
+- [optimizations/README.md:1-237](file://optimizations/README.md#L1-L237)
+- [optimizations/enhanced_openvino_hpe.py:25-217](file://optimizations/enhanced_openvino_hpe.py#L25-L217)
+- [optimizations/optimized_main.py:1-257](file://optimizations/optimized_main.py#L1-L257)
 - [monitor_hpe/docker-compose.yaml:1-52](file://monitor_hpe/docker-compose.yaml#L1-L52)
 - [monitor_hpe/monitor_pid.sh:1-204](file://monitor_hpe/monitor_pid.sh#L1-L204)
 - [recent-dash/prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
@@ -110,12 +140,19 @@ J --> K
 - [pose_monitor.py:1-170](file://pose_monitor.py#L1-L170)
 - [base_hpe.py:482-600](file://base_hpe.py#L482-L600)
 - [main.py:51-188](file://main.py#L51-L188)
+- [docs/hpe-aspect-ratio-support.md:1-28](file://docs/hpe-aspect-ratio-support.md#L1-L28)
+- [docs/hpe-regression-investigation-2026-06-07.md:1-215](file://docs/hpe-regression-investigation-2026-06-07.md#L1-L215)
+- [optimizations/README.md:1-237](file://optimizations/README.md#L1-L237)
+- [optimizations/enhanced_openvino_hpe.py:25-217](file://optimizations/enhanced_openvino_hpe.py#L25-L217)
+- [optimizations/optimized_main.py:1-257](file://optimizations/optimized_main.py#L1-L257)
 - [monitor_hpe/docker-compose.yaml:1-52](file://monitor_hpe/docker-compose.yaml#L1-L52)
 - [recent-dash/docker-compose.yml:1-103](file://recent-dash/docker-compose.yml#L1-L103)
 - [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
 
 ## Core Components
 - **PoseMonitor system**: Comprehensive real-time metrics tracking for pose estimation performance with FPS, inference time, and coordinate statistics
+- **Aspect Ratio Management**: Model-specific aspect ratio handling documentation and coordinate projection fixes for OpenPose and HigherHRNet
+- **CPU Performance Optimization**: Intelligent thread allocation and NUMA-aware configuration for EPIC 7551P processors in 4-vCPU cloud environments
 - **PID-based monitoring container**: Traces a target process PID using bpftrace to capture TX/RX bytes and writes CPU, memory, and network metrics to CSV files for later analysis
 - **Experiment runner**: Orchestrates container startup, waits for completion, saves logs and CSV outputs, and generates plots
 - **Prometheus configuration**: Defines scraping jobs for node and cluster agents and a Coroot endpoint
@@ -124,6 +161,9 @@ J --> K
 
 **Section sources**
 - [pose_monitor.py:8-170](file://pose_monitor.py#L8-L170)
+- [docs/hpe-aspect-ratio-support.md:1-28](file://docs/hpe-aspect-ratio-support.md#L1-L28)
+- [docs/hpe-regression-investigation-2026-06-07.md:1-215](file://docs/hpe-regression-investigation-2026-06-07.md#L1-L215)
+- [optimizations/README.md:1-237](file://optimizations/README.md#L1-L237)
 - [monitor_hpe/monitor_pid.sh:1-204](file://monitor_hpe/monitor_pid.sh#L1-L204)
 - [monitor_hpe/run_experiment.sh:1-138](file://monitor_hpe/run_experiment.sh#L1-L138)
 - [recent-dash/prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
@@ -136,6 +176,8 @@ J --> K
 The monitoring architecture integrates:
 - A host-level monitoring container that traces a target PID and exports metrics to CSV
 - A comprehensive PoseMonitor system that tracks frame processing metrics in real-time
+- Model-specific aspect ratio handling and coordinate projection fixes
+- CPU performance optimization for 4-vCPU cloud configurations
 - A Prometheus configuration that scrapes exporters for system and GPU metrics
 - An HPE pipeline that streams video, runs inference, and logs GPU metrics
 - Optional BPF/BCC tracing for packet-level insights
@@ -145,10 +187,16 @@ sequenceDiagram
 participant Exp as "Experiment Runner"
 participant HPE as "HPE Container"
 participant PM as "PoseMonitor"
+participant AR as "Aspect Ratio Handler"
+participant CPU as "CPU Optimizer"
 participant Mon as "Monitor Container"
 participant Prom as "Prometheus"
 participant Dash as "Grafana Dashboard"
 Exp->>HPE : Start HPE with GPU and streaming inputs
+HPE->>AR : Handle aspect ratio and coordinate projection
+AR-->>HPE : Fixed coordinate scaling
+HPE->>CPU : Apply 4-vCPU optimizations
+CPU-->>HPE : Optimized thread/stream configuration
 HPE->>PM : Update metrics (keypoints, inference_time)
 PM-->>PM : Calculate FPS, X/Y coordinates, inference stats
 Exp->>Mon : Start monitor with TARGET_PID_FILE
@@ -166,6 +214,8 @@ Exp-->>Dash : Load CSV and Prometheus data for visualization
 - [recent-dash/prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
 - [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
 - [pose_monitor.py:49-170](file://pose_monitor.py#L49-L170)
+- [docs/hpe-regression-investigation-2026-06-07.md:30-84](file://docs/hpe-regression-investigation-2026-06-07.md#L30-L84)
+- [optimizations/README.md:45-98](file://optimizations/README.md#L45-L98)
 
 ## Detailed Component Analysis
 
@@ -380,6 +430,99 @@ These modules integrate with the CSV outputs produced by the monitoring pipeline
 - [utils/evaluator.py](file://utils/evaluator.py)
 - [utils/visualizer.py](file://utils/visualizer.py)
 
+## Aspect Ratio and Coordinate Handling
+
+### Model-Specific Aspect Ratio Support
+The HPE framework now includes comprehensive documentation for model-specific aspect ratio handling:
+
+**Supported Models and Aspect Ratios:**
+- **OpenPose**: Limited to landscape-oriented inputs; portrait inputs cause hard errors
+- **EfficientHRNet (ae1, ae2, ae3)**: Broad support for any aspect ratio using keep-aspect-ratio resizing
+- **HigherHRNet**: Broad support with optional center padding for alignment preservation
+- **MoveNet**: Square 256x256 input via padding, accepts all aspect ratios
+- **AlphaPose**: Original resolution preprocessing, no fixed aspect ratio constraints
+
+**Current Issues:**
+- OpenPose fails specifically with portrait-oriented video (taller than wide)
+- Landscape 16:9 inputs work normally
+- Issue originates from OpenPose wrapper aspect-ratio compatibility check
+
+**Recommended Fix Area:**
+- Apply fixes in OpenPose preprocessing path rather than evaluator or CLI layers
+
+**Section sources**
+- [docs/hpe-aspect-ratio-support.md:1-28](file://docs/hpe-aspect-ratio-support.md#L1-L28)
+
+### Coordinate Projection Fixes
+Recent investigations identified and resolved critical coordinate projection issues:
+
+**Root Cause Analysis:**
+- **OpenPose**: Double transformation issue where coordinates were scaled twice
+- **HigherHRNet**: Similar model-API-space problem causing out-of-bounds keypoints
+- **Duplicate Model Loading**: Multiple model loads causing inefficiency
+
+**Fix Implementation:**
+- **OpenPose**: Pass original frame to OpenVINO model API, remove extra coordinate scaling
+- **HigherHRNet**: Apply same fix pattern, preserve pre-resized path for AE models
+- **Duplicate Loading**: Remove eager model loading, rely on processing loop guards
+
+**Validation Results:**
+- All models now produce coordinate-sane outputs
+- OpenPose eliminated out-of-bounds keypoints
+- HigherHRNet resolved giant bounding boxes and diagonal skeleton lines
+- MoveNet and AlphaPose reduced to single model load
+
+**Section sources**
+- [docs/hpe-regression-investigation-2026-06-07.md:28-153](file://docs/hpe-regression-investigation-2026-06-07.md#L28-L153)
+
+## CPU Performance Optimization
+
+### 4-vCPU Cloud Configuration
+The optimizations directory provides comprehensive CPU performance tuning for EPIC 7551P processors in 4-vCPU cloud environments:
+
+**Expected Performance Improvements:**
+- OpenPose: 16.7 FPS → 18-19 FPS (10-15% improvement)
+- EfficientHRNet1 (ae1): 12.5 FPS → 14-15 FPS (12-20% improvement)
+- HigherHRNet: 2.4 FPS → 2.8-3.0 FPS (15-25% improvement)
+
+**Key Optimizations:**
+- **Intelligent Thread Allocation**: 4 threads, 1 stream for all models on 4-vCPU instances
+- **NUMA-Aware Configuration**: Optimized for single NUMA node environments
+- **Memory Bandwidth Optimization**: AVX2 optimization and intelligent batch sizing
+- **System-Level Tuning**: CPU governor, hyper-threading, and process priority adjustments
+
+**Configuration Details:**
+- **OpenPose**: 4 threads, 1 stream, THROUGHPUT hint
+- **EfficientHRNet1**: 4 threads, 1 stream, LATENCY hint with conservative batch
+- **HigherHRNet**: 4 threads, 1 stream, THROUGHPUT with bandwidth optimization
+
+**Section sources**
+- [optimizations/README.md:1-237](file://optimizations/README.md#L1-L237)
+
+### Optimized OpenVINO HPE Implementation
+The enhanced OpenVINO HPE system provides seamless integration of performance optimizations:
+
+**Core Features:**
+- **Automatic CPU Detection**: Identifies EPIC processor capabilities and applies optimal settings
+- **Intelligent Thread Management**: Calculates optimal thread/stream configuration per model
+- **NUMA-Aware Scheduling**: Optimizes for single NUMA node cloud environments
+- **Memory Pattern Optimization**: Adapts to model memory requirements and cache characteristics
+
+**Integration Points:**
+- **EPICCPUOptimizer**: Detects CPU capabilities and calculates optimal configuration
+- **OptimizedOpenVINOHPE**: Enhanced OpenVINO HPE with automatic optimization
+- **create_optimized_openvino_core**: Specialized core creation with optimized properties
+
+**Performance Monitoring:**
+- **get_performance_stats()**: Returns detailed optimization statistics
+- **benchmark_optimization()**: Compares standard vs optimized performance
+- **Real-time Statistics**: Thread allocation, stream configuration, and performance hints
+
+**Section sources**
+- [optimizations/enhanced_openvino_hpe.py:25-217](file://optimizations/enhanced_openvino_hpe.py#L25-L217)
+- [optimizations/optimized_main.py:1-257](file://optimizations/optimized_main.py#L1-L257)
+- [optimizations/cpu_performance_optimizer.py:1-385](file://optimizations/cpu_performance_optimizer.py#L1-L385)
+
 ## Dependency Analysis
 The monitoring stack exhibits the following dependencies:
 - The monitor container depends on the target PID file and bpftrace availability
@@ -387,11 +530,17 @@ The monitoring stack exhibits the following dependencies:
 - Prometheus depends on exporters being reachable at configured targets
 - The HPE pipeline depends on GPU runtime and optional BPF/BCC tracing containers
 - **PoseMonitor system**: Depends on BaseHPE.process_frame integration and real-time metrics processing
+- **Aspect Ratio Handling**: Depends on model-specific preprocessing implementations
+- **CPU Optimization**: Depends on EPICCPUOptimizer and system capability detection
 
 ```mermaid
 graph TB
 PM["pose_monitor.py"] --> BH["base_hpe.py"]
 BH --> MF["main.py"]
+AR["hpe-aspect-ratio-support.md"] --> OP["OpenPose Wrapper"]
+AR --> HR["HigherHRNet Wrapper"]
+CPU["optimizations/README.md"] --> EOH["enhanced_openvino_hpe.py"]
+CPU --> OMC["optimized_main.py"]
 MP["monitor_pid.sh"] --> PIDF["TARGET_PID_FILE"]
 MP --> CSV["CSV Outputs"]
 RE["run_experiment.sh"] --> DC["docker-compose.yaml"]
@@ -400,12 +549,18 @@ PR["prometheus.yml"] --> EXP["Exporters"]
 FH["ffmpeg_hpe/docker-compose.yaml"] --> GM["gpu-metrics"]
 FH --> HPE["hpe container"]
 FH --> TR["bcc-tracer"]
+EOH --> EPO["EPICCPUOptimizer"]
 ```
 
 **Diagram sources**
 - [pose_monitor.py:1-170](file://pose_monitor.py#L1-L170)
 - [base_hpe.py:482-600](file://base_hpe.py#L482-L600)
 - [main.py:51-188](file://main.py#L51-L188)
+- [docs/hpe-aspect-ratio-support.md:1-28](file://docs/hpe-aspect-ratio-support.md#L1-L28)
+- [docs/hpe-regression-investigation-2026-06-07.md:30-84](file://docs/hpe-regression-investigation-2026-06-07.md#L30-L84)
+- [optimizations/README.md:45-98](file://optimizations/README.md#L45-L98)
+- [optimizations/enhanced_openvino_hpe.py:25-217](file://optimizations/enhanced_openvino_hpe.py#L25-L217)
+- [optimizations/optimized_main.py:1-257](file://optimizations/optimized_main.py#L1-L257)
 - [monitor_hpe/monitor_pid.sh:1-204](file://monitor_hpe/monitor_pid.sh#L1-L204)
 - [monitor_hpe/run_experiment.sh:1-138](file://monitor_hpe/run_experiment.sh#L1-L138)
 - [recent-dash/prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
@@ -415,6 +570,11 @@ FH --> TR["bcc-tracer"]
 - [pose_monitor.py:1-170](file://pose_monitor.py#L1-L170)
 - [base_hpe.py:482-600](file://base_hpe.py#L482-L600)
 - [main.py:51-188](file://main.py#L51-L188)
+- [docs/hpe-aspect-ratio-support.md:1-28](file://docs/hpe-aspect-ratio-support.md#L1-L28)
+- [docs/hpe-regression-investigation-2026-06-07.md:1-215](file://docs/hpe-regression-investigation-2026-06-07.md#L1-L215)
+- [optimizations/README.md:1-237](file://optimizations/README.md#L1-L237)
+- [optimizations/enhanced_openvino_hpe.py:25-217](file://optimizations/enhanced_openvino_hpe.py#L25-L217)
+- [optimizations/optimized_main.py:1-257](file://optimizations/optimized_main.py#L1-L257)
 - [monitor_hpe/monitor_pid.sh:1-204](file://monitor_hpe/monitor_pid.sh#L1-L204)
 - [monitor_hpe/run_experiment.sh:1-138](file://monitor_hpe/run_experiment.sh#L1-L138)
 - [recent-dash/prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
@@ -427,6 +587,9 @@ FH --> TR["bcc-tracer"]
 - **BPF tracing**: bpftrace TX/RX aggregation runs at 10 ms intervals; ensure host permissions and kernel modules are available
 - **PoseMonitor overhead**: Real-time metrics processing adds minimal overhead to inference pipeline
 - **Disk I/O**: Atomic CSV writes and sync reduce race conditions but can increase I/O pressure; consider SSD-backed storage for results volumes
+- **Aspect Ratio Handling**: Model-specific preprocessing affects performance; choose appropriate models for input aspect ratios
+- **CPU Optimization**: 4-vCPU configurations benefit from optimized thread allocation and NUMA-aware scheduling
+- **Coordinate Projection**: Fixed double-scaling issues eliminate coordinate calculation overhead and improve accuracy
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -437,6 +600,10 @@ Common issues and resolutions:
 - **CSV write conflicts**: The monitor uses file locks; verify filesystem supports flock semantics and volumes are writable
 - **PoseMonitor integration issues**: Ensure BaseHPE.process_frame is properly calling PoseMonitor.update() with valid keypoints and inference_time
 - **Memory usage tracking**: PoseMonitor tracks frame processing metrics; verify sufficient memory for real-time statistics accumulation
+- **Aspect Ratio Issues**: OpenPose fails with portrait inputs; use models with broad aspect ratio support or rotate input appropriately
+- **Coordinate Projection Problems**: Verify coordinate scaling fixes are applied; check for duplicate model loading causing double transformations
+- **CPU Performance Issues**: Ensure 4-vCPU optimization is enabled; verify system governor is set to performance mode
+- **Thread Contention**: Adjust thread/stream configuration based on model requirements and system capabilities
 
 **Section sources**
 - [monitor_hpe/monitor_pid.sh:1-204](file://monitor_hpe/monitor_pid.sh#L1-L204)
@@ -445,15 +612,20 @@ Common issues and resolutions:
 - [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
 - [ffmpeg_hpe/run_nvidia_dcgm.sh:1-84](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L84)
 - [pose_monitor.py:1-170](file://pose_monitor.py#L1-L170)
+- [docs/hpe-aspect-ratio-support.md:19-27](file://docs/hpe-aspect-ratio-support.md#L19-L27)
+- [docs/hpe-regression-investigation-2026-06-07.md:85-111](file://docs/hpe-regression-investigation-2026-06-07.md#L85-L111)
+- [optimizations/README.md:154-174](file://optimizations/README.md#L154-L174)
 
 ## Conclusion
-The HPE monitoring and analytics stack provides comprehensive real-time monitoring capabilities through the integrated PoseMonitor system. The system offers:
+The HPE monitoring and analytics stack provides comprehensive real-time monitoring capabilities through the integrated PoseMonitor system, enhanced with model-specific aspect ratio handling and CPU performance optimization. The system offers:
 - Real-time PID-level metrics via bpftrace
 - **Pose-specific metrics tracking** with FPS, inference time, and coordinate statistics
+- **Model-specific aspect ratio support** documentation and coordinate projection fixes
+- **CPU performance optimization** for 4-vCPU cloud configurations
 - Prometheus-based system and GPU telemetry
 - A repeatable experiment workflow with artifact collection and plotting
 - Integration points for COCO evaluation and visualization
-Adopt the recommended configurations, interpret metrics carefully, and iteratively optimize resource allocation and tracing overhead to achieve reliable, low-latency performance.
+Adopt the recommended configurations, interpret metrics carefully, and iteratively optimize resource allocation and tracing overhead to achieve reliable, low-latency performance. The recent aspect ratio and coordinate projection fixes ensure accurate pose estimation across diverse input conditions, while the CPU optimization system maximizes throughput on constrained 4-vCPU cloud instances.
 
 ## Appendices
 
@@ -505,3 +677,32 @@ Adopt the recommended configurations, interpret metrics carefully, and iterative
 **Section sources**
 - [base_hpe.py:482-600](file://base_hpe.py#L482-L600)
 - [pose_monitor.py:49-170](file://pose_monitor.py#L49-L170)
+
+### Aspect Ratio Support Reference
+- **OpenPose**: Limited to landscape orientation, fails on portrait inputs
+- **EfficientHRNet (ae1, ae2, ae3)**: Broad support with keep-aspect-ratio resizing
+- **HigherHRNet**: Broad support with optional center padding
+- **MoveNet**: Square 256x256 input, any aspect ratio
+- **AlphaPose**: Original resolution preprocessing, no aspect ratio constraints
+
+**Section sources**
+- [docs/hpe-aspect-ratio-support.md:9-17](file://docs/hpe-aspect-ratio-support.md#L9-L17)
+
+### CPU Optimization Configuration Reference
+- **4-vCPU Cloud Settings**: 4 threads, 1 stream, hyper-threading enabled
+- **Performance Hints**: THROUGHPUT for compute-heavy, LATENCY for low core count
+- **Batch Sizing**: Conservative for memory-intensive models, adaptive based on L3 cache
+- **System Tuning**: CPU governor to performance, NUMA balancing disabled
+
+**Section sources**
+- [optimizations/README.md:45-98](file://optimizations/README.md#L45-L98)
+- [optimizations/README.md:109-152](file://optimizations/README.md#L109-L152)
+
+### Coordinate Projection Fix Reference
+- **OpenPose**: Pass original frame to model API, remove extra coordinate scaling
+- **HigherHRNet**: Apply same fix pattern, preserve AE model pre-resized path
+- **Duplicate Loading**: Remove eager model loading, rely on processing loop guards
+- **Validation**: Eliminated out-of-bounds keypoints and coordinate regression
+
+**Section sources**
+- [docs/hpe-regression-investigation-2026-06-07.md:30-111](file://docs/hpe-regression-investigation-2026-06-07.md#L30-L111)

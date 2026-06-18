@@ -17,15 +17,16 @@
 - [docker-compose.yml](file://docker-compose.yml)
 - [prometheus.yml](file://prometheus.yml)
 - [monitor_hpe/docker-compose.yaml](file://monitor_hpe/docker-compose.yaml)
+- [Dockerfile_base](file://Dockerfile_base)
+- [docs/docker-services.md](file://docs/docker-services.md)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Enhanced Docker Compose configuration with dynamic GPU device configuration using NVIDIA_VISIBLE_DEVICES and CUDA_VISIBLE_DEVICES environment variables
-- Improved OpenCV FFMPEG debug logging with OPENCV_FFMPEG_DEBUG=1 and OPENCV_LOG_LEVEL=DEBUG environment variables
-- Enhanced NVIDIA driver support with NVIDIA_DRIVER_CAPABILITIES=compute,utility,video configuration
-- Added increased FFmpeg timeouts (OPENCV_FFMPEG_OPEN_TIMEOUT=300000, OPENCV_FFMPEG_READ_TIMEOUT=300000) for long-running streams
-- Updated GPU metrics container with proper NVIDIA runtime configuration
+- Updated Docker infrastructure cleanup through archival of stale Dockerfile variants under archive/dockerfiles/
+- Consolidated Dockerfile variants with Dockerfile_base as the active base image
+- Enhanced ffmpeg_hpe docker-compose.yaml with relative build contexts and improved service definitions
+- Simplified Dockerfile management by removing redundant variants
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -48,6 +49,7 @@ This document explains the deployment infrastructure and containerization strate
 - Real-time video feed management and client connectivity
 - Production deployment considerations, scaling strategies, and infrastructure requirements
 - Monitoring stack integration for GPU and system metrics with enhanced NVIDIA driver support
+- **Updated**: Simplified Dockerfile management through consolidation under Dockerfile_base
 
 ## Project Structure
 The repository organizes deployment artifacts by functional area:
@@ -55,6 +57,7 @@ The repository organizes deployment artifacts by functional area:
 - ffmpeg_hpe: Orchestrates the streaming server, human pose estimation (HPE) inference, GPU metrics, and optional BPF tracing with enhanced GPU device configuration
 - recent-dash: DASH caching pipeline with HTTP server, proxy, and client containers
 - Monitoring stack: Prometheus and Grafana with DCGM exporter for GPU telemetry
+- **Updated**: Docker infrastructure cleanup with archived stale Dockerfile variants
 
 ```mermaid
 graph TB
@@ -68,6 +71,7 @@ subgraph "Analytics Layer"
 HPE["Human Pose Estimation<br/>ffmpeg_hpe"]
 Metrics["GPU Metrics Exporter<br/>DCGM + Prometheus"]
 EnhancedGPU["Enhanced GPU Support<br/>Dynamic Device Configuration"]
+BaseImage["Consolidated Base Image<br/>Dockerfile_base"]
 end
 subgraph "Monitoring"
 Prom["Prometheus"]
@@ -78,6 +82,7 @@ DashSrv --> DashProxy --> DashClient
 HPE --> Metrics
 Metrics --> Prom --> Graf
 EnhancedGPU -.-> HPE
+BaseImage -.-> HPE
 ```
 
 **Diagram sources**
@@ -85,18 +90,21 @@ EnhancedGPU -.-> HPE
 - [ffmpeg_hpe/docker-compose.yaml:1-204](file://ffmpeg_hpe/docker-compose.yaml#L1-L204)
 - [recent-dash/docker-compose.yml:1-103](file://recent-dash/docker-compose.yml#L1-L103)
 - [docker-compose.yml:1-30](file://docker-compose.yml#L1-L30)
+- [Dockerfile_base](file://Dockerfile_base)
 
 **Section sources**
 - [rtsp-ipcam/docker-compose.yml:1-64](file://rtsp-ipcam/docker-compose.yml#L1-L64)
 - [ffmpeg_hpe/docker-compose.yaml:1-204](file://ffmpeg_hpe/docker-compose.yaml#L1-L204)
 - [recent-dash/docker-compose.yml:1-103](file://recent-dash/docker-compose.yml#L1-L103)
 - [docker-compose.yml:1-30](file://docker-compose.yml#L1-L30)
+- [Dockerfile_base](file://Dockerfile_base)
 
 ## Core Components
 - H.264 Streaming Server (rtsp-ipcam): A Python HTTP server that uses FFmpeg to stream H.264 video over HTTP. It supports configurable port and video file path, with health checks and resource limits.
 - Human Pose Estimation Pipeline (ffmpeg_hpe): Composes the streaming server, an HPE inference container (with enhanced GPU support), GPU metrics exporter, and optional BPF tracing.
 - DASH Caching Stack (recent-dash): Provides HTTP server, proxy, and client containers for DASH segment delivery and caching.
 - Monitoring Stack: Prometheus scraping DCGM exporter, with Grafana for visualization.
+- **Updated**: Consolidated Docker infrastructure using Dockerfile_base as the primary base image, eliminating redundant Dockerfile variants
 
 Key deployment artifacts:
 - Docker Compose files define services, networks, volumes, environment variables, and health checks
@@ -105,6 +113,7 @@ Key deployment artifacts:
 - **Enhanced**: Dynamic GPU device configuration with NVIDIA_VISIBLE_DEVICES and CUDA_VISIBLE_DEVICES environment variables
 - **Enhanced**: Improved OpenCV FFMPEG debug logging with comprehensive logging levels
 - **Enhanced**: Enhanced NVIDIA driver capabilities with compute, utility, and video support
+- **Updated**: Simplified Dockerfile management through consolidation under Dockerfile_base
 
 **Section sources**
 - [rtsp-ipcam/Dockerfile:1-40](file://rtsp-ipcam/Dockerfile#L1-L40)
@@ -116,6 +125,7 @@ Key deployment artifacts:
 - [recent-dash/HTTP-Client.Dockerfile:1-55](file://recent-dash/HTTP-Client.Dockerfile#L1-L55)
 - [recent-dash/HTTP-Proxy.Dockerfile:1-49](file://recent-dash/HTTP-Proxy.Dockerfile#L1-L49)
 - [docker-compose.yml:1-30](file://docker-compose.yml#L1-L30)
+- [Dockerfile_base](file://Dockerfile_base)
 
 ## Architecture Overview
 The system integrates streaming, analytics, and observability with enhanced GPU device management:
@@ -124,6 +134,7 @@ The system integrates streaming, analytics, and observability with enhanced GPU 
 - Observability: Prometheus scrapes GPU metrics exported by DCGM exporter; Grafana visualizes dashboards
 - Optional DASH caching: HTTP server, proxy, and client form a caching pipeline for segmented content
 - **Enhanced**: Dynamic GPU device selection and NVIDIA driver capability management
+- **Updated**: Simplified Docker infrastructure with consolidated base image management
 
 ```mermaid
 sequenceDiagram
@@ -204,6 +215,7 @@ H264StreamHandler <|-- DirectStreamServer
 - **Enhanced**: Dynamic GPU device configuration with NVIDIA_VISIBLE_DEVICES and CUDA_VISIBLE_DEVICES environment variables
 - **Enhanced**: Comprehensive OpenCV FFMPEG debug logging with OPENCV_FFMPEG_DEBUG=1 and OPENCV_LOG_LEVEL=DEBUG
 - **Enhanced**: Extended FFmpeg timeouts for long-running streams (300 second open/read timeouts)
+- **Updated**: Utilizes Dockerfile_base as the consolidated base image for simplified dependency management
 
 ```mermaid
 graph TB
@@ -215,13 +227,16 @@ H --> B["bcc-tracer"]
 H --> G["GPU Device Config<br/>NVIDIA_VISIBLE_DEVICES<br/>CUDA_VISIBLE_DEVICES"]
 H --> L["Debug Logging<br/>OPENCV_FFMPEG_DEBUG<br/>OPENCV_LOG_LEVEL"]
 H --> T["FFmpeg Timeouts<br/>OPENCV_FFMPEG_OPEN_TIMEOUT<br/>OPENCV_FFMPEG_READ_TIMEOUT"]
+H --> DB["Dockerfile_base<br/>Consolidated Base Image"]
 ```
 
 **Diagram sources**
 - [ffmpeg_hpe/docker-compose.yaml:1-204](file://ffmpeg_hpe/docker-compose.yaml#L1-L204)
+- [Dockerfile_base](file://Dockerfile_base)
 
 **Section sources**
 - [ffmpeg_hpe/docker-compose.yaml:1-204](file://ffmpeg_hpe/docker-compose.yaml#L1-L204)
+- [Dockerfile_base](file://Dockerfile_base)
 
 ### Enhanced GPU Device Configuration
 **New Section** - The HPE service now includes comprehensive GPU device management:
@@ -301,17 +316,31 @@ Prom --> Graf["Grafana"]
 - [docker-compose.yml:1-30](file://docker-compose.yml#L1-L30)
 - [prometheus.yml:1-8](file://prometheus.yml#L1-L8)
 
+### Docker Infrastructure Consolidation
+**New Section** - Simplified Dockerfile management through consolidation:
+
+- **Archived Stale Variants**: Dockerfile variants moved to `archive/dockerfiles/` directory for historical reference
+- **Active Base Image**: `Dockerfile_base` serves as the primary base image for all HPE-related containers
+- **Reduced Complexity**: Elimination of redundant Dockerfile variants reduces maintenance overhead
+- **Standardized Build Process**: All services now inherit from the consolidated base image
+
+**Section sources**
+- [Dockerfile_base](file://Dockerfile_base)
+- [docs/docker-services.md:11-46](file://docs/docker-services.md#L11-L46)
+
 ## Dependency Analysis
 - Service dependencies:
   - HPE depends on the streaming server being healthy
   - DASH client depends on the proxy; proxy depends on the server
   - Monitoring depends on exporters and agents
   - **Enhanced**: HPE now depends on proper GPU device configuration
+  - **Updated**: All services utilize Dockerfile_base for consistent base image management
 - Shared network:
   - A dedicated bridge network isolates streaming services
 - Resource allocation:
   - CPU/memory limits and reservations are defined per service
   - **Enhanced**: GPU devices are dynamically requested with proper driver capabilities
+  - **Updated**: Simplified dependency chain through consolidated base image
 
 ```mermaid
 graph TB
@@ -328,16 +357,19 @@ DC["http_client"] --> Net
 H --> D["Dynamic GPU Config"]
 H --> L["Debug Logging"]
 H --> T["FFmpeg Timeouts"]
+DB["Dockerfile_base<br/>Consolidated Base Image"]
 ```
 
 **Diagram sources**
 - [ffmpeg_hpe/docker-compose.yaml:198-204](file://ffmpeg_hpe/docker-compose.yaml#L198-L204)
 - [rtsp-ipcam/docker-compose.yml:61-64](file://rtsp-ipcam/docker-compose.yml#L61-L64)
 - [recent-dash/docker-compose.yml:1-103](file://recent-dash/docker-compose.yml#L1-L103)
+- [Dockerfile_base](file://Dockerfile_base)
 
 **Section sources**
 - [ffmpeg_hpe/docker-compose.yaml:82-85](file://ffmpeg_hpe/docker-compose.yaml#L82-L85)
 - [recent-dash/docker-compose.yml:24-26](file://recent-dash/docker-compose.yml#L24-L26)
+- [Dockerfile_base](file://Dockerfile_base)
 
 ## Performance Considerations
 - Streaming server:
@@ -348,10 +380,12 @@ H --> T["FFmpeg Timeouts"]
   - **Enhanced**: Shared memory sized appropriately with CUDA memory allocation optimization
   - **Enhanced**: Increased FFmpeg timeouts (300 seconds) to handle long-running streams
   - **Enhanced**: Comprehensive debug logging for troubleshooting GPU and FFMPEG issues
+  - **Updated**: Consolidated base image improves build reproducibility and reduces layer complexity
 - Monitoring:
   - Elevated privileges and host PID namespaces enable accurate process and network tracing
 - DASH caching:
   - Proxy parameters tuned for adaptive loading and caching policies
+- **Updated**: Docker infrastructure simplification reduces build times and improves reliability
 
 Recommendations:
 - **Enhanced**: Configure NVIDIA_VISIBLE_DEVICES to select specific GPUs for HPE workloads
@@ -361,12 +395,14 @@ Recommendations:
 - Use separate networks per workload to isolate traffic and improve security
 - Enable compression and optimize segment sizes for DASH delivery
 - **Enhanced**: Monitor GPU utilization and adjust device allocation based on workload demands
+- **Updated**: Leverage Dockerfile_base for consistent builds across all services
 
 **Section sources**
 - [rtsp-ipcam/docker-compose.yml:20-37](file://rtsp-ipcam/docker-compose.yml#L20-L37)
 - [ffmpeg_hpe/docker-compose.yaml:42-55](file://ffmpeg_hpe/docker-compose.yaml#L42-L55)
 - [ffmpeg_hpe/docker-compose.yaml:65-66](file://ffmpeg_hpe/docker-compose.yaml#L65-L66)
 - [recent-dash/docker-compose.yml:16-32](file://recent-dash/docker-compose.yml#L16-L32)
+- [Dockerfile_base](file://Dockerfile_base)
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -391,6 +427,10 @@ Common issues and resolutions:
   - Increase `OPENCV_FFMPEG_OPEN_TIMEOUT` and `OPENCV_FFMPEG_READ_TIMEOUT` values
   - Check network connectivity and stream source availability
   - Verify FFMPEG debug logs for codec and format issues
+- **New**: Docker build issues:
+  - Verify Dockerfile_base is accessible and not corrupted
+  - Check for conflicts in archived Dockerfile variants
+  - Ensure proper relative paths in docker-compose.yaml build contexts
 
 Operational tips:
 - Use logs from the streaming server and HPE container to diagnose failures
@@ -398,6 +438,7 @@ Operational tips:
 - For DASH, confirm proxy forwarding and cache directory availability
 - Validate environment variables passed via Compose files
 - **Enhanced**: Monitor GPU utilization and adjust device allocation based on workload demands
+- **Updated**: Verify Dockerfile_base integrity if experiencing build failures
 
 **Section sources**
 - [rtsp-ipcam/direct_stream_server.py:60-63](file://rtsp-ipcam/direct_stream_server.py#L60-L63)
@@ -405,9 +446,10 @@ Operational tips:
 - [ffmpeg_hpe/docker-compose.yaml:42-55](file://ffmpeg_hpe/docker-compose.yaml#L42-L55)
 - [ffmpeg_hpe/docker-compose.yaml:48-51](file://ffmpeg_hpe/docker-compose.yaml#L48-L51)
 - [docker-compose.yml:14-22](file://docker-compose.yml#L14-L22)
+- [Dockerfile_base](file://Dockerfile_base)
 
 ## Conclusion
-The deployment infrastructure combines a lightweight HTTP H.264 streaming server with a GPU-accelerated analytics pipeline and a DASH caching stack, all orchestrated via Docker Compose. **Enhanced** with dynamic GPU device configuration, comprehensive debug logging, and improved NVIDIA driver support, the system provides production-ready foundation with advanced GPU management capabilities. The modular design enables scaling by adding more streaming servers, HPE workers, or DASH nodes behind load balancers while maintaining optimal GPU resource utilization.
+The deployment infrastructure combines a lightweight HTTP H.264 streaming server with a GPU-accelerated analytics pipeline and a DASH caching stack, all orchestrated via Docker Compose. **Enhanced** with dynamic GPU device configuration, comprehensive debug logging, and improved NVIDIA driver support, the system provides production-ready foundation with advanced GPU management capabilities. **Updated** with Docker infrastructure consolidation through Dockerfile_base, the system now offers simplified maintenance and improved build reliability while maintaining optimal GPU resource utilization.
 
 ## Appendices
 
@@ -444,8 +486,14 @@ The deployment infrastructure combines a lightweight HTTP H.264 streaming server
   - Set `CUDA_VISIBLE_DEVICES` for CUDA device mapping
   - Enable `NVIDIA_DRIVER_CAPABILITIES=compute,utility,video` for full driver support
   - Monitor GPU utilization and adjust allocation based on workload demands
+- **Updated**: Docker Infrastructure Management:
+  - Ensure Dockerfile_base accessibility and integrity
+  - Verify archived Dockerfile variants are properly stored
+  - Validate relative build contexts in docker-compose.yaml
+  - Monitor build times and resolve consolidation-related issues
 
 **Section sources**
 - [rtsp-ipcam/Dockerfile:16-37](file://rtsp-ipcam/Dockerfile#L16-L37)
 - [ffmpeg_hpe/docker-compose.yaml:42-55](file://ffmpeg_hpe/docker-compose.yaml#L42-L55)
 - [docker-compose.yml:1-30](file://docker-compose.yml#L1-L30)
+- [Dockerfile_base](file://Dockerfile_base)
