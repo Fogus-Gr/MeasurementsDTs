@@ -18,6 +18,12 @@ if command -v curl >/dev/null 2>&1; then
   done
 fi
 
+# Validate manifest content
+manifest_size=$(curl -fsS --max-time 2 -o /dev/null -w '%{size_download}' "$PLAYER_URL" 2>/dev/null || echo "0")
+if [ "$manifest_size" -lt 100 ]; then
+  echo "[PLAYER] WARNING: Manifest appears empty or too small (${manifest_size} bytes)" >&2
+fi
+
 if [ "$START_DELAY_SECONDS" -gt 0 ]; then
   echo "[PLAYER] Waiting ${START_DELAY_SECONDS}s before starting mpv" >&2
   sleep "$START_DELAY_SECONDS"
@@ -36,7 +42,9 @@ while true; do
     --log-file=/tmp/mpv.log \
     --no-ytdl \
     --demuxer-lavf-format=dash \
-    --loop-file=inf \
+    --demuxer-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_delay_max=5,reconnect_on_network_error=1 \
+    --demuxer-readahead-secs=30 \
+    --speed=1 \
     "$PLAYER_URL"
   rc=$?
   set -e

@@ -24,6 +24,20 @@ if [ "$NETIF" != "any" ] && { [ -z "$NETIF" ] || ! ip link show "$NETIF" >/dev/n
   exit 1
 fi
 
+# If NETIF is still "any", try to find the docker bridge for our target network.
+# On a host-networked container, tcpdump -i any sees each packet twice (once on
+# the veth pair, once on the bridge interface), causing exactly 2x counting.
+# Capturing on the specific bridge interface avoids this double-counting.
+if [ "$NETIF" = "any" ]; then
+  bridge_if=$(ip route get "$DASH_SERVER_IP" 2>/dev/null | grep -oP 'dev \K\S+')
+  if [ -n "$bridge_if" ] && [ "$bridge_if" != "lo" ]; then
+    echo "[INFO] Auto-detected Docker bridge interface: $bridge_if (replacing NETIF=any to avoid double-counting)" >&2
+    NETIF="$bridge_if"
+  else
+    echo "[WARN] Could not auto-detect bridge interface for $DASH_SERVER_IP; using NETIF=any (may double-count)" >&2
+  fi
+fi
+
 mkdir -p /opt/tracer/output
 echo "timestamp_ms,proxy_rx_video_bytes,proxy_tx_video_bytes" > /opt/tracer/output/trace.csv
 REQUEST_LOG=/opt/tracer/output/served_segments.log

@@ -11,8 +11,10 @@ if ! command -v bc &> /dev/null; then
   exit 1
 fi
 
-if [ ! -f "segments/manifest.mpd" ]; then
-  echo "[ERROR] Missing DASH assets: recent-dash/segments/manifest.mpd" >&2
+DASH_MANIFEST=${DASH_MANIFEST:-manifest_single.mpd}
+export DASH_MANIFEST
+if [ ! -f "segments/$DASH_MANIFEST" ]; then
+  echo "[ERROR] Missing DASH manifest: recent-dash/segments/$DASH_MANIFEST" >&2
   echo "Restore the migrated DASH segments into recent-dash/segments/ before running this rig." >&2
   exit 1
 fi
@@ -203,7 +205,7 @@ echo "[DEBUG] Updated dash.pid contents:"
 cat ./pids/dash.pid
 
 echo "[DEBUG] Building perf_monitor image..."
-docker compose -f "$COMPOSE_FILE" build perf_monitor trace_container
+docker compose -f "$COMPOSE_FILE" build perf_monitor trace_container mpv
 
 perf_monitor_start=$(date +%s.%N)
 echo "[DEBUG] Starting performance monitoring..."
@@ -244,8 +246,25 @@ fi
 echo "DASH player URL: $DASH_PLAYER_URL"
 
 echo "Running experiment for ${experiment_duration_seconds} seconds..."
-sleep "$experiment_duration_seconds"
+elapsed=0
+check_interval=30
+while [ "$elapsed" -lt "$experiment_duration_seconds" ]; do
+  sleep "$check_interval"
+  elapsed=$((elapsed + check_interval))
+  if [ -n "$PLAYER_CONTAINER" ]; then
+    player_status=$(docker inspect -f '{{.State.Status}}' "$PLAYER_CONTAINER" 2>/dev/null || echo "unknown")
+    player_restarts=$(docker inspect -f '{{.RestartCount}}' "$PLAYER_CONTAINER" 2>/dev/null || echo "?")
+    echo "[HEALTH] ${elapsed}s elapsed | mpv status=$player_status restarts=$player_restarts"
+  fi
+done
 echo "[DEBUG] Ending the experiment..."
+
+# Collect mpv internal playback log
+if [ -n "$PLAYER_CONTAINER" ]; then
+  echo "[DEBUG] Copying mpv internal log..."
+  docker cp "$PLAYER_CONTAINER:/tmp/mpv.log" "$results_dir/logs/mpv_internal.log" 2>/dev/null || \
+    echo "[WARNING] Could not copy mpv internal log" >&2
+fi
 
 echo "[DEBUG] Collecting performance data after experiment completion..."
 if [ -n "$PERF_MONITOR_CONTAINER" ]; then
@@ -260,14 +279,13 @@ fi
 
 if [ -n "$TRACE_CONTAINER" ]; then
   docker exec "$TRACE_CONTAINER" pkill -INT tcpdump 2>/dev/null || true
-  sleep 1
+  sleep 2
   echo "[DEBUG] Copying network trace data from trace_container..."
   docker cp "$TRACE_CONTAINER:/opt/tracer/output/trace.csv" "$results_dir/traces/trace.csv"
   echo "Copied trace file to $results_dir/traces/trace.csv"
-  if [ -f "./traces/served_segments.log" ]; then
-    cp "./traces/served_segments.log" "$results_dir/traces/served_segments.log"
-    echo "Copied served segment log to $results_dir/traces/served_segments.log"
-  fi
+  docker cp "$TRACE_CONTAINER:/opt/tracer/output/served_segments.log" "$results_dir/traces/served_segments.log" 2>/dev/null || \
+    echo "[WARNING] Could not copy served_segments.log from trace_container"
+  echo "Copied served segment log to $results_dir/traces/served_segments.log"
 fi
 
 echo "[DEBUG] Collecting container logs..."
@@ -299,7 +317,7 @@ DOCKER_COMPOSE_FILE="docker-compose.yml"
 
 RESOLUTIONS="Not found"
 if [ -f "$SEGMENTS_LOG" ]; then
-  RESOLUTIONS=$(cut -d',' -f2 "$SEGMENTS_LOG" 2>/dev/null | grep -oP 'video_\K[0-9]+' | sort -u | tr '\n' ' ')
+  RESOLUTIONS=$(cut -d',' -f2 "$SEGMENTS_LOG" 2>/dev/null | sed -n 's/^video_\([0-9]\+\).*/\1/p' | sort -u | tr '\n' ' ')
   if [ -z "$RESOLUTIONS" ]; then
     RESOLUTIONS="Not found"
   fi
@@ -313,9 +331,9 @@ if [ -f "$SEGMENTS_LOG" ]; then
   fi
 fi
 
-PROXY_PARAMS=$(awk '/http_proxy:/,/- [A-Za-z_]+:/{if ($0 ~ /SERVICE_ADDITIONAL_PARAMETERS/) print $0}' "$DOCKER_COMPOSE_FILE" | head -1 | sed 's/.*SERVICE_ADDITIONAL_PARAMETERS=//')
-if [ -z "$PROXY_PARAMS" ]; then
-  PROXY_PARAMS="Not found"
+PROXY_PARAMS_DISPLAY=${PROXY_PARAMS:--al swg -r1 8.3 -r2 3.6 -l 3000 -dl fixed -c random -s 600 -n 65}
+if [ -z "$PROXY_PARAMS_DISPLAY" ]; then
+  PROXY_PARAMS_DISPLAY="Not found"
 fi
 
 CPU_MODEL=$(lscpu | grep "Model name" | sed 's/.*: *//g')
@@ -324,7 +342,8 @@ MEM_TOTAL=$(free -h | awk '/^Mem:/ {print $2}')
 
 {
   echo "==== Experiment Summary ===="
-  echo "http_proxy SERVICE_ADDITIONAL_PARAMETERS: $PROXY_PARAMS"
+  echo "http_proxy SERVICE_ADDITIONAL_PARAMETERS: $PROXY_PARAMS_DISPLAY"
+  echo "DASH manifest: $DASH_MANIFEST"
   echo "DASH proxy URL: $PROXY_URL"
   echo "DASH player URL: $DASH_PLAYER_URL"
   if [ -n "$PLAYER_CONTAINER" ]; then

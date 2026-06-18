@@ -30,7 +30,7 @@ services:
     environment:
       - HTTP_SERVER_DOMAIN=http_server
       - HTTP_SERVER_PORT=80
-      - SERVICE_ADDITIONAL_PARAMETERS=-al swg -r1 8.3 -r2 3.6 -l 3000 -dl fixed -c random -s 600 -n 131
+      - SERVICE_ADDITIONAL_PARAMETERS=${PROXY_PARAMS:--al swg -r1 8.3 -r2 3.6 -l 3000 -dl fixed -c random -s 600 -n 65}
     depends_on:
       - http_server
     pid: "host"
@@ -56,8 +56,12 @@ services:
     ports:
       - "80"
     volumes:
-      # Mount only the manifest so segment fetches still travel through the proxy.
-      - ./segments/manifest.mpd:/opt/http_local/public/manifest.mpd:ro
+      # Mount single-representation manifest so segment fetches still travel
+      # through the proxy.  A single-rep manifest is required because the
+      # origin server (main binary) only handles one HTTP connection at a time;
+      # FFmpeg's DASH demuxer opens concurrent connections for each
+      # AdaptationSet/Representation, which deadlocks the server.
+      - ./segments/${DASH_MANIFEST:-manifest_single.mpd}:/opt/http_local/public/manifest.mpd:ro
     environment:
       - HTTP_PROXY_DOMAIN=http_proxy
       - HTTP_PROXY_PORT=80
@@ -94,8 +98,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '${MPV_CPU_LIMIT:-0.25}'
-          memory: ${MPV_MEMORY_LIMIT:-256M}
+          cpus: '${MPV_CPU_LIMIT:-0.5}'
+          memory: ${MPV_MEMORY_LIMIT:-512M}
 
   perf_monitor:
     build:
