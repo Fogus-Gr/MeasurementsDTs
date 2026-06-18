@@ -1,0 +1,204 @@
+services:
+  h264-streaming-server:
+    build:
+      context: ../rtsp-ipcam
+      dockerfile: Dockerfile
+    container_name: h264-streaming-server
+    restart: unless-stopped
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./results:/output
+      - ../rtsp-ipcam/config:/app/config:ro
+      - ../videos:/app/videos:ro
+    environment:
+      - SERVER_PORT=8089
+      - VIDEO_FILE=${VIDEO_FILE:-/app/videos/rangeOfMotion/vga_01_01.mp4}
+    networks:
+      - streaming-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/8089 || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 6
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "${STREAMER_CPUS:-1.0}"  # Reserve one core for the streamer on a 4-vCPU host.
+          memory: 1G
+        reservations:
+          cpus: "${STREAMER_RESERVATION_CPUS:-1.0}"
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=1000m
+
+  hpe:
+    build:
+      context: ..
+      dockerfile: Dockerfile_base
+    # Add these lines for GPU support
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      # - OPENCV_FFMPEG_CAPTURE_OPTIONS=${OPENCV_FFMPEG_CAPTURE_OPTIONS:-video_codec;mjpeg,tcp|stimeout;5000000'}
+      - OPENCV_FFMPEG_DEBUG=1 # Enable FFMPEG debug logging
+      - OPENCV_LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+      - WAIT_HOSTS=h264-streaming-server:8089
+      - WAIT_HOSTS_TIMEOUT=30
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+      # CPU optimization for OpenVINO backends (openpose / efficienthrnet*).
+      # Tuned for a 4-vCPU host and overridable via ffmpeg_hpe/.env.
+      - OV_MODE=${OV_MODE:-latency}
+      - OV_STREAMS=${OV_STREAMS:-1}
+      - OV_THREADS=${OV_THREADS:-3}
+      - OMP_NUM_THREADS=${OMP_NUM_THREADS:-3}
+      - MKL_NUM_THREADS=${MKL_NUM_THREADS:-3}
+      - OPENBLAS_NUM_THREADS=${OPENBLAS_NUM_THREADS:-3}
+      # - HPE_INPUT=http://h264-streaming-server:8089/stream.h264
+      - OPENCV_FFMPEG_OPEN_TIMEOUT=300000 # Increase timeout for FFMPEG
+      - OPENCV_FFMPEG_READ_TIMEOUT=300000  # Increase read timeout for FFMPEG
+    volumes:
+      - ./results:/output:rw
+      - ../videos:/videos:ro
+    shm_size: 8gb  # Adjust based on your model requirements
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "python.*main.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "${HPE_CPUS:-3.0}"  # HPE gets three cores on a 4-vCPU host.
+          memory: 16G    # Adjust based on your model requirements
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    container_name: hpe
+    depends_on:
+      h264-streaming-server:
+        condition: service_healthy
+    networks:
+      - streaming-network
+    # Add explicit DNS configuration
+    dns_search: .
+    command: >
+      python3 main.py --method ${HPE_METHOD:-movenet} --input ${HPE_INPUT:-http://h264-streaming-server:8089/stream.h264} --csv --output_dir /output/ --device ${HPE_DEVICE:-CPU} --measurement_interval_ms 10 ${HPE_EXTRA_ARGS:-}
+
+  gpu-metrics:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu_metrics
+    container_name: gpu-metrics
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ./results:/output
+    networks:
+      - streaming-network
+    depends_on:
+      - h264-streaming-server
+      - hpe
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "nvidia-smi"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  perf_monitor:
+    container_name: perf_monitor
+    build:
+      context: ../shared/perf_monitor
+      dockerfile: Dockerfile
+    volumes:
+      - ./results:/output:rw
+      - ./pids:/pids:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - OUTPUT_DIR=/output
+      - MONITOR_MODE=docker_api
+      - TARGET_CONTAINER=hpe
+      - DOCKER_SOCKET=/var/run/docker.sock
+      - INTERVAL=${PERF_MONITOR_INTERVAL:-0.5}
+      - EXPERIMENT_TYPE=ffmpeg_hpe
+    depends_on:
+      - h264-streaming-server
+    user: root
+    networks:
+      - streaming-network
+    security_opt:
+      - no-new-privileges:true
+
+  # trace_container:
+  #   image: video-bpftrace:latest
+  #   build:
+  #     context: ./bpftrace-tracer
+  #     dockerfile: Dockerfile
+  #   privileged: true
+  #   pid: host
+  #   network_mode: "host"
+  #   environment:
+  #     - NETIF=eth0
+  #     - TARGET_PORT=8089
+  #   depends_on:
+  #     - h264-streaming-server
+  #     - hpe
+  #     - perf_monitor
+  #   volumes:
+  #     - /sys/kernel/debug:/sys/kernel/debug
+  #     - /lib/modules:/lib/modules:ro
+  #     - ./traces:/opt/tracer/output
+  #     - /sys/fs/cgroup:/sys/fs/cgroup:ro
+  #     - /sys:/sys:ro
+  #   working_dir: /opt/tracer
+  #   entrypoint: ["/bin/bash", "-c"]
+  #   command: ./trace_video_traffic.sh
+  
+  bcc-tracer:
+    build:
+      context: ./bpftrace-tracer
+      dockerfile: Dockerfile.bcc
+    container_name: bcc-tracer
+    # Mount output directory for results
+    volumes:
+      - ./tracer_output:/opt/tracer/output
+      - /lib/modules:/lib/modules:ro
+      - /usr/src:/usr/src:ro
+      - /sys/kernel/debug:/sys/kernel/debug
+    user: root # Ensure root user for BCC tracing
+    environment:
+    - TARGET_CONTAINER=hpe  # The container to monitor
+    - STREAMER_IP=h264-streaming-server
+    - PORT_DETECTION_TIMEOUT=30
+    - BCC_SAMPLE_INTERVAL_MS=${BCC_SAMPLE_INTERVAL_MS:-10}
+    # Ensure the tracer is on the same network as hpe and streaming server
+    network_mode: "service:hpe"  # Share HPE's network namespace
+    # Optionally, wait for hpe to be healthy before starting
+    depends_on:
+      - hpe
+    # Run in privileged mode for BCC to access kernel tracing
+    privileged: true
+    cap_add:
+    - SYS_ADMIN
+    - NET_ADMIN
+    - NET_RAW
+    - IPC_LOCK
+    - SYS_RESOURCE
+    security_opt:
+    - seccomp:unconfined
+
+networks:
+  streaming-network:
+    driver: bridge
