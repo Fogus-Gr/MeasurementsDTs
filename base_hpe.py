@@ -407,8 +407,9 @@ class BaseHPE(ABC):
                 print(f"[ERROR] Video capture not initialized for {self.__class__.__name__}. This HPE implementation may not support video inputs.")
                 return
 
-            print("Starting processing video/webcam data from HTTP stream. Press CTR+C to exit")
-            response = requests.get(self.input_src, stream=True, timeout=30)
+            print("Starting processing video/webcam data from HTTP stream (MJPEG fallback). Press CTR+C to exit")
+            response = requests.get(self.input_src, stream=True, timeout=(10, 30))
+            response.raise_for_status()
             buffer = b""
             consecutive_failures = 0
             max_consecutive_failures = 10

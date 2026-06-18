@@ -94,16 +94,22 @@ class MoveNetHPE(BaseHPE):
             bbox = result[i][51:55].reshape(2,2)          
             score = result[i][55]
             if score > self.score_thresh:   # TODO - use seperate keypoint scores
-                ymin, xmin, ymax, xmax = (bbox * [self.padding.padded_h, self.padding.padded_w]).flatten().astype(int)
+                bbox = (bbox * np.array([self.padding.padded_h, self.padding.padded_w])).flatten()
+                ymin, xmin, ymax, xmax = np.clip(
+                    bbox,
+                    [0, 0, 0, 0],
+                    [self.img_h - 1, self.img_w - 1, self.img_h - 1, self.img_w - 1]
+                ).astype(int)
 
                 kp_xy =kps[:,[1,0]]
-                keypoints = kp_xy * np.array([self.padding.padded_w, self.padding.padded_h])
-                keypoints = np.array(keypoints)
+                keypoints = kp_xy * np.array([self.padding.padded_w, self.padding.padded_h], dtype=float)
+                keypoints[:, 0] = np.clip(keypoints[:, 0], 0, self.img_w - 1)
+                keypoints[:, 1] = np.clip(keypoints[:, 1], 0, self.img_h - 1)
 
                 body = Body(score=score, xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax, 
                             keypoints_score = kps[:,2], 
                             keypoints = keypoints.astype(float),
-                            keypoints_norm = keypoints / np.array([self.img_w, self.img_h]))
+                            keypoints_norm = keypoints / np.array([self.img_w, self.img_h], dtype=float))
                 
                 bodies.append(body)
                 
