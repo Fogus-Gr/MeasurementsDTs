@@ -628,6 +628,7 @@ head -2 traces/bcc/hpe_video_rx.csv && echo "..." && tail -1 traces/bcc/hpe_vide
 | `ffmpeg_hpe/plot_smi_output.py` | `gpu/gpu_metrics.csv` | GPU utilization, temperature, memory, power PNGs |
 | `ffmpeg_hpe/plot_rx_bytes_trimmed_reset.py` | `traces/bcc/hpe_video_rx.csv` | Network RX bytes timeline plot |
 | `ffmpeg_hpe/plot_rx_bytes.py` | `traces/bcc/hpe_video_rx.csv` | Raw RX bytes plot |
+| `ffmpeg_hpe/plot_graph.py` | `perf/perf_metrics.csv` or legacy `perf/pid_metrics.csv` | CPU% + memory usage over time |
 | `monitor_hpe/plot_graph.py` | `perf/aggregated_metrics.csv` | CPU% + memory usage over time |
 | `Measure_plot_cpu_perf/plot_perf_metrics.py` | perf stat CSV | CPU cycles + utilization bar chart |
 | `Measure_gpu_dcgm/plot_smi_output.py` | gpu_metrics.csv | DCGM GPU metrics (alternative) |
@@ -642,6 +643,9 @@ python3 plot_smi_output.py results_*/gpu/gpu_metrics.csv
 
 # Network RX timeline (trimmed/reset for cleaner view)
 python3 plot_rx_bytes_trimmed_reset.py results_*/traces/bcc/hpe_video_rx.csv
+
+# CPU and memory plot for ffmpeg_hpe perf metrics
+python3 plot_graph.py results_*/perf/perf_metrics.csv
 
 # CPU and memory plot
 python3 ../monitor_hpe/plot_graph.py results_*/perf/aggregated_metrics.csv

@@ -11,7 +11,7 @@ Reference for all plotting scripts, their input formats, output files, and usage
 | plot_smi_output.py | Measure_gpu_dcgm/ | gpu_stats.csv | 5 separate PNGs | `python3 plot_smi_output.py <csv>` |
 | plot_rx_bytes.py | ffmpeg_hpe/ | hpe_video_rx.csv | rx_bytes_plot.png | `python3 plot_rx_bytes.py` |
 | plot_rx_bytes_trimmed_reset.py | ffmpeg_hpe/ | hpe_video_rx.csv | rx_bytes_plot.png | `python3 plot_rx_bytes_trimmed_reset.py` |
-| plot_graph.py | ffmpeg_hpe/ | pid_metrics.csv | pid_metrics.png | `python3 plot_graph.py <csv>` |
+| plot_graph.py | ffmpeg_hpe/ | `perf_metrics.csv` or legacy `pid_metrics.csv` | `perf_metrics.png` / `pid_metrics.png` | `python3 plot_graph.py <csv>` |
 | plot_graph.py | monitor_hpe/ | pid_metrics.csv | pid_metrics.png | `python3 plot_graph.py <csv>` |
 | plot_perf_metrics.py | Measure_plot_cpu_perf/ | perf stat output | 2 plots + CSV | `python3 plot_perf_metrics.py <txt>` |
 
@@ -62,6 +62,18 @@ All plots: rotated x-labels (45°), grid enabled, tight layout
 **Plot 2 (Bottom)**: Memory Usage (MB, converted from KB) over time, grid enabled
 **X-axis**: Auto-formatted time (HH:MM:SS), shared between subplots, rotated labels
 **Output**: Same path as input but .png extension, figure 15x10
+**Suptitle**: 'Monitoring Metrics - {filename}'
+**Usage**: `python3 plot_graph.py <csv_file>`
+
+### ffmpeg_hpe/plot_graph.py (61 lines)
+**Input CSV columns**:
+- `perf_metrics.csv`: timestamp, total_cpu_percent, total_mem_rss_kb, active_pids
+- `pid_metrics.csv` (legacy): timestamp, pid, cpu_percent, mem_rss_kb, tx_bytes, rx_bytes
+**Processing**: Converts timestamp to datetime, creates 2x1 subplot grid
+**Plot 1 (Top)**: CPU Usage (%) over time, grid enabled
+**Plot 2 (Bottom)**: Memory Usage (MB, converted from KB) over time, grid enabled
+**X-axis**: Auto-formatted time (HH:MM:SS), shared between subplots, rotated labels
+**Output**: Same path as input but .png extension, figure 15x9
 **Suptitle**: 'Monitoring Metrics - {filename}'
 **Usage**: `python3 plot_graph.py <csv_file>`
 

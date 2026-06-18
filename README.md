@@ -66,13 +66,13 @@ main.py
 run_experiment.sh
   ├── docker compose up h264-streaming-server   # serves video as H.264 HTTP stream
   ├── docker compose up hpe                     # runs main.py against the stream
-  ├── docker compose up perf_monitor            # samples CPU/memory every 500ms
+  ├── docker compose up perf_monitor            # samples HPE container CPU/memory every 500ms
   ├── docker compose up gpu-metrics             # polls nvidia-smi every 500ms
   ├── docker compose up bcc-tracer              # eBPF RX byte counter (optional)
   ├── [wait for hpe container to exit]
   ├── docker cp → results_<method>_<cpu>_<timestamp>/
   │     ├── hpe_output/     ← keypoint CSVs and JSON from main.py
-  │     ├── perf/           ← CPU/memory metrics
+  │     ├── perf/           ← HPE process CPU/memory metrics
   │     ├── gpu/            ← GPU metrics
   │     ├── traces/bcc/     ← per-10ms RX byte trace
   │     └── logs/           ← per-container logs
@@ -136,46 +136,64 @@ All HPE output follows COCO keypoint format. Each detected person produces:
 
 ### 1. Download pretrained models
 
-Model weights are not included in the repository. Download each file and place it at the path shown.
+Model weights are not committed. Download them after installing `gdown` from
+`requirements.txt`.
+
+Create the target directories first:
+
+```bash
+mkdir -p models/AlphaPose/pretrained_models
+mkdir -p models/AlphaPose/detector/yolo/data
+mkdir -p models/MoveNet
+mkdir -p models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001
+mkdir -p models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP32
+mkdir -p models/OpenVINO/pretrained_models/intel/human-pose-estimation-0006/FP32
+mkdir -p models/OpenVINO/pretrained_models/intel/human-pose-estimation-0007/FP32
+mkdir -p models/OpenVINO/pretrained_models/public/FP32
+```
 
 **AlphaPose**
 ```bash
-wget "https://drive.google.com/uc?export=download&id=1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI" \
+gdown "https://drive.google.com/uc?id=1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI" \
   -O models/AlphaPose/pretrained_models/fast_res50_256x192.pth
 
-wget "https://drive.google.com/uc?export=download&id=1k-9cUGcdH5ZFN1NcMvZrO0ApW241tboD" \
+gdown "https://drive.google.com/uc?id=1D47msNOOiJKvPOXlnpyzdKA3k6E97NTC" \
   -O models/AlphaPose/detector/yolo/data/yolov3-spp.weights
 ```
 
 **MoveNet**
 ```bash
-wget "https://drive.google.com/uc?export=download&id=15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr" \
+gdown "https://drive.google.com/uc?id=15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr" \
   -O models/MoveNet/movenet_multipose_lightning_256x256_FP32.bin
 ```
 
 **OpenPose**
 ```bash
-wget "https://drive.google.com/uc?export=download&id=1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm" \
+gdown "https://drive.google.com/uc?id=1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm" \
   -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.bin
 ```
 
 **HigherHRNet**
 ```bash
-wget "https://drive.google.com/uc?export=download&id=1fko47eVczJZQb9wWA2X7eQ0TuF4PDXzs" \
+gdown "https://drive.google.com/uc?id=1fko47eVczJZQb9wWA2X7eQ0TuF4PDXzs" \
   -O models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.bin
 ```
 
 **EfficientHRNet (3 variants)**
 ```bash
-wget "https://drive.google.com/uc?export=download&id=1lEUFqQnWHVymQoZvaXuDFcnOyEEKsexP" \
-  -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
+gdown "https://drive.google.com/uc?id=1lEUFqQnWHVymQoZvaXuDFcnOyEEKsexP" \
+  -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
 
-wget "https://drive.google.com/uc?export=download&id=1d8pGQrM9vEfz_oAIey0qRr7Gxp6dS2UE" \
-  -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0006/FP32/human-pose-estimation-0006.bin
+gdown "https://drive.google.com/uc?id=1d8pGQrM9vEfz_oAIey0qRr7Gxp6dS2UE" \
+  -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0006/FP32/human-pose-estimation-0006.bin
 
-wget "https://drive.google.com/uc?export=download&id=1ZSdsqgD4zUO4gyHMYBfxq3m4UMyQ187j" \
-  -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
+gdown "https://drive.google.com/uc?id=1ZSdsqgD4zUO4gyHMYBfxq3m4UMyQ187j" \
+  -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
 ```
+
+If you already have the Open Model Zoo public layout, the same `.bin` files may
+exist under `models/OpenVINO/pretrained_models/public/human-pose-estimation-*`.
+They are compatible with the XML files used by this branch.
 
 ### 2. Install dependencies
 
@@ -261,7 +279,7 @@ graph TD
 | Folder | Entry point | Input source | HPE runs? | Monitors | Purpose |
 |---|---|---|---|---|---|
 | `monitor_hpe/` | `run_experiment.sh` | Local video file (volume mount) | ✅ | CPU%, RSS memory | Baseline inference cost — no network |
-| `ffmpeg_hpe/` | `run_experiment.sh` `run_experiment_bcc.sh` | Live H.264 HTTP stream (port 8089) | ✅ | CPU%, RSS, GPU, BCC RX bytes | Full streaming benchmark — main rig |
+| `ffmpeg_hpe/` | `run_experiment.sh` `run_experiment_bcc.sh` | Live H.264 HTTP stream (port 8089) | ✅ | HPE process CPU%, RSS memory, GPU, BCC RX bytes | Full streaming benchmark — main rig |
 | `recent-dash/` | `run_experiment.sh` | DASH segments via HTTP proxy | ❌ | CPU%, RSS, DASH-only proxy RX/TX | HTTP caching proxy research — not HPE |
 | `rtsp-ipcam/` | `start_server.sh` | — (is the server) | ❌ | — | Shared H.264 streaming server used by `ffmpeg_hpe/` |
 | `Measure_Flops/` | `measure_flops.sh` | Any HPE command | ✅ | GPU FLOPS, TOPS, memory BW | One-shot Nsight Compute profiling |
@@ -287,14 +305,28 @@ cd monitor_hpe && ./run_experiment.sh
 The main experiment rig. Five containers:
 - `h264-streaming-server` (from `rtsp-ipcam/`) — Python + FFmpeg HTTP server serving a video file as a raw H.264 stream on port 8089
 - `hpe` — runs `main.py --method <X> --input http://<server-ip>:8089/stream.h264`
-- `perf_monitor` (from `shared/perf_monitor/`) — samples CPU/memory/network
+- `perf_monitor` (from `shared/perf_monitor/`) — samples the HPE process CPU and RSS memory via host PID
 - `gpu-metrics` — polls `nvidia-smi` every 500ms
-- `bcc-tracer` (optional, commented out) — eBPF/BCC kernel tracing of network traffic
+- `bcc-tracer` — eBPF/BCC tracing of H.264 RX bytes into the HPE container
 
 ```bash
 cd ffmpeg_hpe && ./run_experiment_bcc.sh <method>
 # e.g. ./run_experiment_bcc.sh movenet
 ```
+
+For benchmark-quality runs, build the images before the timed run so image
+build time and first-run dependency setup do not contaminate the experiment:
+
+```bash
+cd ffmpeg_hpe
+docker compose -f docker-compose.yaml build h264-streaming-server hpe perf_monitor gpu-metrics bcc-tracer
+./run_experiment_bcc.sh movenet
+```
+
+Each BCC run writes `validation_report.json` and `validation_report.txt` in
+the timestamped results directory. A failed validation means at least one
+metric is missing, malformed, or inconsistent and the run should not be used
+for paper results.
 
 #### `recent-dash/` — DASH/HTTP caching experiment
 
@@ -356,9 +388,9 @@ each handling one direction. They are complementary, not redundant.
 
 | Tool | Container | Direction | Method | Works? |
 |---|---|---|---|---|
-| `bpftrace` in `monitor_pid.sh` | `perf_monitor` | **TX** (HPE → outside) | `sys_enter_sendto` tracepoint — fires in HPE process context, PID filter valid | ✅ |
+| `bpftrace` in `monitor_pid.sh` | legacy PID monitor | **TX** (HPE → outside) | `sys_enter_sendto` tracepoint — fires in HPE process context, PID filter valid only when the monitored PID is host-correct | Legacy |
 | `bcc_rx_bytes.py` | `bcc-tracer` | **RX** (stream → HPE) | BPF socket filter on `eth0` filtered by streamer IP + port | ✅ |
-| `bpftrace netif_receive_skb` in `monitor_pid.sh` | `perf_monitor` | RX (attempted) | Fires in softirq/kernel context — PID filter never matches HPE process | ❌ always 0 |
+| `bpftrace netif_receive_skb` in `monitor_pid.sh` | legacy PID monitor | RX (attempted) | Fires in softirq/kernel context — PID filter never matches HPE process | ❌ always 0 |
 
 **Why the split?**
 
@@ -374,10 +406,11 @@ separate container that shares HPE's network namespace
 (`network_mode: service:hpe`) so it sees exactly the same traffic HPE sees.
 
 **For accurate RX measurement always use `bcc-tracer`**, not the bpftrace RX
-column in `network_stats.csv` — that column is always ~0.
-
-The TX measurement from `bpftrace` in `monitor_pid.sh` is valid and can be
-used as-is.
+column in `network_stats.csv` — that column is always ~0. The active
+`run_experiment_bcc.sh` path uses a host-PID process monitor for CPU/memory and
+`bcc-tracer` for video ingress. Files ending in `*_Tx.csv` are HPE JSON output
+payload bytes produced by `utils/evaluator.py`; they are not network transmit
+traffic.
 
 ### Known Issues and Gotchas
 
@@ -400,8 +433,9 @@ These are confirmed issues in the codebase. Fixes marked ✅ are already applied
 | 11 | `ffmpeg_hpe/run_experiment.sh` | HPE container output (keypoint CSVs/JSON) was listed but never copied to results directory | ✅ Fixed |
 | 12 | `ffmpeg_hpe/monitor_pid.sh` | `netif_receive_skb` bpftrace PID filter fires in softirq context — PID never matches HPE process, RX bytes always ~0 | ⚠️ Known — use `bcc-tracer` for accurate RX measurement |
 | 13 | `monitor_hpe/plot_graph.py` | Calls `plt.show()` — blocks indefinitely in headless containers | ⚠️ Open |
-| 14 | `ffmpeg_hpe/plot_graph.py` | Empty file (0 bytes) | ⚠️ Open |
+| 14 | `ffmpeg_hpe/plot_graph.py` | Headless-safe CPU/memory plot helper for `perf_metrics.csv` and legacy `pid_metrics.csv` | ✅ Implemented |
 | 15 | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | ⚠️ Open |
+| 16 | `ffmpeg_hpe/run_experiment_bcc.sh` + `shared/perf_monitor/` | Host-PID monitor consumed a container-namespace PID, producing near-zero CPU and tiny memory for active HPE runs | ✅ Fixed — BCC rig now writes the host PID from `docker inspect` and measures the HPE process directly |
 
 #### HPE inference code
 

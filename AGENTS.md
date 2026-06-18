@@ -139,9 +139,9 @@ modifying any monitoring code.
 
 | Tool | Container | Direction | Mechanism | Status |
 |---|---|---|---|---|
-| `bpftrace sys_enter_sendto` in `monitor_pid.sh` | `perf_monitor` | **TX** (HPE → outside) | Syscall tracepoint — fires in HPE process context, PID filter valid | ✅ works |
+| `bpftrace sys_enter_sendto` in `monitor_pid.sh` | legacy PID monitor | **TX** (HPE → outside) | Syscall tracepoint — fires in HPE process context, PID filter valid only with a host-correct PID | legacy |
 | `bcc_rx_bytes.py` | `bcc-tracer` | **RX** (stream → HPE) | BPF socket filter on `eth0`, filtered by streamer IP + port | ✅ works (filter re-enabled `256a21c`) |
-| `bpftrace netif_receive_skb` in `monitor_pid.sh` | `perf_monitor` | RX (attempted) | Network tracepoint fires in softirq context — PID never matches HPE | ❌ always ~0 |
+| `bpftrace netif_receive_skb` in `monitor_pid.sh` | legacy PID monitor | RX (attempted) | Network tracepoint fires in softirq context — PID never matches HPE | ❌ always ~0 |
 
 **Why TX and RX need different approaches:**
 - `sendto()` is a syscall made by the HPE process — the kernel knows the PID,
@@ -155,8 +155,10 @@ modifying any monitoring code.
 filtering by streamer IP + HPE ephemeral port (auto-detected via `ss -ntp`
 in `entrypoint.sh`).
 
-**Rule:** for RX data use `traces/bcc/hpe_video_rx.csv`. For TX data use
-`network_stats.csv` from `perf_monitor`. Never use the RX column from
+**Rule:** for RX data use `traces/bcc/video_rx.csv` from `bcc-tracer`.
+The active `ffmpeg_hpe/run_experiment_bcc.sh` path uses a host-PID process
+monitor for HPE CPU/memory. Files ending in `*_Tx.csv` are HPE JSON output
+payload bytes, not network TX. Never use the RX column from legacy
 `network_stats.csv` — it is always ~0.
 
 ### Known Issues — Benchmarking Platform
@@ -180,8 +182,9 @@ issues.
 | 11 | `ffmpeg_hpe/run_experiment.sh` | HPE container output (keypoint CSVs/JSON) never copied to results dir | ✅ Fixed (`3c006cf`) |
 | 12 | Both `monitor_pid.sh` files | `netif_receive_skb` bpftrace PID filter fires in softirq context — RX bytes always ~0 | ⚠️ Open — use `bcc-tracer` for accurate RX |
 | 13 | `monitor_hpe/plot_graph.py` | Calls `plt.show()` — blocks in headless containers | ⚠️ Open |
-| 14 | `ffmpeg_hpe/plot_graph.py` | Empty file (0 bytes) | ⚠️ Open |
+| 14 | `ffmpeg_hpe/plot_graph.py` | Headless-safe CPU/memory plot helper for `perf_metrics.csv` and legacy `pid_metrics.csv` | ✅ Implemented |
 | 15 | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | ⚠️ Open |
+| 16 | `ffmpeg_hpe/run_experiment_bcc.sh` + `shared/perf_monitor/` | Host-PID monitor consumed a container-namespace PID, producing near-zero CPU and tiny memory for active HPE runs | ✅ Fixed — BCC rig now writes the host PID from `docker inspect` and measures the HPE process directly |
 
 ### Known TODOs in HPE Inference Code
 - `movenet_hpe.py`: keypoint-level score filtering not yet applied to body

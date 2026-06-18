@@ -213,7 +213,7 @@ Documented in both `README.md` and `AGENTS.md`.
 |---|---|---|---|
 | — | Both `monitor_pid.sh` | `netif_receive_skb` bpftrace RX always ~0 | By design — use `bcc-tracer` for RX |
 | — | `monitor_hpe/plot_graph.py` | Calls `plt.show()` — blocks in headless containers | One-line fix when needed |
-| — | `ffmpeg_hpe/plot_graph.py` | Empty file (0 bytes) | Delete or implement |
+| — | `ffmpeg_hpe/plot_graph.py` | Headless-safe CPU/memory plot helper for `perf_metrics.csv` and legacy `pid_metrics.csv` | Implemented |
 | — | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | Breaks on any other machine |
 | — | `run_experiment_bcc.sh` | `HPE_INPUT` still uses raw IP (not DNS hostname) | Intentional workaround — low risk |
 | — | TX/RX zeros in `pid_metrics.csv` | Network columns always `0,0` | By design — network data is in `network_stats.csv` |
