@@ -158,21 +158,50 @@ fi
 # Create results dir with correct device type
 results_dir="results_${container_type}_${cpu_threads}cores_${device_type}_${VIDEO_FILE_BASENAME}_${timestamp}"
 mkdir -p "$results_dir/logs" "$results_dir/traces/bcc" "$results_dir/perf"
+mkdir -p ./pids
 echo "Results directory: $results_dir"
 
 # Initialize timing file after results_dir is known.
 touch "$results_dir/container_timing.txt"
 echo "Container Instantiation Timing:" > "$results_dir/container_timing.txt"
 
-# Step 11: Start HPE container
+# Step 11: Start performance monitoring before HPE exists.
+perf_monitor_start=$(date +%s.%N)
+echo "[DEBUG] Starting monitoring containers..."
+docker compose -f $docker_compose_file up -d --build perf_monitor
+measure_container_startup "perf_monitor" "$perf_monitor_start"
+
+# Step 12: Start HPE container
 hpe_start=$(date +%s.%N)
 docker compose -f $docker_compose_file up -d hpe
 measure_container_startup "$HPE_SERVICE" "$hpe_start"
 
-# Step 12: Start monitoring containers with BCC support
-perf_monitor_start=$(date +%s.%N)
-echo "[DEBUG] Starting monitoring containers..."
-docker compose -f $docker_compose_file up -d perf_monitor
+# Write the HPE host PID for process-level monitoring.
+# entrypoint.sh uses exec "$@", so python3 main.py becomes PID 1 inside the
+# container. docker inspect .State.Pid returns the host PID of that process,
+# which is the exact process the monitor should sample.
+HPE_CONTAINER=$(docker ps -qf "name=^/hpe$")
+if [ -n "$HPE_CONTAINER" ]; then
+  for attempt in {1..5}; do
+    HPE_HOST_PID=$(docker inspect --format='{{.State.Pid}}' "$HPE_CONTAINER" 2>/dev/null || true)
+    if [ -n "$HPE_HOST_PID" ] && [ "$HPE_HOST_PID" != "0" ]; then
+      echo "$HPE_HOST_PID" > ./pids/hpe.pid
+      echo "[DEBUG] HPE host PID written to pids/hpe.pid: $HPE_HOST_PID"
+      echo "HPE host PID (process-level monitor target): $HPE_HOST_PID" >> "$results_dir/container_timing.txt"
+      break
+    fi
+    echo "[DEBUG] Waiting for HPE host PID (attempt $attempt/5)..."
+    sleep 1
+  done
+  if [ ! -s ./pids/hpe.pid ]; then
+    echo "[WARNING] Could not find HPE host PID — perf_monitor will keep waiting for pids/hpe.pid"
+  fi
+fi
+
+# Special handling for BCC tracer
+bcc_start=$(date +%s.%N)
+echo "[DEBUG] Starting GPU and BCC monitoring containers..."
+gpu_start=$(date +%s.%N)
 docker compose -f $docker_compose_file up -d gpu-metrics
 docker compose -f $docker_compose_file up -d bcc-tracer
 
@@ -180,11 +209,9 @@ PERF_MONITOR_CONTAINER=$(docker ps -qf "name=perf_monitor")
 GPU_METRICS_CONTAINER=$(docker ps -qf "name=gpu-metrics")
 TRACE_CONTAINER=$(docker ps -qf "name=.*bcc-tracer.*")
 
-measure_container_startup "perf_monitor" "$perf_monitor_start"
-measure_container_startup "gpu-metrics" "$perf_monitor_start"
+measure_container_startup "gpu-metrics" "$gpu_start"
 
 # Special handling for BCC tracer
-bcc_start=$(date +%s.%N)
 echo "[DEBUG] Waiting for BCC tracer to initialize..."
 sleep 8  # Extra time for BCC compilation and port detection
 measure_container_startup "bcc-tracer" "$bcc_start"
@@ -205,28 +232,6 @@ if [[ -z "$detected_port" ]]; then
   echo "[WARNING] BCC tracer did not detect HPE video port after 20 seconds."
 fi
 echo "[DEBUG] waiting for experiment to finish..."
-
-# Step 13: Get the main.py PID inside the hpe container (for monitor_pid.sh)
-# pgrep extracts just the PID — ps -ef writes the full process table which
-# monitor_pid.sh cannot parse as a PID
-mkdir -p ./pids
-HPE_CONTAINER=$(docker ps -qf "name=^/hpe$")
-if [ -n "$HPE_CONTAINER" ]; then
-  for attempt in {1..5}; do
-    HPE_PID=$(docker exec $HPE_CONTAINER pgrep -f "python.*main.py" 2>/dev/null | head -1)
-    if [ -n "$HPE_PID" ]; then
-      echo "$HPE_PID" > ./pids/hpe.pid
-      echo "[DEBUG] HPE main.py PID: $HPE_PID"
-      break
-    else
-      echo "[DEBUG] Waiting for main.py to start (attempt $attempt/5)..."
-      sleep 2
-    fi
-  done
-  if [ ! -s ./pids/hpe.pid ]; then
-    echo "[WARNING] Could not find main.py PID — monitor_pid.sh will not track the process"
-  fi
-fi
 
 # Step 13b: Collect initial logs
 sleep 2  # Allow containers to stabilize

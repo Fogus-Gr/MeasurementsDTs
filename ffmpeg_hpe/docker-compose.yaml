@@ -131,7 +131,6 @@ services:
       - EXPERIMENT_TYPE=ffmpeg_hpe   # Optional, for script logic
     depends_on:
       - h264-streaming-server
-      - hpe
     # Use host PID namespace to monitor processes in the host 
     pid: host
     cap_add:
