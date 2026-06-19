@@ -25,7 +25,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${STREAMER_CPUS:-1.0}"  # Reserve one core for the streamer on a 4-vCPU host.
+          cpus: "${STREAMER_CPUS:-1.0}"  # Selected by the run script profile.
           memory: 1G
         reservations:
           cpus: "${STREAMER_RESERVATION_CPUS:-1.0}"
@@ -54,10 +54,13 @@ services:
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
       # CPU optimization for OpenVINO backends (openpose / efficienthrnet*).
-      # Tuned for a 4-vCPU host and overridable via ffmpeg_hpe/.env.
+      # Tuned by run_experiment_bcc.sh for the current host and overridable
+      # via ffmpeg_hpe/.env or exported shell variables.
       - OV_MODE=${OV_MODE:-latency}
       - OV_STREAMS=${OV_STREAMS:-1}
       - OV_THREADS=${OV_THREADS:-3}
+      - OV_CPU_PINNING=${OV_CPU_PINNING:-true}
+      - OV_HYPER_THREADING=${OV_HYPER_THREADING:-false}
       - OMP_NUM_THREADS=${OMP_NUM_THREADS:-3}
       - MKL_NUM_THREADS=${MKL_NUM_THREADS:-3}
       - OPENBLAS_NUM_THREADS=${OPENBLAS_NUM_THREADS:-3}
@@ -77,13 +80,14 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${HPE_CPUS:-3.0}"  # HPE gets three cores on a 4-vCPU host.
-          memory: 16G    # Adjust based on your model requirements
+          cpus: "${HPE_CPUS:-3.0}"  # Selected by the run script profile.
+          memory: "${HPE_MEMORY_LIMIT:-16G}"    # Selected by the run script profile.
         reservations:
           devices:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+          memory: "${HPE_MEMORY_RESERVATION:-12G}"
     container_name: hpe
     depends_on:
       h264-streaming-server:

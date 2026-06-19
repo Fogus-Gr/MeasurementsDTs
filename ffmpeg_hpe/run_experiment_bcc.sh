@@ -1,5 +1,7 @@
 #!/bin/bash
 set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 timestamp=$(date +%Y%m%d_%H%M%S)
 cpu_threads=$(lscpu | awk '/^CPU\(s\):/ {print $2; exit}')
@@ -26,6 +28,62 @@ measure_container_startup() {
   else
     echo "[WARNING] Could not find container $container_name to measure startup time"
   fi
+}
+
+# Resolve a machine-aware resource profile for the current HPE method/device.
+resolve_resource_profile() {
+  local method="$1"
+  local device="$2"
+  local total_vcpus
+  local total_mem_gib
+  local streamer_cpus
+  local hpe_cpus
+  local hpe_mem_limit_gib
+  local hpe_mem_reservation_gib
+  local ov_threads_default
+
+  total_vcpus=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
+  total_mem_gib=$(awk '/MemTotal:/ {printf "%d\n", ($2 + 1048575) / 1048576; exit}' /proc/meminfo)
+
+  if [ -z "$total_vcpus" ] || [ "$total_vcpus" -lt 4 ]; then
+    echo "[ERROR] This experiment requires at least 4 vCPUs. Found: ${total_vcpus:-unknown}"
+    exit 1
+  fi
+
+  if [ "$device" = "GPU" ]; then
+    streamer_cpus=$(awk -v total="$total_vcpus" 'BEGIN {v=total*0.25; if (v<1.0) v=1.0; if (v>2.0) v=2.0; printf "%.1f", v}')
+    hpe_mem_limit_gib=$(awk -v total="$total_mem_gib" 'BEGIN {v=total*0.25; if (v<8) v=8; if (v>16) v=16; printf "%d", int(v+0.5)}')
+    ov_threads_default=$(awk -v total="$total_vcpus" -v streamer="$streamer_cpus" 'BEGIN {v=total-streamer; if (v<2) v=2; if (v>4) v=4; printf "%d", int(v+0.5)}')
+  else
+    streamer_cpus=$(awk -v total="$total_vcpus" 'BEGIN {v=total*0.375; if (v<1.5) v=1.5; if (v>2.5) v=2.5; printf "%.1f", v}')
+    hpe_mem_limit_gib=$(awk -v total="$total_mem_gib" 'BEGIN {v=total*0.20; if (v<4) v=4; if (v>16) v=16; printf "%d", int(v+0.5)}')
+    ov_threads_default=$(awk -v total="$total_vcpus" -v streamer="$streamer_cpus" 'BEGIN {v=total-streamer; if (v<2) v=2; printf "%d", int(v+0.5)}')
+  fi
+
+  hpe_cpus=$(awk -v total="$total_vcpus" -v streamer="$streamer_cpus" 'BEGIN {v=total-streamer; if (v<1.0) v=1.0; printf "%.1f", v}')
+  hpe_mem_reservation_gib=$(awk -v value="$hpe_mem_limit_gib" 'BEGIN {printf "%d", int(value*0.75 + 0.5)}')
+
+  : "${STREAMER_CPUS:=$streamer_cpus}"
+  : "${STREAMER_RESERVATION_CPUS:=$streamer_cpus}"
+  : "${HPE_CPUS:=$hpe_cpus}"
+  : "${HPE_MEMORY_LIMIT:=${hpe_mem_limit_gib}G}"
+  : "${HPE_MEMORY_RESERVATION:=${hpe_mem_reservation_gib}G}"
+  : "${OV_MODE:=latency}"
+  : "${OV_STREAMS:=1}"
+  : "${OV_THREADS:=$ov_threads_default}"
+  : "${OV_CPU_PINNING:=true}"
+  : "${OV_HYPER_THREADING:=false}"
+
+  export STREAMER_CPUS STREAMER_RESERVATION_CPUS HPE_CPUS
+  export HPE_MEMORY_LIMIT HPE_MEMORY_RESERVATION
+  export OV_MODE OV_STREAMS OV_THREADS OV_CPU_PINNING OV_HYPER_THREADING
+
+  echo "[INFO] Detected ${total_vcpus} vCPUs and ${total_mem_gib} GiB RAM on this host"
+  echo "[INFO] Selected ffmpeg_hpe profile: method=${method} device=${device}"
+  echo "[INFO] Streamer CPUs: ${STREAMER_CPUS} (reservation: ${STREAMER_RESERVATION_CPUS})"
+  echo "[INFO] HPE CPUs: ${HPE_CPUS}"
+  echo "[INFO] HPE memory: ${HPE_MEMORY_LIMIT} (reservation: ${HPE_MEMORY_RESERVATION})"
+  echo "[INFO] OV_THREADS: ${OV_THREADS}"
 }
 
 # Step 3: Enhanced diagnostics function with BCC support
@@ -57,10 +115,10 @@ capture_diagnostics() {
 # Use HPE_METHOD as container_type for results dir naming
 container_type="${1:-movenet}"
 
-# Load VIDEO_FILE from .env if not set
+# Load VIDEO_FILE from the rig-local .env if not set
 if [[ -z "$VIDEO_FILE" ]]; then
-  if [ -f .env ]; then
-    export $(grep -E '^VIDEO_FILE=' .env | xargs)
+  if [ -f "$SCRIPT_DIR/.env" ]; then
+    export $(grep -E '^VIDEO_FILE=' "$SCRIPT_DIR/.env" | xargs)
   fi
 fi
 
@@ -70,7 +128,21 @@ if [[ -z "$VIDEO_FILE" ]]; then
   exit 1
 fi
 
-VIDEO_FILE_BASENAME=$(basename "$VIDEO_FILE")
+VIDEO_FILE_INPUT="$VIDEO_FILE"
+if [[ "$VIDEO_FILE_INPUT" == /app/videos/* ]]; then
+  VIDEO_FILE_RELATIVE="${VIDEO_FILE_INPUT#/app/videos/}"
+  VIDEO_FILE_CONTAINER="$VIDEO_FILE_INPUT"
+elif [[ "$VIDEO_FILE_INPUT" == /* ]]; then
+  VIDEO_FILE_RELATIVE="$(basename "$VIDEO_FILE_INPUT")"
+  VIDEO_FILE_CONTAINER="$VIDEO_FILE_INPUT"
+else
+  VIDEO_FILE_RELATIVE="$VIDEO_FILE_INPUT"
+  VIDEO_FILE_CONTAINER="/app/videos/$VIDEO_FILE_INPUT"
+fi
+
+export VIDEO_FILE="$VIDEO_FILE_CONTAINER"
+
+VIDEO_FILE_BASENAME=$(basename "$VIDEO_FILE_RELATIVE")
 if [[ "$VIDEO_FILE_BASENAME" == "" || "$VIDEO_FILE_BASENAME" == "." || "$VIDEO_FILE_BASENAME" == "/" ]]; then
   VIDEO_FILE_BASENAME="unknown"
 fi
@@ -86,6 +158,24 @@ echo "[DEBUG] Cleaning previous run artifacts..."
 rm -f ./results/*.csv ./traces/*.csv 2>/dev/null || true
 rm -f ./csv/*.csv 2>/dev/null || true
 rm -rf ./tracer_output/* 2>/dev/null || true
+
+arguments="$*"
+export HPE_METHOD="${1:-movenet}"
+if [[ "$HPE_METHOD" == "alphapose" || "$arguments" == *"--method alphapose"* ]]; then
+  export HPE_DEVICE="GPU"
+elif [[ "$HPE_METHOD" == hrnet* ]]; then
+  export HPE_DEVICE="CPU"
+else
+  export HPE_DEVICE="CPU"
+fi
+
+if [[ "$arguments" == *"--device GPU"* ]]; then
+  export HPE_DEVICE="GPU"
+elif [[ "$arguments" == *"--device CPU"* ]]; then
+  export HPE_DEVICE="CPU"
+fi
+
+resolve_resource_profile "$HPE_METHOD" "$HPE_DEVICE"
 
 echo "Preparing experiment workspace..."
 
@@ -124,24 +214,10 @@ echo "[DEBUG] Using direct IP for stream: $STREAM_URL"
 # Step 10: Configure HPE environment
 arguments="$*"  # Capture all arguments
 
-export HPE_METHOD="${1:-movenet}"
 shift || true
 export HPE_EXTRA_ARGS="$*"
 export HPE_INPUT="http://h264-streaming-server:8089/stream.h264"
 export HPE_DEVICE="${HPE_DEVICE:-CPU}"
-# Method-specific defaults
-if [[ "$HPE_METHOD" == "alphapose" || "$arguments" == *"--method alphapose"* ]]; then
-  export HPE_DEVICE="GPU"  # AlphaPose default
-elif [[ "$HPE_METHOD" == "hrnet"* ]]; then
-  export HPE_DEVICE="CPU"
-fi
-
-# Argument overrides
-if [[ "$arguments" == *"--device GPU"* ]]; then
-  export HPE_DEVICE="GPU"
-elif [[ "$arguments" == *"--device CPU"* ]]; then
-  export HPE_DEVICE="CPU"  # This will override AlphaPose's GPU default
-fi
 
 echo "Selected configuration:"
 echo "Method: $HPE_METHOD"
@@ -292,7 +368,11 @@ if [ -n "$TRACE_CONTAINER" ]; then
   echo "[DEBUG] Copied BCC trace data (or skipped if not present)"
   docker cp "$TRACE_CONTAINER:/opt/tracer/output/logs" "$results_dir/traces/bcc/" 2>/dev/null || true
   echo "[DEBUG] Copied BCC logs (or skipped)"
-  docker logs "$TRACE_CONTAINER" 2>&1 | grep "Detected HPE video port" > "$results_dir/traces/bcc/port_info.txt" 2>/dev/null || true
+  if [[ -n "$detected_port" ]]; then
+    echo "BCC detected HPE video port: $detected_port" > "$results_dir/traces/bcc/port_info.txt"
+  else
+    docker logs "$TRACE_CONTAINER" 2>&1 | grep "Monitoring HPE traffic on port" > "$results_dir/traces/bcc/port_info.txt" 2>/dev/null || true
+  fi
   echo "[DEBUG] Extracted port info (or skipped)"
 fi
 
