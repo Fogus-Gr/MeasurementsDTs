@@ -1,0 +1,12 @@
+pids/
+results/
+results_*/
+tracer_output/
+traces/
+logs/
+perf/
+*.pyc
+__pycache__/
+*.log
+*.csv
+*.png

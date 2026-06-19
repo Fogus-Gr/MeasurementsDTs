@@ -53,6 +53,8 @@ videos/*
 Measure_plot_cpu_perf/*
 Measure_Flops/*
 ffmpeg_hpe/*
+ffmpeg_hpe_cpu/*
 recent-dash/*
+.env.cpu
 
 
