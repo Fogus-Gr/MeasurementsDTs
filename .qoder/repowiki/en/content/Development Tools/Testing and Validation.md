@@ -15,16 +15,25 @@
 - [tests/contact_sheet_smoke/run_contact_sheet_smoke.py](file://tests/contact_sheet_smoke/run_contact_sheet_smoke.py)
 - [tests/test_hpe_regressions.py](file://tests/test_hpe_regressions.py)
 - [unit_tests/test_hpe_coordinate_smoke.py](file://unit_tests/test_hpe_coordinate_smoke.py)
+- [ffmpeg_hpe/validate_run.py](file://ffmpeg_hpe/validate_run.py)
+- [ffmpeg_hpe/run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
+- [ffmpeg_hpe/run_experiment_bcc.sh](file://ffmpeg_hpe/run_experiment_bcc.sh)
+- [ffmpeg_hpe/docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
+- [ffmpeg_hpe/bpftrace-tracer/README.md](file://ffmpeg_hpe/bpftrace-tracer/README.md)
+- [ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py)
+- [ffmpeg_hpe/Dockerfile.gpu_metrics](file://ffmpeg_hpe/Dockerfile.gpu_metrics)
+- [ffmpeg_hpe/run_nvidia_dcgm.sh](file://ffmpeg_hpe/run_nvidia_dcgm.sh)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Added comprehensive contact sheet smoke testing framework documentation
-- Documented coordinate smoke testing system with regression validation
-- Enhanced testing methodology section with new testing infrastructure
-- Updated architecture overview to include new testing components
-- Added new testing components to project structure visualization
-- Expanded troubleshooting guide with new test-specific issues
+- Enhanced comprehensive validation framework documentation with multi-domain quality assurance checks
+- Documented advanced experiment orchestration capabilities and automated result validation system
+- Updated testing methodology to include FFmpeg HPE validation framework with container operation validation
+- Expanded architecture overview to include automated validation pipeline and multi-container orchestration
+- Added new validation components to project structure visualization with enhanced monitoring capabilities
+- Updated troubleshooting guide with validation-specific issues and BPF tracing considerations
+- Documented GPU metrics collection and BPF tracing integration for comprehensive quality assurance
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -39,19 +48,20 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document describes the comprehensive testing and validation utilities for the Human Pose Estimation (HPE) framework. The testing ecosystem now includes multiple sophisticated testing methodologies:
+This document describes the comprehensive testing and validation utilities for the Human Pose Estimation (HPE) framework. The testing ecosystem now includes multiple sophisticated testing methodologies with a focus on automated quality assurance and comprehensive validation:
 
-- **Contact Sheet Smoke Testing**: Automated multi-method comparison with visual output
+- **Contact Sheet Smoke Testing**: Automated multi-method comparison with visual output and detailed reporting
 - **Coordinate Smoke Testing**: Regression validation for coordinate accuracy and bounds checking
 - **Regression Testing**: Unit tests for critical implementation behaviors and architectural constraints
 - **Traditional Smoke Testing**: Basic functionality validation across different HPE methods
 - **Installation and Environment Validation**: Reproducible environment setup verification
 - **HTTP Stream Testing**: Local development server for IP-based input validation
+- **FFmpeg HPE Validation Framework**: Comprehensive quality assurance system with multi-domain validation checks
 
-These testing frameworks provide comprehensive coverage for different aspects of HPE functionality, from basic smoke tests to detailed coordinate validation and architectural regression testing.
+The new FFmpeg HPE validation framework provides a sophisticated quality assurance system that validates HPE container operation, JSON output integrity, network monitoring accuracy, performance metrics consistency, and GPU utilization monitoring. This framework ensures reproducible and defensible results for research and production deployments through automated validation and comprehensive monitoring.
 
 ## Project Structure
-The testing ecosystem has evolved to include dedicated testing directories with specialized functionality:
+The testing ecosystem has evolved to include dedicated testing directories with specialized functionality, including the new FFmpeg HPE validation framework with comprehensive monitoring capabilities:
 
 ```mermaid
 graph TB
@@ -66,6 +76,15 @@ CSS["tests/contact_sheet_smoke/"]
 CTS["unit_tests/test_hpe_coordinate_smoke.py"]
 RT["tests/test_hpe_regressions.py"]
 end
+subgraph "FFmpeg HPE Validation Framework"
+VR["ffmpeg_hpe/validate_run.py"]
+RE["ffmpeg_hpe/run_experiment.sh"]
+REB["ffmpeg_hpe/run_experiment_bcc.sh"]
+DC["ffmpeg_hpe/docker-compose.yaml"]
+BT["ffmpeg_hpe/bpftrace-tracer/"]
+GM["ffmpeg_hpe/run_nvidia_dcgm.sh"]
+DF["ffmpeg_hpe/Dockerfile.gpu_metrics"]
+end
 subgraph "Application"
 MAIN["main.py"]
 BASE["base_hpe.py"]
@@ -79,6 +98,15 @@ ST --> MAIN
 INS --> MAIN
 SVS --> MAIN
 SIM --> OVB
+VR --> RE
+VR --> REB
+VR --> DC
+VR --> BT
+VR --> GM
+RE --> DC
+REB --> DC
+REB --> BT
+REB --> GM
 MAIN --> OVB
 MAIN --> MN
 OVB --> BASE
@@ -98,6 +126,11 @@ MN --> BASE
 - [tests/contact_sheet_smoke/run_contact_sheet_smoke.py:1-210](file://tests/contact_sheet_smoke/run_contact_sheet_smoke.py#L1-L210)
 - [tests/test_hpe_regressions.py:1-103](file://tests/test_hpe_regressions.py#L1-L103)
 - [unit_tests/test_hpe_coordinate_smoke.py:1-158](file://unit_tests/test_hpe_coordinate_smoke.py#L1-L158)
+- [ffmpeg_hpe/validate_run.py:1-521](file://ffmpeg_hpe/validate_run.py#L1-L521)
+- [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
+- [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
+- [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
+- [ffmpeg_hpe/bpftrace-tracer/README.md:1-71](file://ffmpeg_hpe/bpftrace-tracer/README.md#L1-L71)
 
 **Section sources**
 - [README.md:1-125](file://README.md#L1-L125)
@@ -113,9 +146,14 @@ MN --> BASE
 - [tests/contact_sheet_smoke/run_contact_sheet_smoke.py:1-210](file://tests/contact_sheet_smoke/run_contact_sheet_smoke.py#L1-L210)
 - [tests/test_hpe_regressions.py:1-103](file://tests/test_hpe_regressions.py#L1-L103)
 - [unit_tests/test_hpe_coordinate_smoke.py:1-158](file://unit_tests/test_hpe_coordinate_smoke.py#L1-L158)
+- [ffmpeg_hpe/validate_run.py:1-521](file://ffmpeg_hpe/validate_run.py#L1-L521)
+- [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
+- [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
+- [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
+- [ffmpeg_hpe/bpftrace-tracer/README.md:1-71](file://ffmpeg_hpe/bpftrace-tracer/README.md#L1-L71)
 
 ## Core Components
-The testing ecosystem now encompasses multiple specialized testing frameworks:
+The testing ecosystem now encompasses multiple specialized testing frameworks with enhanced validation capabilities:
 
 ### Traditional Smoke Testing
 - **Smoke Test Script**: Executes representative runs for MoveNet, AlphaPose, and EfficientHRNet variants across image, directory, and video inputs. Respects device selection and handles missing AlphaPose models gracefully.
@@ -126,6 +164,13 @@ The testing ecosystem now encompasses multiple specialized testing frameworks:
 - **Contact Sheet Smoke Testing**: Comprehensive multi-method testing that runs all HPE methods on a single input image, generates visual contact sheets, and creates detailed summaries with individual method outputs.
 - **Coordinate Smoke Testing**: Regression testing that validates coordinate accuracy, bounds checking, and detection quality thresholds across all supported HPE methods.
 - **Regression Testing**: Unit tests that verify critical implementation behaviors, architectural constraints, and code quality standards.
+
+### FFmpeg HPE Validation Framework
+- **Validation Runner**: Comprehensive validation system that checks HPE container operation, JSON output integrity, network monitoring accuracy, performance metrics consistency, and GPU utilization.
+- **Experiment Scripts**: Automated experiment orchestration with container startup timing, resource monitoring, and data collection across multiple domains.
+- **Docker Compose Orchestration**: Multi-container setup for HPE processing, performance monitoring, BPF tracing, and GPU metrics collection with shared networking.
+- **BPF Tracing**: Kernel-level network traffic monitoring for accurate RX byte counting and port detection with automatic port discovery.
+- **GPU Metrics Collection**: Real-time GPU utilization and thermal monitoring using nvidia-smi with comprehensive metric tracking.
 
 ### Application Integration
 - **Simple Test**: Demonstrates synchronous webcam processing with OpenVINO, including camera availability checks, inference timing, and pose rendering.
@@ -145,42 +190,173 @@ The testing ecosystem now encompasses multiple specialized testing frameworks:
 - [tests/contact_sheet_smoke/run_contact_sheet_smoke.py:1-210](file://tests/contact_sheet_smoke/run_contact_sheet_smoke.py#L1-L210)
 - [tests/test_hpe_regressions.py:1-103](file://tests/test_hpe_regressions.py#L1-L103)
 - [unit_tests/test_hpe_coordinate_smoke.py:1-158](file://unit_tests/test_hpe_coordinate_smoke.py#L1-L158)
+- [ffmpeg_hpe/validate_run.py:1-521](file://ffmpeg_hpe/validate_run.py#L1-L521)
+- [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
+- [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
+- [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
+- [ffmpeg_hpe/bpftrace-tracer/README.md:1-71](file://ffmpeg_hpe/bpftrace-tracer/README.md#L1-L71)
 
 ## Architecture Overview
-The testing architecture now includes multiple layers of validation, from basic smoke tests to comprehensive regression testing:
+The testing architecture now includes multiple layers of validation, from basic smoke tests to comprehensive regression testing and the new FFmpeg HPE validation framework with automated quality assurance:
 
 ```mermaid
 sequenceDiagram
 participant User as "User/Test Runner"
-participant CSS as "Contact Sheet Test"
-participant CTS as "Coordinate Test"
-participant RT as "Regression Test"
+participant VR as "validate_run.py"
+participant RE as "run_experiment.sh"
+participant REB as "run_experiment_bcc.sh"
+participant DC as "docker-compose.yaml"
+participant BT as "BPF Tracer"
+participant GM as "GPU Metrics"
+participant PM as "Perf Monitor"
 participant Main as "main.py"
 participant Impl as "HPE Implementation"
-User->>CSS : Run contact sheet test
-CSS->>Main : Invoke with multiple methods
-loop For each method
-Main->>Impl : load_model() and process
-Impl-->>Main : Results
-end
-CSS-->>User : Visual contact sheet + summary
-User->>CTS : Run coordinate smoke test
-CTS->>Main : Process with validation
-Main->>Impl : load_model() and process
-Impl-->>Main : Results with coordinates
-CTS-->>User : Coordinate validation report
-User->>RT : Run regression tests
-RT->>Main : Source code analysis
-RT-->>User : Test results
+User->>RE : Run experiment
+RE->>DC : Start containers
+DC->>BT : Launch BPF tracer
+DC->>GM : Launch GPU metrics
+DC->>PM : Launch perf monitor
+RE->>Main : Execute HPE processing
+Main->>Impl : Process video stream
+Impl-->>Main : Generate outputs
+RE->>VR : Validate results
+VR->>VR : Check exit codes
+VR->>VR : Validate JSON outputs
+VR->>VR : Validate network RX
+VR->>VR : Validate performance
+VR->>VR : Validate GPU metrics
+VR-->>User : PASS/FAIL report
 ```
 
 **Diagram sources**
-- [tests/contact_sheet_smoke/run_contact_sheet_smoke.py:61-101](file://tests/contact_sheet_smoke/run_contact_sheet_smoke.py#L61-L101)
-- [unit_tests/test_hpe_coordinate_smoke.py:78-101](file://unit_tests/test_hpe_coordinate_smoke.py#L78-L101)
-- [tests/test_hpe_regressions.py:8-103](file://tests/test_hpe_regressions.py#L8-L103)
-- [main.py:208-227](file://main.py#L208-L227)
+- [ffmpeg_hpe/validate_run.py:467-521](file://ffmpeg_hpe/validate_run.py#L467-L521)
+- [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
+- [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
+- [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
+- [ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py:1-120](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py#L1-L120)
+- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-86](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L86)
 
 ## Detailed Component Analysis
+
+### FFmpeg HPE Validation Framework
+**Purpose**: Comprehensive quality assurance system that validates HPE container operation, output integrity, and performance metrics across multiple domains with automated result validation.
+
+**Key Features**:
+- **Multi-Domain Validation**: Checks HPE container exit codes, JSON output integrity, network monitoring accuracy, performance metrics, and GPU utilization
+- **Automated Reporting**: Generates structured validation reports with PASS/FAIL status and detailed metrics
+- **Threshold Configuration**: Configurable tolerances for network byte matching and performance validation
+- **Comprehensive Coverage**: Validates all aspects of HPE processing from container startup to output generation
+
+**Validation Domains**:
+- **HPE Container Validation**: Ensures container exits with code 0 and logs contain expected processing information
+- **JSON Output Validation**: Verifies presence of exactly one JSON CSV, parseable content, sequential frame numbering, and frame count consistency
+- **Network Monitoring Validation**: Compares BCC RX byte counts with FFmpeg bytes-read within configurable tolerance
+- **Performance Metrics Validation**: Validates CPU utilization, memory usage, and Docker memory consistency
+- **GPU Metrics Validation**: Ensures GPU metrics collection and proper utilization reporting
+
+**Execution Flow**:
+```mermaid
+flowchart TD
+Start(["Start Validation"]) --> ParseArgs["Parse Arguments"]
+ParseArgs --> FindDir["Find Latest Results Directory"]
+FindDir --> ValidateExit["Validate HPE Exit Code"]
+ValidateExit --> ParseLog["Parse HPE Log"]
+ParseLog --> ValidateJSON["Validate JSON Output"]
+ValidateJSON --> ValidateTX["Validate TX Output"]
+ValidateTX --> ValidateBCC["Validate BCC RX"]
+ValidateBCC --> ValidatePerf["Validate Performance"]
+ValidatePerf --> ValidateGPU["Validate GPU Metrics"]
+ValidateGPU --> GenerateReport["Generate Validation Report"]
+GenerateReport --> End(["Validation Complete"])
+```
+
+**Diagram sources**
+- [ffmpeg_hpe/validate_run.py:467-521](file://ffmpeg_hpe/validate_run.py#L467-L521)
+
+**Expected Outcomes**:
+- PASS status when all validation checks succeed within configured tolerances
+- FAIL status with detailed explanations when validation fails
+- Structured validation_report.json and validation_report.txt files
+- Metrics dictionary containing detailed performance and validation metrics
+
+**Section sources**
+- [ffmpeg_hpe/validate_run.py:1-521](file://ffmpeg_hpe/validate_run.py#L1-L521)
+
+### Experiment Orchestration Scripts
+**Purpose**: Automated experiment execution with comprehensive container orchestration and data collection across multiple validation domains.
+
+**Key Features**:
+- **Container Startup Timing**: Measures and records container instantiation times for performance analysis
+- **Health Check Integration**: Monitors container health and responds to failures appropriately
+- **Data Collection Automation**: Automatically collects performance metrics, network traces, and HPE outputs
+- **Resource Management**: Configures CPU limits, memory reservations, and GPU device allocation
+- **Diagnostic Logging**: Captures comprehensive diagnostic information for troubleshooting
+
+**Run Experiment Script**:
+- **Standard Experiment**: Runs experiments with perf_monitor, bcc-tracer, and gpu-metrics containers
+- **BCC Experiment**: Enhanced version with BPF tracing and detailed port detection
+- **Automatic Cleanup**: Ensures proper container cleanup and resource deallocation
+- **Result Organization**: Creates structured results directories with organized output files
+
+**Section sources**
+- [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
+- [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
+
+### Docker Compose Orchestration
+**Purpose**: Multi-container setup for coordinated HPE processing with monitoring and validation capabilities.
+
+**Service Configuration**:
+- **HPE Service**: Main HPE processing container with GPU support and OpenVINO optimization
+- **Streaming Server**: RTSP/H.264 streaming server with health checks and resource limits
+- **Performance Monitor**: Containerized performance monitoring with process-level metrics
+- **BPF Tracer**: Kernel-level network traffic monitoring with port detection
+- **GPU Metrics**: Real-time GPU utilization and thermal monitoring
+
+**Network Architecture**:
+- **Streaming Network**: Dedicated bridge network for HPE processing and streaming
+- **Container Communication**: Shared network namespaces for accurate monitoring
+- **Resource Isolation**: Separate CPU and memory limits for each service
+
+**Section sources**
+- [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
+
+### BPF Tracing and Network Monitoring
+**Purpose**: Kernel-level network traffic monitoring for accurate RX byte counting and port detection.
+
+**Key Features**:
+- **BPF Program**: Low-level packet filtering and byte counting using eBPF
+- **Port Detection**: Automatic detection of HPE video port for accurate monitoring
+- **Real-time Monitoring**: Continuous packet capture with CSV output
+- **Socket Filter Attachment**: Flexible attachment methods for different kernel configurations
+
+**BPF Implementation**:
+- **Packet Filtering**: Filters TCP packets from streaming server to HPE container
+- **Byte Counting**: Accumulates packet lengths for RX byte totals
+- **Timestamp Tracking**: Records monitoring timestamps for analysis
+- **Delta Calculation**: Computes byte deltas for rate analysis
+
+**Section sources**
+- [ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py:1-120](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py#L1-L120)
+- [ffmpeg_hpe/bpftrace-tracer/README.md:1-71](file://ffmpeg_hpe/bpftrace-tracer/README.md#L1-L71)
+
+### GPU Metrics Collection
+**Purpose**: Real-time GPU utilization and thermal monitoring using nvidia-smi.
+
+**Key Features**:
+- **Continuous Monitoring**: Periodic GPU statistics collection with configurable intervals
+- **Multi-GPU Support**: Handles systems with multiple GPUs and tracks utilization per device
+- **Comprehensive Metrics**: Collects utilization percentages, memory usage, temperature, and power consumption
+- **CSV Output**: Structured metrics output for analysis and validation
+
+**Metrics Collection**:
+- **GPU Utilization**: Percentage of time GPU is busy processing
+- **Memory Utilization**: Percentage of GPU memory currently in use
+- **Temperature**: Current GPU operating temperature
+- **Power Usage**: Current GPU power consumption
+
+**Section sources**
+- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-86](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L86)
+- [ffmpeg_hpe/Dockerfile.gpu_metrics](file://ffmpeg_hpe/Dockerfile.gpu_metrics)
 
 ### Contact Sheet Smoke Testing Framework
 **Purpose**: Comprehensive multi-method comparison testing with visual output and detailed reporting.
@@ -368,7 +544,7 @@ ValidateBoxSize --> Success["Test Pass"]
 - [movenet_hpe.py:1-111](file://movenet_hpe.py#L1-L111)
 
 ## Dependency Analysis
-The enhanced testing ecosystem creates a layered dependency structure with specialized testing components:
+The enhanced testing ecosystem creates a layered dependency structure with specialized testing components, including the new FFmpeg HPE validation framework with comprehensive monitoring capabilities:
 
 ```mermaid
 graph LR
@@ -382,6 +558,17 @@ subgraph "Advanced Testing"
 CSS["contact_sheet_smoke.py"] --> MAIN
 CTS["coordinate_smoke_test.py"] --> MAIN
 RT["test_hpe_regressions.py"] --> MAIN
+end
+subgraph "FFmpeg HPE Validation"
+VR["validate_run.py"] --> RE["run_experiment.sh"]
+VR --> REB["run_experiment_bcc.sh"]
+VR --> DC["docker-compose.yaml"]
+VR --> BT["bcc_rx_bytes.py"]
+VR --> GM["run_nvidia_dcgm.sh"]
+RE --> DC
+REB --> DC
+DC --> BT
+DC --> GM
 end
 MAIN --> OVB
 MAIN --> MN["movenet_hpe.py"]
@@ -401,6 +588,12 @@ MN --> BASE
 - [tests/contact_sheet_smoke/run_contact_sheet_smoke.py:1-210](file://tests/contact_sheet_smoke/run_contact_sheet_smoke.py#L1-L210)
 - [unit_tests/test_hpe_coordinate_smoke.py:1-158](file://unit_tests/test_hpe_coordinate_smoke.py#L1-L158)
 - [tests/test_hpe_regressions.py:1-103](file://tests/test_hpe_regressions.py#L1-L103)
+- [ffmpeg_hpe/validate_run.py:1-521](file://ffmpeg_hpe/validate_run.py#L1-L521)
+- [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
+- [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
+- [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
+- [ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py:1-120](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py#L1-L120)
+- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-86](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L86)
 
 **Section sources**
 - [dev_tools/smoke_test.sh:1-42](file://dev_tools/smoke_test.sh#L1-L42)
@@ -413,19 +606,31 @@ MN --> BASE
 - [tests/contact_sheet_smoke/run_contact_sheet_smoke.py:1-210](file://tests/contact_sheet_smoke/run_contact_sheet_smoke.py#L1-L210)
 - [unit_tests/test_hpe_coordinate_smoke.py:1-158](file://unit_tests/test_hpe_coordinate_smoke.py#L1-L158)
 - [tests/test_hpe_regressions.py:1-103](file://tests/test_hpe_regressions.py#L1-L103)
+- [ffmpeg_hpe/validate_run.py:1-521](file://ffmpeg_hpe/validate_run.py#L1-L521)
+- [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
+- [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
+- [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
+- [ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py:1-120](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py#L1-L120)
+- [ffmpeg_hpe/run_nvidia_dcgm.sh:1-86](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L86)
 
 ## Performance Considerations
 **Enhanced Performance Testing**:
 - **Contact Sheet Parallelization**: Multiple methods run sequentially but can be parallelized for faster execution
 - **Coordinate Testing Optimization**: Uses minimal processing with focused validation metrics
 - **Regression Test Efficiency**: Source code analysis is lightweight compared to runtime testing
+- **Validation Framework Overhead**: Comprehensive validation adds minimal overhead to experiment execution
+- **Network Monitoring Impact**: BPF tracing introduces negligible CPU overhead during experiments
+- **GPU Metrics Overhead**: nvidia-smi monitoring runs at configurable intervals to minimize impact
 - **Timeout Management**: Configurable timeouts prevent hanging during testing
 - **Memory Usage**: Contact sheet generation requires sufficient memory for multiple output images
+- **Container Resource Limits**: Docker Compose ensures proper resource isolation and prevents resource contention
 
 **Device Configuration**:
 - **Contact Sheet Testing**: Supports both CPU and GPU devices with configurable timeout per model
 - **Coordinate Testing**: Currently configured for CPU-only processing
 - **Regression Testing**: No device requirements as it analyzes source code
+- **Validation Framework**: Supports both CPU and GPU configurations depending on HPE method
+- **Network Monitoring**: Requires root privileges and BPF kernel support for accurate packet filtering
 
 ## Troubleshooting Guide
 **Enhanced Troubleshooting** with new testing framework considerations:
@@ -450,6 +655,16 @@ MN --> BASE
 - **String Pattern Changes**: Tests rely on specific string patterns in source code
 - **Environment Issues**: Regression tests require access to all source files
 
+### FFmpeg HPE Validation Framework Issues
+- **Results Directory Not Found**: Ensure the validation script points to a valid results directory
+- **Missing Validation Reports**: Check if experiment completed successfully and generated output files
+- **BPF Tracing Failures**: Verify kernel supports BPF and container has required privileges
+- **GPU Metrics Collection Issues**: Ensure NVIDIA drivers are properly installed and accessible
+- **Network Byte Mismatch**: Adjust `--rx-tolerance-percent` threshold for experimental conditions
+- **Performance Metrics Inconsistencies**: Verify container has proper resource limits and monitoring access
+- **Container Startup Timeouts**: Check Docker Compose configuration and resource availability
+- **Port Detection Failures**: Ensure BPF tracer has proper network access and kernel support
+
 ### Traditional Testing Issues
 - **Conda Environment Not Found**: Ensure the environment is created and activated before running tests
 - **AlphaPose Models Missing**: The smoke test skips AlphaPose when models are not present
@@ -457,6 +672,13 @@ MN --> BASE
 - **HTTP Stream Errors**: Use the development stream server to validate HTTP input handling
 - **Timeout or Frame Limit Exceeded**: Adjust timeout and max_frames parameters when processing HTTP streams
 - **GPU Device Not Supported**: Some models do not support GPU; implementations fall back to CPU automatically
+
+### Container Orchestration Issues
+- **Docker Compose Errors**: Verify Docker Compose version compatibility and proper YAML syntax
+- **Network Connectivity**: Ensure containers can communicate through the streaming network
+- **Volume Mount Issues**: Check that output directories are properly mounted and writable
+- **Resource Allocation**: Verify CPU and memory limits are appropriate for the workload
+- **Health Check Failures**: Investigate container startup issues and dependency problems
 
 **Section sources**
 - [tests/contact_sheet_smoke/run_contact_sheet_smoke.py:170-174](file://tests/contact_sheet_smoke/run_contact_sheet_smoke.py#L170-L174)
@@ -468,16 +690,24 @@ MN --> BASE
 - [openvino_base_hpe.py:87-89](file://openvino_base_hpe.py#L87-L89)
 - [movenet_hpe.py:28-30](file://movenet_hpe.py#L28-L30)
 - [main.py:29-45](file://main.py#L29-L45)
+- [ffmpeg_hpe/validate_run.py:480-483](file://ffmpeg_hpe/validate_run.py#L480-L483)
+- [ffmpeg_hpe/run_experiment.sh:28-44](file://ffmpeg_hpe/run_experiment.sh#L28-L44)
+- [ffmpeg_hpe/run_experiment_bcc.sh:31-54](file://ffmpeg_hpe/run_experiment_bcc.sh#L31-L54)
 
 ## Conclusion
-The enhanced testing and validation utilities provide a comprehensive framework for continuous validation of the Human Pose Estimation framework. The addition of contact sheet smoke testing, coordinate smoke testing, and regression testing creates multiple layers of validation:
+The enhanced testing and validation utilities provide a comprehensive framework for continuous validation of the Human Pose Estimation framework. The addition of the FFmpeg HPE validation framework creates a multi-layered validation system that ensures reproducible and defensible results through automated quality assurance:
 
 - **Contact Sheet Testing**: Provides visual comparison across all HPE methods for quick assessment
 - **Coordinate Testing**: Ensures algorithmic correctness and prevents coordinate projection regressions  
 - **Regression Testing**: Maintains code quality and architectural integrity
 - **Traditional Testing**: Validates basic functionality and environment setup
+- **FFmpeg HPE Validation Framework**: Comprehensive quality assurance across container operation, output integrity, network monitoring, and performance metrics
 
-Together with the existing smoke test, installation validation, and HTTP stream testing, this comprehensive testing ecosystem ensures robust validation of the HPE framework across multiple dimensions and use cases.
+The new validation framework addresses the need for automated result validation in research-grade experiments, ensuring that each run passes strict quality checks before results are considered valid. This includes validation of HPE container exit codes, JSON output integrity, network RX byte accuracy, performance metrics consistency, and GPU utilization monitoring.
+
+The framework leverages Docker Compose orchestration to create isolated, reproducible testing environments with comprehensive monitoring capabilities. The validation system automatically collects and analyzes performance metrics, network traffic data, and GPU utilization statistics to provide detailed insights into system behavior.
+
+Together with the existing smoke test, installation validation, and HTTP stream testing, this comprehensive testing ecosystem ensures robust validation of the HPE framework across multiple dimensions and use cases, supporting both development and research applications with automated quality assurance and comprehensive result validation.
 
 ## Appendices
 
@@ -599,3 +829,89 @@ python main.py --method movenet --input http://localhost:5000/video_feed
 **Section sources**
 - [dev_tools/stream_video_server.py:206-228](file://dev_tools/stream_video_server.py#L206-L228)
 - [README.md:116-125](file://README.md#L116-L125)
+
+### Running FFmpeg HPE Validation
+**Purpose**: Validate experiment results and generate comprehensive quality reports.
+
+**Usage**:
+```bash
+# Validate latest results directory
+python ffmpeg_hpe/validate_run.py
+
+# Validate specific results directory
+python ffmpeg_hpe/validate_run.py results_movenet_CPU_20240101_120000
+
+# Configure validation thresholds
+python ffmpeg_hpe/validate_run.py --rx-tolerance-percent 1.5 --min-avg-cpu-percent 0.5 --min-memory-mb 25.0
+```
+
+**Validation Domains**:
+- **HPE Container Exit Codes**: Ensures container exits with code 0
+- **JSON Output Integrity**: Validates presence and parseability of JSON CSV files
+- **Network Monitoring Accuracy**: Compares BCC RX bytes with FFmpeg bytes-read within tolerance
+- **Performance Metrics**: Validates CPU utilization, memory usage, and Docker memory consistency
+- **GPU Metrics**: Ensures GPU utilization and thermal monitoring
+
+**Output**: validation_report.json and validation_report.txt files with PASS/FAIL status and detailed metrics.
+
+**Section sources**
+- [ffmpeg_hpe/validate_run.py:13-19](file://ffmpeg_hpe/validate_run.py#L13-L19)
+- [ffmpeg_hpe/validate_run.py:467-521](file://ffmpeg_hpe/validate_run.py#L467-L521)
+
+### Running FFmpeg HPE Experiments
+**Purpose**: Execute comprehensive HPE experiments with monitoring and validation.
+
+**Usage**:
+```bash
+# Standard experiment with perf_monitor and bcc-tracer
+./ffmpeg_hpe/run_experiment.sh movenet
+
+# BCC experiment with enhanced tracing
+./ffmpeg_hpe/run_experiment_bcc.sh alphapose --device GPU
+
+# Experiment with custom arguments
+./ffmpeg_hpe/run_experiment.sh hrnet --extra-args "--batch-size 8 --max-frames 1000"
+```
+
+**Features**:
+- **Container Startup Timing**: Measures and records container instantiation times
+- **Health Check Integration**: Monitors container health and responds to failures
+- **Data Collection Automation**: Automatically collects performance metrics, network traces, and HPE outputs
+- **Resource Management**: Configures CPU limits, memory reservations, and GPU device allocation
+- **Diagnostic Logging**: Captures comprehensive diagnostic information for troubleshooting
+
+**Output**: Structured results directory with organized CSV files, logs, and validation reports.
+
+**Section sources**
+- [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
+- [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
+
+### Docker Compose Configuration
+**Purpose**: Multi-container orchestration for HPE processing with monitoring capabilities.
+
+**Usage**:
+```bash
+# Start all services
+docker compose -f ffmpeg_hpe/docker-compose.yaml up -d
+
+# Start specific services
+docker compose -f ffmpeg_hpe/docker-compose.yaml up -d hpe perf_monitor bcc-tracer
+
+# View service status
+docker compose -f ffmpeg_hpe/docker-compose.yaml ps
+
+# View service logs
+docker compose -f ffmpeg_hpe/docker-compose.yaml logs -f hpe
+```
+
+**Services**:
+- **h264-streaming-server**: RTSP/H.264 streaming server with health checks
+- **hpe**: Main HPE processing container with GPU support
+- **perf_monitor**: Containerized performance monitoring
+- **bcc-tracer**: Kernel-level network traffic monitoring
+- **gpu-metrics**: Real-time GPU utilization monitoring
+
+**Networking**: Services communicate through the streaming-network bridge network with proper resource isolation.
+
+**Section sources**
+- [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)

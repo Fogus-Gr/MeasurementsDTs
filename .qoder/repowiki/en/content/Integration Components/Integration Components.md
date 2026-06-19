@@ -6,6 +6,11 @@
 - [main.py](file://main.py)
 - [ffmpeg_hpe/docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [recent-dash/docker-compose.yml](file://recent-dash/docker-compose.yml)
+- [recent-dash/entrypoint.sh](file://recent-dash/entrypoint.sh)
+- [recent-dash/mpv-entrypoint.sh](file://recent-dash/mpv-entrypoint.sh)
+- [recent-dash/run_experiment.sh](file://recent-dash/run_experiment.sh)
+- [recent-dash/segments/manifest.mpd](file://recent-dash/segments/manifest.mpd)
+- [recent-dash/segments/manifest_single.mpd](file://recent-dash/segments/manifest_single.mpd)
 - [measure_gpu_dcgm/run_nvidia_dcgm.sh](file://measure_gpu_dcgm/run_nvidia_dcgm.sh)
 - [measure_gpu_dcgm/Dockerfile.gpu_metrics](file://measure_gpu_dcgm/Dockerfile.gpu_metrics)
 - [measure_plot_cpu_perf/run_perf_plot.sh](file://measure_plot_cpu_perf/run_perf_plot.sh)
@@ -13,11 +18,17 @@
 - [dev_tools/app_ffmpeg.py](file://dev_tools/app_ffmpeg.py)
 - [rtsp-ipcam/direct_stream_server.py](file://rtsp-ipcam/direct_stream_server.py)
 - [ffmpeg_hpe/run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
-- [recent-dash/run_experiment.sh](file://recent-dash/run_experiment.sh)
 - [optimizations/cpu_performance_optimizer.py](file://optimizations/cpu_performance_optimizer.py)
 - [optimizations/enhanced_openvino_hpe.py](file://optimizations/enhanced_openvino_hpe.py)
 - [monitor_hpe/docker-compose.yaml](file://monitor_hpe/docker-compose.yaml)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Enhanced Recent-DASH component with improved manifest handling through environment variables
+- Added configurable DASH manifest selection with `${DASH_MANIFEST:-manifest_single.mpd}` syntax
+- Improved MPV player entrypoint with manifest size validation and enhanced player configuration
+- Updated environment variable system for better control over player behavior and timing
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -35,7 +46,7 @@ This document explains the integration components that extend the core Human Pos
 - Open Model Zoo integration for accessing pre-trained models
 - FFmpeg integration for video processing pipelines
 - DCGM exporter for GPU metrics collection
-- Recent dash monitoring system for network traffic analysis
+- Recent dash monitoring system for network traffic analysis with enhanced manifest handling
 - CPU performance plotting tools
 - Usage patterns, configuration requirements, and APIs
 
@@ -45,7 +56,7 @@ These integrations enable advanced use cases such as real-time video processing,
 The repository organizes HPE experiments and integrations across several directories:
 - Core HPE entrypoint and methods
 - FFmpeg-based streaming pipeline and monitoring
-- Dash-based network monitoring and tracing
+- Dash-based network monitoring and tracing with enhanced configuration
 - GPU metrics collection via DCGM exporter
 - CPU performance optimization and plotting
 - RTSP/IP camera streaming server
@@ -63,6 +74,8 @@ end
 subgraph "Dash Monitoring"
 RDC["recent-dash/docker-compose.yml"]
 REX["recent-dash/run_experiment.sh"]
+ME["Manifest Enhancement"]
+MPV["MPV Entry Point"]
 end
 subgraph "GPU Metrics"
 DCGM["measure_gpu_dcgm/run_nvidia_dcgm.sh"]
@@ -83,12 +96,17 @@ M --> CPO
 M --> EOH
 M --> RPP
 M --> RPD
+RDC --> ME
+RDC --> MPV
 ```
 
 **Diagram sources**
 - [main.py:1-99](file://main.py#L1-L99)
 - [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
-- [recent-dash/docker-compose.yml:1-103](file://recent-dash/docker-compose.yml#L1-L103)
+- [recent-dash/docker-compose.yml:1-180](file://recent-dash/docker-compose.yml#L1-L180)
+- [recent-dash/entrypoint.sh:1-24](file://recent-dash/entrypoint.sh#L1-L24)
+- [recent-dash/mpv-entrypoint.sh:1-57](file://recent-dash/mpv-entrypoint.sh#L1-L57)
+- [recent-dash/run_experiment.sh:1-380](file://recent-dash/run_experiment.sh#L1-L380)
 - [measure_gpu_dcgm/run_nvidia_dcgm.sh:1-29](file://measure_gpu_dcgm/run_nvidia_dcgm.sh#L1-L29)
 - [measure_gpu_dcgm/Dockerfile.gpu_metrics:1-12](file://measure_gpu_dcgm/Dockerfile.gpu_metrics#L1-L12)
 - [optimizations/cpu_performance_optimizer.py:1-539](file://optimizations/cpu_performance_optimizer.py#L1-L539)
@@ -105,7 +123,7 @@ M --> RPD
 ## Core Components
 - OpenVINO-based HPE methods and model selection
 - FFmpeg-based streaming server and HTTP MJPEG/FLV pipelines
-- Dash-based HTTP streaming infrastructure with proxy and client
+- Dash-based HTTP streaming infrastructure with enhanced proxy, client, and player components
 - GPU metrics collection via DCGM exporter
 - CPU performance optimization and plotting tools
 - RTSP/IP camera streaming server
@@ -115,6 +133,7 @@ Key capabilities:
 - Stream H.264/H.265 video over HTTP for real-time inference
 - Monitor network traffic and CPU performance during experiments
 - Export GPU telemetry for capacity planning and debugging
+- **Enhanced DASH manifest handling with configurable environments and validation**
 
 **Section sources**
 - [README.md:1-125](file://README.md#L1-L125)
@@ -124,7 +143,7 @@ Key capabilities:
 The integrated system orchestrates multiple containers and pipelines:
 - HPE inference container consuming HTTP video streams
 - FFmpeg-based streaming server or HTTP MJPEG server
-- Dash HTTP server/proxy/client stack for DASH streaming
+- Dash HTTP server/proxy/client stack for DASH streaming with enhanced configuration
 - Performance and tracing containers for CPU/GPU metrics
 - Optional BPFTrace/BCC tracers for network packet analysis
 
@@ -137,11 +156,11 @@ end
 subgraph "HPE Inference"
 HPE["HPE Container<br/>main.py + OpenVINO"]
 end
-subgraph "Monitoring"
+subgraph "Enhanced Monitoring"
 PERF["Perf Monitor<br/>run_perf_plot.sh"]
 TRACE["Trace Container<br/>BPFTrace/BCC"]
-DASH["Dash Infra<br/>http_server/proxy/client"]
-end
+DASH["Dash Infra<br/>http_server/proxy/client<br/>Enhanced Manifest Handling"]
+END
 subgraph "Metrics"
 GPU["DCGM Exporter<br/>run_nvidia_dcgm.sh"]
 end
@@ -159,6 +178,8 @@ DASH --> HPE
 - [main.py:22-46](file://main.py#L22-L46)
 - [ffmpeg_hpe/docker-compose.yaml:39-93](file://ffmpeg_hpe/docker-compose.yaml#L39-L93)
 - [recent-dash/docker-compose.yml:3-51](file://recent-dash/docker-compose.yml#L3-L51)
+- [recent-dash/entrypoint.sh:1-24](file://recent-dash/entrypoint.sh#L1-L24)
+- [recent-dash/mpv-entrypoint.sh:1-57](file://recent-dash/mpv-entrypoint.sh#L1-L57)
 - [measure_gpu_dcgm/run_nvidia_dcgm.sh:10-27](file://measure_gpu_dcgm/run_nvidia_dcgm.sh#L10-L27)
 - [measure_plot_cpu_perf/run_perf_plot.sh:11-25](file://measure_plot_cpu_perf/run_perf_plot.sh#L11-L25)
 
@@ -246,15 +267,23 @@ Cleanup --> Done(["CSV Ready"])
 - [measure_gpu_dcgm/Dockerfile.gpu_metrics:1-12](file://measure_gpu_dcgm/Dockerfile.gpu_metrics#L1-L12)
 
 ### Recent Dash Monitoring System for Network Traffic Analysis
+**Updated** Enhanced with improved manifest handling and configurable player settings
+
 - Purpose: Provide a DASH streaming infrastructure with HTTP server, proxy, and client.
 - Components:
   - http_server: Static HTTP server serving DASH segments.
   - http_proxy: Proxy with configurable caching and rate parameters.
   - http_client: Client container exposing port for VLC/players.
+  - **Enhanced mpv player**: Configurable through environment variables with manifest validation.
   - perf_monitor: Captures CPU performance metrics for monitored processes.
   - trace_container: BPF-based tracing for network traffic.
 - Experiment automation:
   - run_experiment.sh builds images, starts services, measures container startup times, collects logs and traces, and cleans up.
+- **Enhanced Features**:
+  - **Configurable Manifests**: `${DASH_MANIFEST:-manifest_single.mpd}` allows selecting different manifest files.
+  - **Player Environment Variables**: `DASH_PLAYER_WARMUP_SECONDS`, `DASH_PLAYER_RETRY_DELAY_SECONDS`, `DASH_PLAYER_START_DELAY_SECONDS`.
+  - **Manifest Size Validation**: MPV entrypoint validates manifest content before playback.
+  - **Improved Player Reliability**: Enhanced retry logic and logging for robust DASH playback.
 
 ```mermaid
 sequenceDiagram
@@ -262,17 +291,20 @@ participant User as "User"
 participant Proxy as "http_proxy"
 participant Server as "http_server"
 participant Client as "http_client"
+participant MPV as "Enhanced MPV Player"
 participant PM as "perf_monitor"
 participant Tr as "trace_container"
-User->>Client : "Open manifest.mpd"
-Client->>Proxy : "HTTP GET /manifest.mpd"
-Proxy->>Server : "Forward request"
+User->>MPV : "Connect to DASH manifest"
+MPV->>Client : "HTTP GET /manifest.mpd"
+Client->>Proxy : "Forward request"
+Proxy->>Server : "Fetch manifest"
 Server-->>Proxy : "Serve DASH manifest"
 Proxy-->>Client : "Return manifest"
-Client->>Proxy : "GET media segments"
+Client-->>MPV : "Manifest with validation"
+MPV->>Proxy : "GET media segments"
 Proxy->>Server : "Fetch segments"
 Server-->>Proxy : "Segments"
-Proxy-->>Client : "Deliver segments"
+Proxy-->>MPV : "Deliver segments"
 PM-->>PM : "Collect perf metrics"
 Tr-->>Tr : "Capture network traces"
 ```
@@ -280,11 +312,14 @@ Tr-->>Tr : "Capture network traces"
 **Diagram sources**
 - [recent-dash/docker-compose.yml:3-51](file://recent-dash/docker-compose.yml#L3-L51)
 - [recent-dash/run_experiment.sh:10-30](file://recent-dash/run_experiment.sh#L10-L30)
+- [recent-dash/mpv-entrypoint.sh:1-57](file://recent-dash/mpv-entrypoint.sh#L1-L57)
 
 **Section sources**
-- [recent-dash/docker-compose.yml:1-103](file://recent-dash/docker-compose.yml#L1-L103)
-- [recent-dash/README.md:1-20](file://recent-dash/README.md#L1-L20)
-- [recent-dash/run_experiment.sh:1-286](file://recent-dash/run_experiment.sh#L1-L286)
+- [recent-dash/docker-compose.yml:1-180](file://recent-dash/docker-compose.yml#L1-L180)
+- [recent-dash/README.md:1-189](file://recent-dash/README.md#L1-L189)
+- [recent-dash/run_experiment.sh:1-380](file://recent-dash/run_experiment.sh#L1-L380)
+- [recent-dash/entrypoint.sh:1-24](file://recent-dash/entrypoint.sh#L1-L24)
+- [recent-dash/mpv-entrypoint.sh:1-57](file://recent-dash/mpv-entrypoint.sh#L1-L57)
 
 ### CPU Performance Plotting Tools
 - Purpose: Profile CPU performance for target PIDs and produce plots.
@@ -368,6 +403,7 @@ OptimizedOpenVINOHPE --> EPICCPUOptimizer : "uses"
 - Dash monitoring depends on Docker Compose services and BPF-based tracing for network visibility.
 - GPU metrics depend on NVIDIA runtime and nvidia-smi availability.
 - CPU performance tools depend on perf, sudo, and mounted PID files.
+- **Recent-DASH enhanced components depend on configurable environment variables for manifest selection and player behavior.**
 
 ```mermaid
 graph LR
@@ -376,6 +412,8 @@ M --> FF["FFmpeg Pipeline"]
 FF --> RS["RTSP/IP Cam Server"]
 FF --> AF["Flask MJPEG Server"]
 M --> DASH["Dash Infra"]
+DASH --> MAN["Enhanced Manifest Handling"]
+DASH --> MPV["MPV Player"]
 M --> DCGM["DCGM Exporter"]
 M --> PERF["CPU Perf Tools"]
 PERF --> BPF["BPFTrace/BCC"]
@@ -385,13 +423,15 @@ PERF --> BPF["BPFTrace/BCC"]
 - [main.py:10-12](file://main.py#L10-L12)
 - [ffmpeg_hpe/docker-compose.yaml:39-93](file://ffmpeg_hpe/docker-compose.yaml#L39-L93)
 - [recent-dash/docker-compose.yml:3-51](file://recent-dash/docker-compose.yml#L3-L51)
+- [recent-dash/entrypoint.sh:1-24](file://recent-dash/entrypoint.sh#L1-L24)
+- [recent-dash/mpv-entrypoint.sh:1-57](file://recent-dash/mpv-entrypoint.sh#L1-L57)
 - [measure_gpu_dcgm/run_nvidia_dcgm.sh:10-27](file://measure_gpu_dcgm/run_nvidia_dcgm.sh#L10-L27)
 - [measure_plot_cpu_perf/run_perf_plot.sh:11-25](file://measure_plot_cpu_perf/run_perf_plot.sh#L11-L25)
 
 **Section sources**
 - [main.py:1-99](file://main.py#L1-L99)
 - [ffmpeg_hpe/docker-compose.yaml:1-201](file://ffmpeg_hpe/docker-compose.yaml#L1-L201)
-- [recent-dash/docker-compose.yml:1-103](file://recent-dash/docker-compose.yml#L1-L103)
+- [recent-dash/docker-compose.yml:1-180](file://recent-dash/docker-compose.yml#L1-L180)
 
 ## Performance Considerations
 - CPU optimization:
@@ -402,8 +442,10 @@ PERF --> BPF["BPFTrace/BCC"]
 - Streaming:
   - Increase OpenCV FFMPEG timeouts for long-running HTTP streams.
   - Use appropriate FFmpeg presets and tune for zero-latency streaming.
-
-[No sources needed since this section provides general guidance]
+- **Recent-DASH enhancements**:
+  - **Configurable manifest selection** allows testing different DASH configurations without rebuilding containers.
+  - **Player environment variables** enable fine-tuning of playback behavior for different network conditions.
+  - **Manifest validation** prevents failed playback attempts and improves experiment reliability.
 
 ## Troubleshooting Guide
 Common issues and remedies:
@@ -417,6 +459,10 @@ Common issues and remedies:
   - Confirm /pids/dash.pid exists and is readable by the perf monitor container.
 - DCGM exporter not writing CSV:
   - Validate NVIDIA runtime and permissions; confirm output directory mount.
+- **Enhanced DASH issues**:
+  - **Missing manifest files**: Ensure the selected manifest exists in `recent-dash/segments/` directory.
+  - **Player connection failures**: Check environment variables for player timing and warmup settings.
+  - **Empty manifest warnings**: Verify manifest size validation and network connectivity between components.
 
 **Section sources**
 - [dev_tools/app_ffmpeg.py:54-66](file://dev_tools/app_ffmpeg.py#L54-L66)
@@ -424,6 +470,7 @@ Common issues and remedies:
 - [ffmpeg_hpe/docker-compose.yaml:19-24](file://ffmpeg_hpe/docker-compose.yaml#L19-L24)
 - [measure_plot_cpu_perf/run_perf_plot.sh:6-9](file://measure_plot_cpu_perf/run_perf_plot.sh#L6-L9)
 - [measure_gpu_dcgm/run_nvidia_dcgm.sh:4-5](file://measure_gpu_dcgm/run_nvidia_dcgm.sh#L4-L5)
+- [recent-dash/mpv-entrypoint.sh:21-25](file://recent-dash/mpv-entrypoint.sh#L21-L25)
 
 ## Conclusion
 The integration components significantly extend the HPE framework by enabling:
@@ -431,4 +478,8 @@ The integration components significantly extend the HPE framework by enabling:
 - Robust, real-time video streaming using FFmpeg and HTTP servers
 - Comprehensive system monitoring through DASH infrastructure, BPF tracing, and CPU/GPU metrics
 - Model-specific CPU optimizations for high-core-count systems
-Together, these integrations support advanced scenarios such as live video analytics, performance benchmarking, and observability-driven operations.
+- **Enhanced DASH experimentation with configurable manifests and reliable player behavior**
+
+**Updated** The Recent-DASH component now provides improved flexibility through configurable manifest handling and enhanced player configuration, making it easier to test different DASH configurations and network conditions while maintaining reliable experiment execution.
+
+Together, these integrations support advanced scenarios such as live video analytics, performance benchmarking, observability-driven operations, and comprehensive DASH streaming research with flexible configuration options.

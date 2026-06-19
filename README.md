@@ -9,8 +9,8 @@ Baseline implementations of five 2D Human Pose Estimation methods — **AlphaPos
 | Component | Version |
 |---|---|
 | OS | Ubuntu 20.04 |
-| Python | 3.8.10 |
-| OpenVINO | 2024.2.0 |
+| Python | 3.9.13 (`perf-tuning-base` branch) |
+| OpenVINO | 2024.4.0 |
 | PyTorch | 2.4.1+cu121 |
 | CUDA Toolkit | 12.6 |
 | GPU | NVIDIA (any CUDA-capable) |
@@ -202,7 +202,7 @@ They are compatible with the XML files used by this branch.
 pip uninstall alphapose
 
 # Create and activate the Conda environment
-conda create -n hpe python=3.8.10 -y
+conda create -n hpe python=3.9.13 -y
 conda activate hpe
 conda install pytorch==2.4.1 torchvision==0.19.1 -c pytorch
 conda install --file requirements.txt

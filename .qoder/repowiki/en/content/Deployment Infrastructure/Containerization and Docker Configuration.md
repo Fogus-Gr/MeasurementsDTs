@@ -2,13 +2,18 @@
 
 <cite>
 **Referenced Files in This Document**
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
+- [run_experiment_bcc.sh](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/run_experiment_bcc.sh)
+- [validate_run.py](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/validate_run.py)
+- [bcc_rx_bytes.py](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py)
+- [Dockerfile.bcc](file://ffmpeg_hpe/bpftrace-tracer/Dockerfile.bcc)
+- [Dockerfile](file://ffmpeg_hpe_backup_20260618/shared/perf_monitor/Dockerfile)
+- [docker_stats_monitor.py](file://ffmpeg_hpe_backup_20260618/shared/perf_monitor/docker_stats_monitor.py)
+- [monitor_pid_perf.sh](file://ffmpeg_hpe_backup_20260618/shared/perf_monitor/monitor_pid_perf.sh)
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [Dockerfile.gpu_metrics](file://ffmpeg_hpe/Dockerfile.gpu_metrics)
 - [entrypoint.sh](file://ffmpeg_hpe/entrypoint.sh)
 - [run_nvidia_dcgm.sh](file://ffmpeg_hpe/run_nvidia_dcgm.sh)
-- [Dockerfile.bcc](file://ffmpeg_hpe/bpftrace-tracer/Dockerfile.bcc)
-- [bcc_rx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py)
-- [entrypoint.sh](file://ffmpeg_hpe/bpftrace-tracer/entrypoint.sh)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
 - [HTTP-Server.Dockerfile](file://recent-dash/HTTP-Server.Dockerfile)
 - [HTTP-Proxy.Dockerfile](file://recent-dash/HTTP-Proxy.Dockerfile)
@@ -16,9 +21,6 @@
 - [entrypoint.sh](file://recent-dash/entrypoint.sh)
 - [mpv-entrypoint.sh](file://recent-dash/mpv-entrypoint.sh)
 - [Dockerfile_mpv](file://recent-dash/Dockerfile_mpv)
-- [HTTP-Client.launch.sh](file://recent-dash/HTTP-Client.launch.sh)
-- [HTTP-Proxy.launch.sh](file://recent-dash/HTTP-Proxy.launch.sh)
-- [HTTP-Server.launch.sh](file://recent-dash/HTTP-Server.launch.sh)
 - [docker-compose.yml](file://rtsp-ipcam/docker-compose.yml)
 - [Dockerfile](file://rtsp-ipcam/Dockerfile)
 - [start_server.sh](file://rtsp-ipcam/start_server.sh)
@@ -31,11 +33,11 @@
 
 ## Update Summary
 **Changes Made**
-- Added comprehensive documentation for the new mpv service in recent-dash for containerized media playback
-- Updated recent-dash architecture to include automated DASH segment fetching and playback capabilities
-- Enhanced Dockerfile configurations for HTTP server, proxy, and client services
-- Added detailed coverage of the mpv-entrypoint.sh script functionality and environment variable configuration
-- Updated container networking and service dependencies to support the new media playback workflow
+- Added comprehensive documentation for the new ffmpeg_hpe_backup_20260618 framework with enhanced Docker orchestration
+- Expanded BPF tracing capabilities with detailed BCC tracer implementation and validation system
+- Introduced comprehensive experiment validation system with automated quality assurance
+- Enhanced performance monitoring with Docker API-based metrics collection
+- Updated container networking and service dependencies to support the new backup framework
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -55,74 +57,94 @@ This document explains the containerization and Docker configuration used to orc
 - Container networking, port mappings, and service dependencies.
 - Dockerfile configuration for the HPE application, including base images, environment variables, and runtime dependencies.
 - Entrypoint script functionality and container startup procedures.
-- **NEW**: Containerized media playback capabilities using mpv for recent-dash DASH streaming experiments.
+- **NEW**: Enhanced Docker orchestration framework with ffmpeg_hpe_backup_20260618 for comprehensive experiment management.
+- **NEW**: Expanded BPF tracing capabilities with detailed traffic monitoring and validation system.
+- **NEW**: Comprehensive experiment validation system with automated quality assurance and reporting.
 - Best practices for container resource allocation, GPU passthrough, and production deployment considerations.
 - Examples of scaling services and managing container lifecycles.
 
 ## Project Structure
 The repository organizes containerization artifacts primarily under:
 - ffmpeg_hpe: streaming pipeline, GPU metrics, and BPF tracer services
-- recent-dash: HTTP server, proxy, client, and **NEW**: mpv media player for DASH streaming experiments
+- **NEW**: ffmpeg_hpe_backup_20260618: Enhanced orchestration framework with experiment management and validation
+- **NEW**: shared/perf_monitor: Advanced performance monitoring with Docker API integration
+- recent-dash: HTTP server, proxy, client, and mpv media player for DASH streaming experiments
 - rtsp-ipcam: H.264 streaming server
 - monitor_hpe: monitoring utilities and PID tracking
 - Root-level Dockerfiles and compose files for top-level services
 
 ```mermaid
 graph TB
-subgraph "ffmpeg_hpe"
+subgraph "ffmpeg_hpe_backup_20260618"
 A["docker-compose.yaml"]
-B["Dockerfile.gpu_metrics"]
-C["entrypoint.sh"]
-D["run_nvidia_dcgm.sh"]
+B["run_experiment_bcc.sh"]
+C["validate_run.py"]
+D["bcc_rx_bytes.py"]
 E["Dockerfile.bcc"]
-F["bcc_rx_bytes.py"]
-G["entrypoint.sh (bcc)"]
+end
+subgraph "shared/perf_monitor"
+F["Dockerfile"]
+G["docker_stats_monitor.py"]
+H["monitor_pid_perf.sh"]
+end
+subgraph "ffmpeg_hpe"
+I["docker-compose.yaml"]
+J["Dockerfile.gpu_metrics"]
+K["entrypoint.sh"]
+L["run_nvidia_dcgm.sh"]
 end
 subgraph "recent-dash"
-H["docker-compose.yml"]
-I["HTTP-Server.Dockerfile"]
-J["HTTP-Proxy.Dockerfile"]
-K["HTTP-Client.Dockerfile"]
-L["mpv-entrypoint.sh"]
-M["Dockerfile_mpv"]
-N["mpv service"]
+M["docker-compose.yml"]
+N["HTTP-Server.Dockerfile"]
+O["HTTP-Proxy.Dockerfile"]
+P["HTTP-Client.Dockerfile"]
+Q["mpv-entrypoint.sh"]
+R["Dockerfile_mpv"]
 end
 subgraph "rtsp-ipcam"
-O["docker-compose.yml"]
-P["Dockerfile"]
-Q["start_server.sh"]
+S["docker-compose.yml"]
+T["Dockerfile"]
+U["start_server.sh"]
 end
 subgraph "monitor_hpe"
-R["Dockerfile"]
-S["docker-compose.yaml"]
+V["Dockerfile"]
+W["docker-compose.yaml"]
 end
-T["Dockerfile.hpe"]
-U["prometheus.yml"]
-V["docker-compose.yml (root)"]
+X["Dockerfile.hpe"]
+Y["prometheus.yml"]
+Z["docker-compose.yml (root)"]
+A --> B
 A --> C
 A --> D
 A --> E
-E --> F
-E --> G
-H --> I
-H --> J
-H --> K
-H --> L
-H --> M
-H --> N
-O --> P
-O --> Q
-S --> R
+F --> G
+F --> H
+I --> J
+I --> K
+I --> L
+M --> N
+M --> O
+M --> P
+M --> Q
+M --> R
+S --> T
+S --> U
+W --> V
 ```
 
 **Diagram sources**
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
+- [run_experiment_bcc.sh](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/run_experiment_bcc.sh)
+- [validate_run.py](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/validate_run.py)
+- [bcc_rx_bytes.py](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py)
+- [Dockerfile.bcc](file://ffmpeg_hpe/bpftrace-tracer/Dockerfile.bcc)
+- [Dockerfile](file://ffmpeg_hpe_backup_20260618/shared/perf_monitor/Dockerfile)
+- [docker_stats_monitor.py](file://ffmpeg_hpe_backup_20260618/shared/perf_monitor/docker_stats_monitor.py)
+- [monitor_pid_perf.sh](file://ffmpeg_hpe_backup_20260618/shared/perf_monitor/monitor_pid_perf.sh)
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [Dockerfile.gpu_metrics](file://ffmpeg_hpe/Dockerfile.gpu_metrics)
 - [entrypoint.sh](file://ffmpeg_hpe/entrypoint.sh)
 - [run_nvidia_dcgm.sh](file://ffmpeg_hpe/run_nvidia_dcgm.sh)
-- [Dockerfile.bcc](file://ffmpeg_hpe/bpftrace-tracer/Dockerfile.bcc)
-- [bcc_rx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py)
-- [entrypoint.sh](file://ffmpeg_hpe/bpftrace-tracer/entrypoint.sh)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
 - [HTTP-Server.Dockerfile](file://recent-dash/HTTP-Server.Dockerfile)
 - [HTTP-Proxy.Dockerfile](file://recent-dash/HTTP-Proxy.Dockerfile)
@@ -137,6 +159,7 @@ S --> R
 - [Dockerfile.hpe](file://Dockerfile.hpe)
 
 **Section sources**
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
 - [docker-compose.yml](file://rtsp-ipcam/docker-compose.yml)
@@ -146,19 +169,23 @@ S --> R
 - H.264 streaming server: Provides an HTTP H.264 stream for downstream consumers.
 - HPE application: Performs pose estimation on the stream; supports GPU acceleration and configurable device selection.
 - GPU metrics collector: Gathers GPU utilization and telemetry periodically.
-- Performance monitor: Monitors host-level processes and system resources.
-- BPF tracer: Captures and logs network traffic related to the HPE pipeline using BCC/BPF.
-- **NEW**: Recent-DASH services: HTTP server, proxy, client, and **mpv media player** for automated DASH segment fetching and playback experiments.
-- **NEW**: Containerized media playback: Automated DASH streaming playback using mpv with configurable warmup, retry, and logging capabilities.
+- Performance monitor: Monitors host-level processes and system resources using Docker API integration.
+- BPF tracer: Captures and logs network traffic related to the HPE pipeline using BCC/BPF with advanced validation.
+- **NEW**: Enhanced orchestration framework: Comprehensive experiment management with automated validation and reporting.
+- **NEW**: Advanced performance monitoring: Docker API-based metrics collection with real-time CPU, memory, and PID tracking.
+- **NEW**: Experiment validation system: Automated quality assurance with comprehensive data validation and reporting.
+- **NEW**: Backup framework: ffmpeg_hpe_backup_20260618 provides enhanced orchestration and experiment management capabilities.
 
 Key orchestration highlights:
 - Services share a dedicated bridge network for isolated communication.
 - Health checks ensure readiness before dependent services start.
 - Resource limits and reservations are configured for predictable performance.
 - GPU passthrough is enabled via NVIDIA runtime and environment variables.
-- **NEW**: mpv service automatically waits for DASH manifest availability and handles continuous playback with restart capabilities.
+- **NEW**: Enhanced experiment orchestration with automated timing, diagnostics, and validation.
+- **NEW**: Comprehensive BPF tracing with port detection and traffic validation capabilities.
 
 **Section sources**
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yml](file://rtsp-ipcam/docker-compose.yml)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
@@ -170,7 +197,8 @@ The orchestration centers on a shared network and a strict startup order:
 - hpe depends on the streaming server being healthy and sets environment variables to consume the stream.
 - gpu-metrics runs alongside hpe to collect GPU telemetry.
 - perf_monitor and bcc-tracer operate independently but can observe the pipeline.
-- **NEW**: recent-dash services form a complete DASH streaming pipeline with automated media playback.
+- **NEW**: Enhanced orchestration framework manages complete experiment lifecycle with validation.
+- **NEW**: Advanced performance monitoring provides real-time container metrics via Docker API.
 
 ```mermaid
 graph TB
@@ -180,6 +208,11 @@ H["hpe"]
 G["gpu-metrics"]
 P["perf_monitor"]
 T["bcc-tracer"]
+end
+subgraph "Network: backup-framework"
+BE["backup-experiment-manager"]
+BV["validation-system"]
+BT["traffic-tracer"]
 end
 subgraph "Network: dash-caching_network"
 DS["http_server"]
@@ -191,6 +224,9 @@ S --> |"Stream"| H
 H --> |"GPU Telemetry"| G
 H --> |"System Metrics"| P
 H --> |"Traffic Tracing"| T
+BE --> |"Experiment Control"| H
+BV --> |"Quality Assurance"| H
+BT --> |"Traffic Monitoring"| T
 DS --> |"DASH Segments"| DP
 DP --> |"Cached/Forwarded"| DC
 DC --> |"Manifest"| DM
@@ -198,14 +234,35 @@ DM --> |"Automated Playback"| DS
 ```
 
 **Diagram sources**
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
 
 **Section sources**
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
 
 ## Detailed Component Analysis
+
+### Enhanced Orchestration Framework (ffmpeg_hpe_backup_20260618)
+- **NEW**: Comprehensive experiment management with automated lifecycle control.
+- **NEW**: Advanced timing and diagnostics collection for performance analysis.
+- **NEW**: Integrated validation system with automated quality assurance.
+- **NEW**: Enhanced BPF tracing with port detection and traffic validation.
+- **NEW**: Structured results organization with timestamped directories and comprehensive metadata.
+
+Key features:
+- Automated container startup and shutdown with precise timing measurements.
+- Comprehensive diagnostics collection including container logs and system state.
+- Integrated validation system with automated quality checks and reporting.
+- Enhanced BPF tracing with automatic port detection and traffic validation.
+- Structured results organization with timestamped directories and comprehensive metadata.
+
+**Section sources**
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
+- [run_experiment_bcc.sh](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/run_experiment_bcc.sh)
+- [validate_run.py](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/validate_run.py)
 
 ### H.264 Streaming Server
 - Purpose: Serve an H.264 stream over HTTP for real-time consumption.
@@ -255,41 +312,66 @@ Operational notes:
 - [Dockerfile.gpu_metrics](file://ffmpeg_hpe/Dockerfile.gpu_metrics)
 - [run_nvidia_dcgm.sh](file://ffmpeg_hpe/run_nvidia_dcgm.sh)
 
-### Performance Monitor
-- Purpose: Observe host-level processes and system resources for the experiment.
-- Privileges: Requires elevated capabilities and host PID namespace for accurate monitoring.
-- Volumes: Mounts output and PID directories for artifact persistence and process tracking.
+### Advanced Performance Monitor (Enhanced)
+- **NEW**: Docker API-based performance monitoring with real-time metrics collection.
+- **NEW**: Comprehensive CPU, memory, and PID tracking with Docker socket integration.
+- **NEW**: Automatic container discovery and monitoring with configurable intervals.
+- **NEW**: Structured CSV output with detailed performance metrics and container identification.
+
+Key features:
+- Real-time Docker API integration for container metrics collection.
+- Automatic target container discovery and monitoring.
+- Comprehensive performance metrics including CPU percentage, memory usage, and active PIDs.
+- Structured CSV output with timestamped entries and container metadata.
+- Configurable monitoring intervals and output directories.
 
 **Section sources**
-- [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
-- [docker-compose.yaml](file://monitor_hpe/docker-compose.yaml)
-- [Dockerfile](file://monitor_hpe/Dockerfile)
+- [Dockerfile](file://ffmpeg_hpe_backup_20260618/shared/perf_monitor/Dockerfile)
+- [docker_stats_monitor.py](file://ffmpeg_hpe_backup_20260618/shared/perf_monitor/docker_stats_monitor.py)
+- [monitor_pid_perf.sh](file://ffmpeg_hpe_backup_20260618/shared/perf_monitor/monitor_pid_perf.sh)
 
-### BPF Tracer (BCC-based)
-- Purpose: Capture TCP RX bytes for the H.264 stream between the streaming server and HPE.
-- Image: Ubuntu-based with BCC built from source and Python dependencies.
-- Execution: Detects the HPE listening port and attaches a raw socket filter to capture traffic on the default interface.
-- Output: Writes per-timestamp RX deltas and cumulative byte counts to CSV.
+### Enhanced BPF Tracer (Expanded Capabilities)
+- **NEW**: Advanced BPF tracing with automatic port detection and traffic validation.
+- **NEW**: Comprehensive traffic monitoring with configurable sampling intervals.
+- **NEW**: Structured CSV output with timestamped RX byte measurements.
+- **NEW**: Robust error handling and validation with detailed logging.
 
-Security and capabilities:
-- Requires privileged mode and specific capabilities for kernel tracing.
-- Shares the HPE service network namespace to simplify IP/port discovery.
+Key features:
+- Automatic port detection and streamer IP discovery.
+- Configurable sampling intervals with environment variable support.
+- Structured CSV output with timestamp, delta, cumulative, and time delta measurements.
+- Robust error handling with detailed logging and validation.
+- Raw socket filtering with BCC for low-level network traffic capture.
 
 **Section sources**
 - [Dockerfile.bcc](file://ffmpeg_hpe/bpftrace-tracer/Dockerfile.bcc)
-- [bcc_rx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py)
-- [entrypoint.sh](file://ffmpeg_hpe/bpftrace-tracer/entrypoint.sh)
-- [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
+- [bcc_rx_bytes.py](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py)
+
+### Comprehensive Experiment Validation System (NEW)
+- **NEW**: Automated quality assurance with comprehensive data validation.
+- **NEW**: Multi-level validation including exit codes, log parsing, and metric consistency.
+- **NEW**: Detailed reporting with PASS/FAIL status and comprehensive metrics.
+- **NEW**: Configurable thresholds for performance and validation criteria.
+
+Validation levels:
+- HPE container exit code validation (must be 0).
+- Log parsing for processed frames and FFmpeg bytes read.
+- JSON CSV validation for structural integrity and sequential frame numbering.
+- TX CSV validation for payload byte consistency.
+- BCC RX validation with configurable tolerance for byte comparison.
+- Performance metrics validation with CPU and memory thresholds.
+- GPU metrics validation for telemetry consistency.
+
+**Section sources**
+- [validate_run.py](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/validate_run.py)
 
 ### Recent-DASH Infrastructure (Alternative Orchestration)
-- Purpose: Complete DASH streaming pipeline with HTTP server, proxy, client, and **automated media playback**.
-- Services: http_server, http_proxy, http_client, **mpv**, perf_monitor, and a containerized BPF tracer.
+- Purpose: Complete DASH streaming pipeline with HTTP server, proxy, client, and automated media playback.
+- Services: http_server, http_proxy, http_client, mpv, perf_monitor, and a containerized BPF tracer.
 - Networking: Dedicated bridge network with static IP assignments for predictable service discovery.
-- **NEW**: mpv service with automated DASH segment fetching and continuous playback capabilities.
+- **NEW**: Enhanced orchestration with automated DASH segment fetching and continuous playback capabilities.
 - **NEW**: Environment variable-driven configuration for warmup delays, retry intervals, and playback timing.
 - Entrypoints: Launch scripts manage process lifecycle and PID tracking.
-
-**Updated** Added comprehensive media playback capabilities with automated DASH segment handling.
 
 **Section sources**
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
@@ -301,7 +383,7 @@ Security and capabilities:
 - [Dockerfile_mpv](file://recent-dash/Dockerfile_mpv)
 
 ### MPV Media Player Service (NEW)
-- Purpose: **Automated DASH streaming playback** with continuous loop and intelligent error recovery.
+- Purpose: Automated DASH streaming playback with continuous loop and intelligent error recovery.
 - **NEW**: Built on Debian slim base with mpv and curl dependencies for reliable playback.
 - **NEW**: Intelligent warmup mechanism that waits for DASH manifest availability before starting playback.
 - **NEW**: Configurable retry delays, warmup periods, and start delays through environment variables.
@@ -352,8 +434,10 @@ Inter-service dependencies and startup order:
 - hpe depends on h264-streaming-server being healthy.
 - gpu-metrics and perf_monitor can start independently but benefit from the pipeline being active.
 - bcc-tracer depends on the HPE container's network namespace and detects HPE's outbound connection to the streamer.
-- **NEW**: recent-dash services follow a strict startup order: http_server → http_proxy → http_client → mpv.
-- **NEW**: mpv service depends on http_client being ready and serving the DASH manifest.
+- **NEW**: Enhanced orchestration framework manages complete experiment lifecycle with validation.
+- **NEW**: Performance monitor uses Docker API for real-time metrics collection.
+- **NEW**: BPF tracer operates independently with automatic port detection capabilities.
+- **NEW**: Validation system runs after experiment completion for quality assurance.
 
 ```mermaid
 graph LR
@@ -361,16 +445,23 @@ H264["h264-streaming-server"] --> HPE["hpe"]
 HPE --> GPU["gpu-metrics"]
 HPE --> PERF["perf_monitor"]
 HPE --> BPF["bcc-tracer"]
+BACKUP["backup-experiment-manager"] --> HPE
+BACKUP --> GPU
+BACKUP --> PERF
+BACKUP --> BPF
+VALIDATION["validation-system"] --> BACKUP
 HTTP_SERVER["http_server"] --> HTTP_PROXY["http_proxy"]
 HTTP_PROXY --> HTTP_CLIENT["http_client"]
 HTTP_CLIENT --> MPV["mpv"]
 ```
 
 **Diagram sources**
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
 
 **Section sources**
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
 
@@ -378,24 +469,28 @@ HTTP_CLIENT --> MPV["mpv"]
 - Resource Allocation:
   - CPU and memory limits and reservations are defined per service to prevent noisy-neighbor effects.
   - HPE uses significant shared memory to support model inference.
-  - **NEW**: mpv service has minimal resource footprint with 0.25 CPUs and 256MB memory limits.
+  - **NEW**: Enhanced orchestration framework provides precise timing measurements for resource optimization.
+  - **NEW**: Docker API-based performance monitoring offers real-time resource utilization insights.
 - GPU Passthrough:
   - NVIDIA runtime and environment variables ensure the HPE container sees the correct GPU(s).
   - Device reservations are configured for guaranteed GPU access.
 - Observability:
   - Healthchecks provide early failure detection.
   - GPU metrics and BPF tracing offer deep insights into throughput and bottlenecks.
-  - **NEW**: mpv service provides detailed playback logs for debugging and performance analysis.
+  - **NEW**: Comprehensive validation system ensures data quality and experiment reliability.
+  - **NEW**: Docker API monitoring provides detailed container-level performance metrics.
 - FFMPEG Tuning:
   - Increased timeouts reduce premature failures on long streams.
 - Security Hardening:
   - Non-root users, read-only root filesystems, and temporary filesystems for /tmp improve isolation.
-- **NEW**: DASH Pipeline Optimization:
-  - Static IP assignments eliminate DNS resolution overhead in the pipeline.
-  - Resource-constrained services prevent resource contention during experiments.
-  - Automated warmup mechanisms ensure stable playback conditions.
+- **NEW**: Enhanced Experiment Management:
+  - Structured results organization with timestamped directories.
+  - Comprehensive diagnostics collection for troubleshooting.
+  - Automated validation ensures experiment quality and reproducibility.
+  - Configurable sampling intervals for BPF tracing optimization.
 
 **Section sources**
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yml](file://rtsp-ipcam/docker-compose.yml)
 - [docker-compose.yaml](file://monitor_hpe/docker-compose.yaml)
@@ -414,6 +509,19 @@ Common issues and remedies:
   - Confirm the tracer shares the HPE network namespace.
   - Verify the default interface is correctly detected and accessible.
   - Check that HPE establishes an outbound connection to the streamer before the tracer starts.
+  - **NEW**: Check BPF tracer logs for port detection messages and validation errors.
+- **NEW**: Enhanced orchestration framework issues:
+  - Verify experiment script has proper permissions and dependencies.
+  - Check container timing measurements for startup delays and initialization issues.
+  - Review validation reports for specific quality assurance failures.
+- **NEW**: Performance monitor Docker API errors:
+  - Ensure Docker socket is properly mounted (/var/run/docker.sock).
+  - Verify target container name matches the monitored container.
+  - Check Docker API accessibility and permissions.
+- **NEW**: Validation system failures:
+  - Review validation report for specific check failures and metrics.
+  - Verify required files exist in results directory (JSON, TX, BCC, perf, GPU).
+  - Check threshold values and adjust validation criteria if needed.
 - **NEW**: mpv service fails to start DASH playback:
   - Verify the DASH manifest is available at the expected URL (http://http_client/manifest.mpd).
   - Check network connectivity between mpv and http_client services.
@@ -429,6 +537,9 @@ Common issues and remedies:
   - **NEW**: Check that the mpv service port is not conflicting with other services.
 
 **Section sources**
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
+- [run_experiment_bcc.sh](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/run_experiment_bcc.sh)
+- [validate_run.py](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/validate_run.py)
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [run_nvidia_dcgm.sh](file://ffmpeg_hpe/run_nvidia_dcgm.sh)
 - [entrypoint.sh](file://ffmpeg_hpe/bpftrace-tracer/entrypoint.sh)
@@ -437,21 +548,36 @@ Common issues and remedies:
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
 
 ## Conclusion
-The containerization setup provides a robust, observable, and scalable pipeline for streaming, inference, and monitoring. By leveraging Docker Compose, GPU passthrough, and BPF-based tracing, teams can reproduce and operate the HPE experiment consistently across environments. **The addition of the mpv service and enhanced recent-dash infrastructure now enables automated DASH segment fetching and playback capabilities, providing a complete experimental framework for caching and streaming research.** Applying the best practices outlined here ensures predictable performance, improved security, and easier maintenance.
+The containerization setup provides a robust, observable, and scalable pipeline for streaming, inference, and monitoring. By leveraging Docker Compose, GPU passthrough, and BPF-based tracing, teams can reproduce and operate the HPE experiment consistently across environments. **The addition of the enhanced ffmpeg_hpe_backup_20260618 framework introduces comprehensive experiment management, advanced performance monitoring, and automated validation capabilities, providing a complete solution for scientific experimentation and quality assurance.** The enhanced orchestration framework, combined with the comprehensive validation system, ensures reliable, reproducible, and high-quality experimental results for streaming and inference research.
 
 ## Appendices
 
-### Dockerfile Configuration for HPE Application
-Highlights:
-- Base image tailored for CUDA and PyTorch development.
-- Manual compilation of FFmpeg with NVIDIA CUDA/NVENC/NPP support.
-- Manual compilation of OpenCV 4.10.0 with CUDA and FFMPEG support.
-- Installation of Python dependencies and optional OpenVINO with GPU support.
-- Model downloads and extension builds during image build.
-- Entrypoint and default CMD for flexible invocation.
+### Enhanced Dockerfile Configuration for ffmpeg_hpe_backup_20260618
+**NEW**: Comprehensive orchestration framework with experiment management capabilities.
+
+#### Enhanced Docker Compose Configuration
+- Multi-service orchestration with precise resource allocation and dependency management.
+- GPU-enabled HPE service with configurable device selection and OpenVINO optimization.
+- Advanced BPF tracer with automatic port detection and traffic validation.
+- Enhanced performance monitoring with Docker API integration.
+- Structured results organization with timestamped directories and comprehensive metadata.
+
+#### BPF Tracer Dockerfile
+- **NEW**: Ubuntu 22.04 base with comprehensive BCC installation from source.
+- **NEW**: Full kernel header support and development dependencies for BPF programming.
+- **NEW**: Python 3.9+ with BCC library and dependencies for traffic monitoring.
+- **NEW**: Configurable sampling intervals via environment variables.
+
+#### Performance Monitor Dockerfile
+- **NEW**: Ubuntu 20.04 base with Docker API integration tools.
+- **NEW**: Linux tools, bpftrace, and Python 3.8+ for performance monitoring.
+- **NEW**: World-writable output directory for seamless volume mounting.
+- **NEW**: Optimized for minimal image size with essential monitoring tools.
 
 **Section sources**
-- [Dockerfile.hpe](file://Dockerfile.hpe)
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
+- [Dockerfile.bcc](file://ffmpeg_hpe/bpftrace-tracer/Dockerfile.bcc)
+- [Dockerfile](file://ffmpeg_hpe_backup_20260618/shared/perf_monitor/Dockerfile)
 
 ### Enhanced Dockerfile Configuration for Recent-DASH Services
 **NEW**: Multi-stage Docker builds for optimized image sizes and reduced attack surface.
@@ -485,43 +611,76 @@ Highlights:
 - [HTTP-Client.Dockerfile](file://recent-dash/HTTP-Client.Dockerfile)
 - [Dockerfile_mpv](file://recent-dash/Dockerfile_mpv)
 
+### Enhanced Experiment Management and Validation
+**NEW**: Comprehensive experiment orchestration with automated quality assurance.
+
+#### Experiment Script Features
+- **NEW**: Automated container lifecycle management with precise timing measurements.
+- **NEW**: Comprehensive diagnostics collection including container logs and system state.
+- **NEW**: Structured results organization with timestamped directories and metadata.
+- **NEW**: Integrated validation system with automated quality checks and reporting.
+
+#### Validation System Capabilities
+- **NEW**: Multi-level validation including exit codes, log parsing, and metric consistency.
+- **NEW**: Detailed reporting with PASS/FAIL status and comprehensive metrics.
+- **NEW**: Configurable thresholds for performance and validation criteria.
+- **NEW**: Automated quality assurance for scientific experimentation.
+
+**Section sources**
+- [run_experiment_bcc.sh](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/run_experiment_bcc.sh)
+- [validate_run.py](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/validate_run.py)
+
 ### Container Networking and Port Mappings
 - Bridge network: All services join a shared network for internal communication.
 - **NEW**: Dedicated dash-caching network with static IP assignments for predictable service discovery.
+- **NEW**: Enhanced orchestration framework uses service-level networking for precise dependency management.
 - Ports:
   - Streaming server exposes a configurable port mapped to the host.
   - **NEW**: HTTP services use internal port 80 with configurable host port mapping.
   - **NEW**: mpv service runs without external port exposure (headless operation).
+  - **NEW**: BPF tracer operates on host network with privileged access for traffic monitoring.
 - DNS: Search domain configured for service discovery.
-- **NEW**: Network isolation: mpv service operates in the same network as other recent-dash services.
+- **NEW**: Network isolation: Enhanced framework maintains service separation while enabling necessary communication.
 
 **Section sources**
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yml](file://rtsp-ipcam/docker-compose.yml)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
 
-### Entrypoint Script Functionality
-- Conditional GPU metrics launcher: Starts the GPU metrics script in the background when enabled.
-- Argument forwarding: Executes the provided command or defaults to the main application.
-- Graceful shutdown: Terminates background processes on SIGTERM.
+### Enhanced Entrypoint Script Functionality
+- **NEW**: Enhanced orchestration framework with automated experiment management.
+- **NEW**: Advanced timing and diagnostics collection for performance analysis.
+- **NEW**: Integrated validation system with automated quality assurance.
+- **NEW**: Conditional GPU metrics launcher: Starts the GPU metrics script in the background when enabled.
+- **NEW**: Argument forwarding: Executes the provided command or defaults to the main application.
+- **NEW**: Graceful shutdown: Terminates background processes on SIGTERM.
 - **NEW**: mpv entrypoint script provides intelligent warmup, retry, and logging capabilities for DASH playback.
 
 **Section sources**
 - [entrypoint.sh](file://ffmpeg_hpe/entrypoint.sh)
 - [mpv-entrypoint.sh](file://recent-dash/mpv-entrypoint.sh)
+- [run_experiment_bcc.sh](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/run_experiment_bcc.sh)
 
-### Scaling and Lifecycle Management
+### Enhanced Scaling and Lifecycle Management
+- **NEW**: Enhanced orchestration framework supports independent scaling of experiment components.
+- **NEW**: Automated experiment lifecycle with precise timing and validation.
+- **NEW**: Comprehensive diagnostics collection for troubleshooting and optimization.
 - Scaling:
   - Duplicate the HPE service with different device assignments or separate instances for multiple inputs.
   - Scale the streaming server if bandwidth becomes a bottleneck.
   - **NEW**: Scale recent-dash services independently based on experiment requirements.
+  - **NEW**: Enhanced framework supports parallel experiment execution with isolated results.
 - Lifecycle:
   - Use restart policies to maintain service uptime.
   - Healthchecks ensure automatic restarts on failure.
   - Graceful shutdown via signals allows cleanup of background processes.
-  - **NEW**: mpv service uses "unless-stopped" policy for continuous playback during experiments.
+  - **NEW**: Enhanced framework uses "unless-stopped" policy for continuous playback during experiments.
+  - **NEW**: Automated validation ensures experiment quality before cleanup.
+- **NEW**: Docker API monitoring provides real-time container metrics for dynamic scaling decisions.
 
 **Section sources**
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yml](file://rtsp-ipcam/docker-compose.yml)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
@@ -529,6 +688,7 @@ Highlights:
 ### Prometheus and Grafana Integration
 - Prometheus configuration file is included at the repository root for scraping metrics.
 - Grafana dashboards can be configured to visualize GPU and system metrics collected by the pipeline.
+- **NEW**: Enhanced framework includes Docker API metrics for comprehensive container monitoring.
 - **NEW**: Recent-dash services include Coroot monitoring labels for enhanced observability.
 
 **Section sources**
@@ -536,8 +696,15 @@ Highlights:
 - [docker-compose.yml](file://docker-compose.yml)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
 
-### Environment Variable Configuration Reference (NEW)
-**NEW**: Comprehensive environment variable configuration for recent-dash services and mpv player.
+### Enhanced Environment Variable Configuration Reference (NEW)
+**NEW**: Comprehensive environment variable configuration for enhanced orchestration framework and recent-dash services.
+
+#### Enhanced Framework Variables
+- `VIDEO_FILE`: Path to video file for streaming (loaded from .env if not set)
+- `STREAMER_CPUS`, `STREAMER_RESERVATION_CPUS`: CPU allocation for streaming server
+- `HPE_CPUS`: CPU allocation for HPE container
+- `BCC_SAMPLE_INTERVAL_MS`: Sampling interval for BPF tracing (default: 10ms)
+- `PERF_MONITOR_INTERVAL`: Interval for Docker API performance monitoring (default: 0.5s)
 
 #### Service-Level Variables
 - `DASH_SERVER_IP`: Static IP assignment for http_server (default: 172.28.0.2)
@@ -560,7 +727,15 @@ Highlights:
 - `HTTP_SERVER_DOMAIN`, `HTTP_SERVER_PORT`: Upstream server configuration
 - `HTTP_PROXY_DOMAIN`, `HTTP_PROXY_PORT`: Downstream proxy configuration
 
+#### Validation System Variables
+- `RX_TOLERANCE_PERCENT`: Allowed BCC RX vs FFmpeg bytes-read delta (default: 2.0%)
+- `MIN_AVG_CPU_PERCENT`: Minimum plausible average HPE container CPU percent (default: 1.0%)
+- `MIN_MEMORY_MB`: Minimum plausible HPE container memory working set (default: 50.0MB)
+
 **Section sources**
+- [docker-compose.yaml](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/docker-compose.yaml)
+- [docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
 - [docker-compose.yml](file://recent-dash/docker-compose.yml)
 - [mpv-entrypoint.sh](file://recent-dash/mpv-entrypoint.sh)
+- [validate_run.py](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/validate_run.py)
 - [HTTP-Proxy.Dockerfile](file://recent-dash/HTTP-Proxy.Dockerfile)

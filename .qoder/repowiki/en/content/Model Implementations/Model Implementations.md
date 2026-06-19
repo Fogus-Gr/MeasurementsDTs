@@ -15,7 +15,15 @@
 - [human-pose-estimation-0007.xml](file://models/OpenVINO/pretrained_models/intel/human-pose-estimation-0007/Fp32/human-pose-estimation-0007.xml)
 - [higher-hrnet-w32-human-pose-estimation.xml](file://models/OpenVINO/pretrained_models/public/Fp32/higher-hrnet-w32-human-pose-estimation.xml)
 - [movenet_multipose_lightning_256x256_FP32.xml](file://models/MoveNet/movenet_multipose_lightning_256x256_FP32.xml)
+- [test_hpe_coordinate_smoke.py](file://unit_tests/test_hpe_coordinate_smoke.py)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Enhanced MoveNet HPE implementation documentation with critical bug fix details
+- Updated MoveNet postprocessing section to reflect improved coordinate clipping and bounds checking
+- Added comprehensive coverage of keypoint padding and coordinate validation improvements
+- Expanded troubleshooting guidance for coordinate-related issues
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -36,7 +44,7 @@ This document explains the Human Pose Estimation implementations provided in the
 - EfficientHRNet variants (OpenVINO: AE-1, AE-2, AE-3)
 - MoveNet (OpenVINO)
 
-It describes each method’s architecture, model characteristics, performance trade-offs, and practical use cases. It also documents configuration options, input/output specifications, optimization strategies, and selection guidance for deployment scenarios and hardware constraints.
+It describes each method's architecture, model characteristics, performance trade-offs, and practical use cases. It also documents configuration options, input/output specifications, optimization strategies, and selection guidance for deployment scenarios and hardware constraints.
 
 ## Project Structure
 The repository organizes HPE implementations around a shared base class and method-specific adapters:
@@ -336,14 +344,17 @@ Bodies --> Save["Render + save outputs"]
 - Postprocessing:
   - Parses per-person keypoints and bounding boxes; builds Body objects.
 
+**Updated** Enhanced MoveNet implementation now includes critical bug fixes for coordinate clipping and bounds checking. The postprocessing stage implements comprehensive bounds validation for both bounding boxes and keypoints, ensuring all coordinates remain within valid image boundaries. This addresses previous issues where out-of-bounds coordinates could occur due to improper scaling and padding calculations.
+
 ```mermaid
 flowchart TD
 Start(["MoveNet Inference"]) --> CPUOnly["Force CPU (GPU not supported)"]
 CPUOnly --> Load["Load compiled model"]
 Load --> Pre["Preprocess RGB frame"]
 Pre --> Infer["Infer keypoints + bbox"]
-Infer --> Post["Parse per-person results"]
-Post --> Bodies["Build Body list"]
+Infer --> Post["Parse per-person results with bounds checking"]
+Post --> Clip["Apply coordinate clipping to valid ranges"]
+Clip --> Bodies["Build Body list with validated coordinates"]
 Bodies --> Save["Render + save outputs"]
 ```
 
@@ -403,8 +414,6 @@ B --> MN
   - HTTP streams benefit from reduced buffer sizes and timeouts.
   - PyNvCodec reduces CPU load for video decoding; falls back to OpenCV when unavailable.
 
-[No sources needed since this section provides general guidance]
-
 ## Troubleshooting Guide
 - Missing or unsupported input:
   - Ensure input type is recognized (image, directory, video, webcam, HTTP stream).
@@ -417,6 +426,8 @@ B --> MN
   - Increase robustness by retrying reads and using timeouts.
 - OpenVINO configuration:
   - Verify environment variables and device availability; check effective settings printed during load.
+- Coordinate validation issues:
+  - **Updated** MoveNet postprocessing now includes comprehensive bounds checking. If experiencing coordinate errors, verify that the coordinate clipping logic is properly validating both bounding boxes and keypoints against image boundaries. The implementation ensures all coordinates remain within [0, width-1] and [0, height-1] ranges.
 
 **Section sources**
 - [base_hpe.py:90-157](file://base_hpe.py#L90-L157)
@@ -426,3 +437,5 @@ B --> MN
 
 ## Conclusion
 This repository provides a comprehensive, unified framework for Human Pose Estimation across multiple backends and model families. Choose AlphaPose for PyTorch flexibility and research-grade accuracy, OpenPose for robust single-pass pose estimation, HigherHRNet for high-precision CPU-only scenarios, EfficientHRNet variants for balanced accuracy-speed trade-offs on GPU, and MoveNet for the fastest CPU-based real-time solutions. Tune OpenVINO settings and model sizes according to your hardware and latency/throughput goals.
+
+**Updated** Recent enhancements to the MoveNet implementation address critical coordinate validation issues, ensuring reliable operation across diverse deployment scenarios. The improved bounds checking provides greater stability and prevents coordinate overflow issues that could affect downstream processing and visualization.

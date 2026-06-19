@@ -4,6 +4,34 @@ Welcome! This guide is written for someone who is new to this project. By the en
 
 ---
 
+## Getting the Code
+
+This guide documents the `perf-tuning-base` branch, which contains the Docker-based
+benchmarking platform. Clone the repository and switch to this branch before starting:
+
+```bash
+git clone https://github.com/Fogus-Gr/MeasurementsDTs.git
+cd MeasurementsDTs
+git checkout perf-tuning-base
+```
+
+> **Python version:** This branch uses **Python 3.9.13** (see `.python-version`).
+> The `requirements.txt` on this branch is pinned to versions tested with Python 3.9.13.
+> Other branches (e.g. `main`) may use different Python and dependency versions —
+> `requirements.txt.in` contains the unpinned baseline for those branches.
+> Always check `.python-version` and `requirements.txt` on whichever branch you are working.
+>
+> **Videos folder:** The `videos/` directory is gitignored — it is **not** included in
+> the clone. You must create it manually and place your HPE benchmark videos there
+> before running experiments (see [Section 9 — Configuring the Video Source](#configuring-the-video-source)
+> for details):
+> ```bash
+> mkdir -p videos/rangeOfMotion videos/ultimatum
+> # Place your .mp4 video files inside the subdirectories
+> ```
+
+---
+
 ## Table of Contents
 
 1. [What Is This Project?](#1-what-is-this-project)
@@ -70,7 +98,7 @@ The top-level folders fall into three categories:
 
 | Folder | Entry Point | What it measures |
 |---|---|---|
-| `ffmpeg_hpe/` | `run_experiment.sh` / `run_experiment_bcc.sh` | HPE inference on H.264 stream + full monitoring stack |
+| `ffmpeg_hpe/` | `run_experiment_bcc.sh` | HPE inference on H.264 stream + full monitoring stack |
 | `monitor_hpe/` | `run_experiment.sh` | HPE inference baseline — CPU/memory only, no streaming server |
 | `recent-dash/` | `run_experiment.sh` | DASH/HTTP caching research — separate thread |
 
@@ -120,7 +148,7 @@ MeasurementsDTs/
 │       └── pretrained_models/     # .xml/.bin files (NOT in git — download manually)
 │
 ├── ffmpeg_hpe/                    # PRIMARY experiment folder — start here for benchmarks
-│   ├── run_experiment.sh          # Basic experiment runner (GPU + CPU metrics only)
+│   ├── run_experiment.sh          # Legacy runner (use run_experiment_bcc.sh instead)
 │   ├── run_experiment_bcc.sh      # Full run with BCC kernel-level network tracing (recommended)
 │   ├── docker-compose.yaml        # Multi-service orchestration (5 services)
 │   ├── .env                       # VIDEO_FILE and SERVER_PORT configuration
@@ -138,8 +166,9 @@ MeasurementsDTs/
 │   ├── plot_graph.py              # CPU + memory usage plots
 │   └── run_experiment.sh
 │
-├── recent-dash/                   # Experimental Prometheus/dashboard monitoring
-│   └── perf_monitor/              # bpftrace-based CPU/memory monitor container
+├── recent-dash/                   # DASH/HTTP caching experiment (separate research thread)
+│   ├── run_experiment.sh          # DASH experiment entry point
+│   └── docker-compose.yml         # HTTP server/proxy/client + perf_monitor (built from ../shared/perf_monitor)
 │
 ├── Measure_plot_cpu_perf/         # Linux perf stat plotting tools
 │   └── plot_perf_metrics.py       # Plot CPU cycles and utilization from perf stat CSV
@@ -168,7 +197,7 @@ MeasurementsDTs/
 │   └── direct_stream_server.py
 │
 ├── Dockerfile_base                # Main HPE Docker image (used by ffmpeg_hpe experiments)
-├── Dockerfile.hpe                 # Alternative HPE Dockerfile
+├── Dockerfile_cpu                # CPU-only HPE Docker image (used by ffmpeg_hpe_cpu)
 ├── docker-compose.yml             # Root-level compose (GPU metrics stack)
 └── README.md                      # Project README with model download links
 ```
@@ -181,11 +210,11 @@ MeasurementsDTs/
 
 | Requirement | Notes |
 |---|---|
-| Linux host | Ubuntu 20.04 tested and recommended |
+| Linux host | Ubuntu 20.04/22.04 tested and recommended |
 | Docker + Docker Compose | v20+ recommended; Compose v2 (`docker compose`) |
 | NVIDIA GPU + drivers | Required for GPU experiments; CPU-only also supported |
 | nvidia-container-toolkit | Enables `runtime: nvidia` in Docker Compose |
-| Python 3.8.10 | For local runs; use conda or virtualenv |
+| Python 3.9.13 | For local runs on `perf-tuning-base`; use conda or virtualenv (see [Getting the Code](#getting-the-code) above) |
 | Conda (recommended) | For managing the Python environment |
 | `bc` package | For floating-point math in shell scripts; auto-installed by experiment scripts |
 | Sufficient disk space | Docker images can be 10–20 GB combined; run `df -h` before starting |
@@ -204,16 +233,23 @@ docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu20.04 nvidia-smi
 ### Option A: Conda (recommended)
 
 ```bash
-# Create and activate environment
-conda create -n hpe python=3.8.10 -y
-conda activate hpe
+# Create and activate environment (Python 3.9.13 — matches .python-version)
+conda create -n hpe-perf python=3.9.13 -y
+conda activate hpe-perf
 
 # Install PyTorch with CUDA support
 conda install pytorch==2.4.1 torchvision==0.19.1 -c pytorch
 
-# Install all remaining dependencies
+# Install all remaining dependencies (pinned to Python 3.9.13)
 conda install --file requirements.txt
 ```
+
+> **`requirements.txt` vs `requirements.txt.in`:** The `requirements.txt` on this
+> branch is fully pinned to exact versions tested with Python 3.9.13 (e.g.
+> `openvino==2024.4.0`, `numpy==1.24.3`, `scipy==1.10.1`). The file
+> `requirements.txt.in` is an unpinned template used by other branches (e.g.
+> `openvino==2024.6.0`, `numpy>=1.26.0`, `torch>=2.2.0`). Do not mix the two —
+> always use `requirements.txt` on `perf-tuning-base`.
 
 ### Option B: pip + virtualenv
 
@@ -244,9 +280,10 @@ python setup.py build_ext --inplace
 | `torch` | 2.4.1 | PyTorch for AlphaPose/MoveNet |
 | `openvino` | 2024.4.0 | Inference engine for OpenVINO models |
 | `opencv-python` | 4.10.0.84 | Video/image I/O and processing |
-| `tensorflow` | 2.13.1 | Used by some MoveNet variants |
 | `Cython` | 3.0.11 | AlphaPose C extensions |
-| `numpy` | 1.24.4 | Array operations |
+| `numpy` | 1.24.3 | Array operations |
+| `scipy` | 1.10.1 | Scientific computing |
+| `pandas` | 2.0.3 | Data processing / CSV handling |
 | `matplotlib` / `seaborn` | 3.7.5 / 0.13.2 | Plotting results |
 | `psutil` | 7.0.0 | Process monitoring |
 | `gdown` | 5.2.0 | Google Drive model downloads |
@@ -256,38 +293,52 @@ python setup.py build_ext --inplace
 
 ## 5. Downloading Pretrained Model Weights
 
-**Model files are not in git.** Download each one and place it at the specified path:
+**Model files are not in git.** Download them after installing `gdown` from
+`requirements.txt`.
+
+Create the target directories first:
+
+```bash
+mkdir -p models/AlphaPose/pretrained_models
+mkdir -p models/AlphaPose/detector/yolo/data
+mkdir -p models/MoveNet
+mkdir -p models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001
+mkdir -p models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP32
+mkdir -p models/OpenVINO/pretrained_models/intel/human-pose-estimation-0006/FP32
+mkdir -p models/OpenVINO/pretrained_models/intel/human-pose-estimation-0007/FP32
+mkdir -p models/OpenVINO/pretrained_models/public/FP32
+```
 
 ### AlphaPose
 
 ```bash
 # ResNet50 pose estimation weights
-wget "https://drive.google.com/uc?export=download&id=1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI" \
+gdown "https://drive.google.com/uc?id=1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI" \
   -O models/AlphaPose/pretrained_models/fast_res50_256x192.pth
 
 # YOLOv3 person detector weights
-wget "https://drive.google.com/uc?export=download&id=1k-9cUGcdH5ZFN1NcMvZrO0ApW241tboD" \
+gdown "https://drive.google.com/uc?id=1D47msNOOiJKvPOXlnpyzdKA3k6E97NTC" \
   -O models/AlphaPose/detector/yolo/data/yolov3-spp.weights
 ```
 
 ### MoveNet
 
 ```bash
-wget "https://drive.google.com/uc?export=download&id=15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr" \
+gdown "https://drive.google.com/uc?id=15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr" \
   -O models/MoveNet/movenet_multipose_lightning_256x256_FP32.bin
 ```
 
 ### OpenPose (OpenVINO)
 
 ```bash
-wget "https://drive.google.com/uc?export=download&id=1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm" \
+gdown "https://drive.google.com/uc?id=1VNucIyIsdaiw1cYt-JGqBWloVu2TVdsm" \
   -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001/human-pose-estimation-0001.bin
 ```
 
 ### HigherHRNet (OpenVINO)
 
 ```bash
-wget "https://drive.google.com/uc?export=download&id=1fko47eVczJZQb9wWA2X7eQ0TuF4PDXzs" \
+gdown "https://drive.google.com/uc?id=1fko47eVczJZQb9wWA2X7eQ0TuF4PDXzs" \
   -O models/OpenVINO/pretrained_models/public/FP32/higher-hrnet-w32-human-pose-estimation.bin
 ```
 
@@ -295,22 +346,21 @@ wget "https://drive.google.com/uc?export=download&id=1fko47eVczJZQb9wWA2X7eQ0TuF
 
 ```bash
 # ae1
-wget "https://drive.google.com/uc?export=download&id=1lEUFqQnWHVymQoZvaXuDFcnOyEEKsexP" \
-  -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
+gdown "https://drive.google.com/uc?id=1lEUFqQnWHVymQoZvaXuDFcnOyEEKsexP" \
+  -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
 
 # ae2
-wget "https://drive.google.com/uc?export=download&id=1d8pGQrM9vEfz_oAIey0qRr7Gxp6dS2UE" \
-  -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0006/FP32/human-pose-estimation-0006.bin
+gdown "https://drive.google.com/uc?id=1d8pGQrM9vEfz_oAIey0qRr7Gxp6dS2UE" \
+  -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0006/FP32/human-pose-estimation-0006.bin
 
 # ae3
-wget "https://drive.google.com/uc?export=download&id=1ZSdsqgD4zUO4gyHMYBfxq3m4UMyQ187j" \
-  -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
+gdown "https://drive.google.com/uc?id=1ZSdsqgD4zUO4gyHMYBfxq3m4UMyQ187j" \
+  -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
 ```
 
-> **Tip:** If `wget` fails for Google Drive links (common with large files), try `gdown` which is included in requirements:
-> ```bash
-> gdown "https://drive.google.com/uc?id=<FILE_ID>" -O <destination>
-> ```
+> **Tip:** If `gdown` fails for a Google Drive link (common with large files or
+> rate limits), you can also download the file manually through your browser
+> and place it at the destination path shown above.
 
 ---
 
@@ -371,7 +421,7 @@ python3 main.py --help
 | `--save_image` | False | Save annotated image(s) |
 | `--save_video` | False | Save annotated video |
 | `--detbatch` | `5` | Detection batch size (AlphaPose only) |
-| `--timeout` | `300` | Timeout in seconds for HTTP streams |
+| `--timeout` | `0` | Timeout in seconds for processing (0 = unlimited) |
 | `--max_frames` | `0` | Max frames to process (0 = unlimited) |
 | `--measurement_interval_ms` | `100` | Interval for measuring data volume |
 
@@ -400,12 +450,12 @@ python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'
 │  ┌──────────────────────┐    HTTP H.264 Stream               │
 │  │  h264-streaming-server│ ──────────────────┐               │
 │  │  (FFmpeg/NGINX, :8089)│                   │               │
-│  │  2 CPU cores, 1 GB   │                   ▼               │
+│  │  1 CPU core,  1 GB   │                   ▼               │
 │  └──────────────────────┘       ┌──────────────────────┐    │
 │                                  │      hpe container    │    │
 │                                  │  Python + OpenCV      │    │
 │                                  │  Pose Estimation      │    │
-│                                  │  4 CPU cores, 16 GB   │    │
+│                                  │  3 CPU cores, 16 GB   │    │
 │                                  │  NVIDIA GPU (optional)│    │
 │                                  └─────────┬────────────┘    │
 │                                            │                  │
@@ -413,10 +463,10 @@ python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'
 │              ▼                             ▼          ▼      │
 │  ┌─────────────────┐  ┌──────────────┐  ┌──────────────┐   │
 │  │  perf_monitor    │  │  bcc-tracer  │  │  gpu-metrics │   │
-│  │  (bpftrace)      │  │  (BPF/BCC)   │  │  (nvidia-smi)│   │
+│  │  (/proc deltas)  │  │  (BPF/BCC)   │  │  (nvidia-smi)│   │
 │  │  CPU% + mem RSS  │  │  RX bytes    │  │  temp, power │   │
-│  │  → aggregated_   │  │  per 10ms    │  │  utilization │   │
-│  │    metrics.csv   │  │  → video_    │  │  → gpu_      │   │
+│  │  → perf_metrics  │  │  per 10ms    │  │  utilization │   │
+│  │    .csv          │  │  → video_    │  │  → gpu_      │   │
 │  └─────────────────┘  │    rx.csv    │  │    metrics.csv│   │
 │                        └──────────────┘  └──────────────┘   │
 └─────────────────────────────────────────────────────────────┘
@@ -429,7 +479,7 @@ python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'
 #### 1. `h264-streaming-server`
 - **What it does:** Serves the benchmark video as an H.264 HTTP stream on port 8089.
 - **Built from:** `rtsp-ipcam/Dockerfile`
-- **Resources:** 2 CPU cores (limit), 1 GB RAM
+- **Resources:** 1 CPU core (limit), 1 GB RAM
 - **Config:** `VIDEO_FILE` from `.env`, `SERVER_PORT=8089`
 - **Healthcheck:** TCP connection check on port 8089; HPE container waits until healthy.
 
@@ -437,7 +487,7 @@ python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'
 - **What it does:** The main inference container. Reads from the stream, runs pose estimation, writes keypoint CSVs.
 - **Built from:** `Dockerfile_base` at the repo root
 - **Command:** `python3 main.py --method <METHOD> --input http://h264-streaming-server:8089/stream.h264 --csv --output_dir /output/ --device <DEVICE> --measurement_interval_ms 10`
-- **Resources:** 4 CPU cores (limit), 16 GB RAM, NVIDIA GPU (via `runtime: nvidia`)
+- **Resources:** 3 CPU cores (limit), 16 GB RAM, NVIDIA GPU (via `runtime: nvidia`)
 - **Environment:** `HPE_METHOD`, `HPE_INPUT`, `HPE_DEVICE` are injected by experiment scripts.
 - **Shared memory:** 8 GB (`shm_size`) — needed for large batch PyTorch operations.
 
@@ -447,9 +497,9 @@ python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'
 - **Requires:** NVIDIA GPU and `nvidia-container-toolkit`.
 
 #### 4. `perf_monitor`
-- **What it does:** Uses bpftrace to monitor the HPE process's CPU usage and memory RSS. Runs in host PID namespace.
-- **Output:** `results/perf/aggregated_metrics.csv`
-- **Privileges:** `privileged: true`, `SYS_ADMIN`, `NET_ADMIN` — needed for kernel tracing.
+- **What it does:** Monitors the HPE process's CPU usage and memory RSS via `/proc/$PID/stat` delta calculations at 500 ms intervals. Runs in host PID namespace (`pid: host`) so it can read the host-side PID of the HPE container's main process (written to `pids/hpe.pid` by the experiment script via `docker inspect --format='{{.State.Pid}}'`).
+- **Output:** `results/perf_metrics.csv` (columns: `timestamp,total_cpu_percent,total_mem_rss_kb,active_pids`)
+- **Privileges:** `privileged: true`, `SYS_ADMIN`, `NET_ADMIN`, `NET_RAW`, `IPC_LOCK` — over-provisioned (the script only reads `/proc`, but `bpftrace` is installed in the image for historical reasons).
 
 #### 5. `bcc-tracer`
 - **What it does:** Uses Linux BCC (BPF Compiler Collection) to trace network RX bytes at the kernel level, counting bytes received from the streaming server every 10 ms.
@@ -461,30 +511,36 @@ python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'
 
 When you run `./run_experiment_bcc.sh alphapose`, the script:
 
-1. **Generates a timestamped results directory name** (e.g., `results_alphapose_AMD_EPYC_7551P_20250428_120000/`).
-2. **Creates output subdirectories:** `logs/`, `perf/`, `gpu/`, `traces/bcc/`, `hpe_output/`.
+1. **Generates a timestamped results directory name** (e.g., `results_alphapose_4cores_GPU_vga_01_01.mp4_20260618_120000/`).
+2. **Creates output subdirectories:** `logs/`, `perf/`, `traces/bcc/`.
 3. **Cleans up** any previous containers with `docker compose down -v --remove-orphans`.
-4. **Starts the streaming server** and waits for the healthcheck to pass (up to 30 s).
-5. **Starts the HPE container** with the configured method and device.
-6. **Starts monitoring sidecars** in parallel: `gpu-metrics`, `perf_monitor`, `bcc-tracer`.
-7. **Polls the HPE container** until it exits (video finishes or timeout reached).
-8. **Captures diagnostics** (container logs, stream availability) on failure.
-9. **Collects all outputs** — copies CSV files from Docker volumes into the results directory.
-10. **Writes `container_timing.txt`** with per-container startup times.
-11. **Tears down** all containers.
+4. **Starts the streaming server** and waits for the healthcheck to pass (up to 60 s).
+5. **Starts `perf_monitor`** *before* the HPE container so it is ready to sample from the first frame.
+6. **Starts the HPE container** with the configured method and device.
+7. **Extracts the HPE host PID** via `docker inspect --format='{{.State.Pid}}'` and writes it to `pids/hpe.pid` for `perf_monitor` to read.
+8. **Starts `gpu-metrics` and `bcc-tracer`** sidecars, then waits 8 s for BPF compilation and port detection.
+9. **Polls the HPE container** every 5 s until it exits (video finishes or stream ends).
+10. **Captures diagnostics** (container logs, stream availability) on failure.
+11. **Checks the HPE exit code** — distinguishes clean exit (0) from crash/OOM (non-zero).
+12. **Collects all outputs** — copies CSV files from containers and bind-mounted volumes into the results directory (`perf/`, `gpu/`, `traces/bcc/`, `hpe_output/`, `logs/`).
+13. **Writes `container_timing.txt`** with per-container startup times and detected BCC port info.
+14. **Tears down** all containers.
 
 ---
 
 ## 9. Running Experiments
 
-### Two Experiment Scripts
+### Experiment Script
 
 > *For detailed script flow and all arguments, see [Experiment Scripts Deep Dive](docs/experiment-scripts.md).*
 
+The `ffmpeg_hpe/` rig uses a single entry point:
+
 | Script | Use Case |
 |---|---|
-| `run_experiment.sh` | Quick run: GPU metrics + CPU stats only, no network tracing |
-| `run_experiment_bcc.sh` | Full benchmark: includes BCC kernel-level RX byte tracing — **recommended** |
+| `run_experiment_bcc.sh` | Full benchmark: HPE inference on H.264 stream with BCC kernel-level RX byte tracing, CPU/memory monitoring, and GPU metrics |
+
+> `run_experiment.sh` exists in the folder but is a legacy variant — it lacks host-PID extraction and the BCC port-detection logic. Use `run_experiment_bcc.sh` for all benchmarks.
 
 ### Build Docker Images
 
@@ -539,6 +595,32 @@ VIDEO_FILE=/app/videos/ultimatum/hd_00_00.mp4 ./run_experiment_bcc.sh alphapose
 ```
 
 The `../videos/` directory is mounted read-only into the streaming server container at `/app/videos/`.
+The `VIDEO_FILE` path in `.env` always refers to the container-side path (`/app/videos/...`),
+which maps to `videos/...` on the host.
+
+The `videos/` folder is **gitignored** (`videos/*` in `.gitignore`) — it is not included
+when you clone the repo. You must create it and add your own video files before running
+experiments:
+
+```bash
+# Create subdirectories for organising your benchmark videos
+mkdir -p videos/rangeOfMotion videos/ultimatum
+
+# Place your .mp4 files inside (example structure):
+# videos/
+# ├── rangeOfMotion/
+# │   ├── vga_01_01.mp4          # VGA resolution clip
+# │   └── hd_00_00.mp4           # HD resolution clip
+# └── ultimatum/
+#     └── vga_01_01_miso.mp4
+
+# Then point .env at the video you want to stream
+echo "VIDEO_FILE=/app/videos/rangeOfMotion/vga_01_01.mp4" > ffmpeg_hpe/.env
+```
+
+> The streaming server reads the video via FFmpeg and serves it as a continuous H.264
+> HTTP stream. Any format FFmpeg can decode will work, but `.mp4` (H.264-encoded) is
+> recommended for lowest latency.
 
 ### Cleanup Between Runs
 
@@ -558,43 +640,42 @@ docker compose down -v --remove-orphans
 Results are saved to a timestamped directory inside `ffmpeg_hpe/`:
 
 ```
-results_alphapose_AMD_EPYC_7551P_32-Core_20250428_120000/
+results_alphapose_4cores_GPU_vga_01_01.mp4_20260618_120000/
 ├── container_timing.txt         # Startup time per container (seconds)
 ├── logs/
 │   ├── hpe_startup.log          # HPE container early startup output
-│   ├── hpe_startup_full.log     # Full HPE container log
+│   ├── hpe.log                  # Full HPE container log
 │   ├── hpe_exit.log             # HPE container exit code (0 = clean, non-zero = crash)
-│   ├── perf_monitor.log         # bpftrace perf monitor log
+│   ├── perf_monitor.log         # perf_monitor container log
 │   ├── bcc-tracer.log           # BCC tracer log (port detection, tracing events)
+│   ├── bcc_tracer_startup.log   # BCC tracer early startup log
 │   └── gpu-metrics.log          # GPU metrics collector log
 ├── perf/
-│   ├── pid_metrics.csv          # Columns: timestamp, pid, cpu_percent, mem_rss_kb, tx_bytes*, rx_bytes*
-│   ├── network_stats.csv        # Columns: timestamp, pid, interface, bytes, sent  ← TX data lives here
-│   └── perf_metrics.csv         # Additional perf_monitor metrics
+│   └── perf_metrics.csv         # Columns: timestamp, total_cpu_percent, total_mem_rss_kb, active_pids
 ├── gpu/
 │   └── gpu_metrics.csv          # Columns: timestamp, gpu_id, gpu_utilization, mem_utilization, temperature, power_usage
 ├── traces/bcc/
-│   └── hpe_video_rx.csv         # Columns: timestamp_ms, rx_bytes (per 10ms interval)  ← RX data lives here
+│   ├── video_rx.csv             # Columns: timestamp_ms, rx_bytes (per 10ms interval)  ← RX data lives here
+│   ├── port_info.txt            # Detected HPE video port
+│   └── logs/                    # BCC tracer internal logs
 └── hpe_output/
-    ├── *.csv                    # Keypoint data: frame, person_id, joint coordinates
-    └── *.json                   # COCO-format keypoint export (if --json flag used)
+    ├── *_JSON.csv               # Keypoint data: frame, person_id, joint coordinates
+    └── *_Tx.csv                 # HPE output data volume per measurement interval
 ```
 
-> `*` The `tx_bytes` and `rx_bytes` columns in `pid_metrics.csv` are always `0` — this is intentional. Network data is collected separately by two different tools (see below).
+### Network Data — Where to Find It
 
-### TX and RX Network Data — Where to Find It
-
-Network measurement requires two different tools because TX and RX operate in different kernel contexts:
+Network RX measurement uses BCC (BPF Compiler Collection) kernel-level tracing:
 
 | Direction | Tool | Container | Mechanism | Output file |
 |---|---|---|---|---|
-| **TX** (HPE → outside) | `bpftrace sys_enter_sendto` in `monitor_pid.sh` | `perf_monitor` | Syscall tracepoint — fires in HPE process context, PID filter valid | `perf/network_stats.csv` (rows where `sent=1`) |
-| **RX** (stream → HPE) | `bcc_rx_bytes.py` | `bcc-tracer` | BPF socket filter on `eth0`, filtered by streamer IP + port | `traces/bcc/hpe_video_rx.csv` |
-| ~~RX (attempted)~~ | ~~`bpftrace netif_receive_skb`~~ | ~~`perf_monitor`~~ | ~~Fires in softirq/kernel context — PID never matches HPE~~ | ~~Always ~0, ignore~~ |
+| **RX** (stream → HPE) | `bcc_rx_bytes.py` | `bcc-tracer` | BPF socket filter on `eth0`, filtered by streamer IP + port | `traces/bcc/video_rx.csv` |
 
-**Why the split is necessary:** `sendto()` is a syscall made by the HPE process — the kernel knows the PID. Incoming packets are processed by the kernel network stack in softirq context *before* being associated with any process — PID filtering is impossible at that point. `bcc-tracer` works around this by filtering by IP+port instead, running in a container that shares HPE's network namespace (`network_mode: service:hpe`).
+**Why BCC for RX?** Incoming packets are processed by the kernel network stack in softirq context *before* being associated with any process — PID filtering is impossible at that point. `bcc-tracer` works around this by filtering by IP+port instead, running in a container that shares HPE's network namespace (`network_mode: service:hpe`).
 
-**Rule:** for RX data use `traces/bcc/hpe_video_rx.csv`. For TX data use `perf/network_stats.csv`. Never use the RX column from `pid_metrics.csv` — it is always `0` by design.
+**About `*_Tx.csv` files:** Files in `hpe_output/` ending in `_Tx.csv` are HPE JSON output payload byte measurements (data volume produced by the inference process via `--measurement_interval_ms`), **not** network transmit traffic. They measure how much keypoint data the HPE process generates per interval, not bytes sent over the network.
+
+**Rule:** for RX data use `traces/bcc/video_rx.csv`. For HPE output data volume use `hpe_output/*_Tx.csv`. Do not confuse the two.
 
 ### Quick Data Inspection
 
@@ -602,19 +683,19 @@ Network measurement requires two different tools because TX and RX operate in di
 cd results_alphapose_*/
 
 # Total video data received (MB)
-awk -F, 'NR>1 {sum += $2} END {printf "%.2f MB\n", sum/1024/1024}' traces/bcc/hpe_video_rx.csv
+awk -F, 'NR>1 {sum += $2} END {printf "%.2f MB\n", sum/1024/1024}' traces/bcc/video_rx.csv
 
 # Average GPU utilization
 awk -F, 'NR>1 {sum += $2; n++} END {printf "%.1f%%\n", sum/n}' gpu/gpu_metrics.csv
 
-# Peak memory usage (MB)
-awk -F, 'NR>1 {if ($3 > max) max=$3} END {print max " MB"}' perf/aggregated_metrics.csv
+# Peak memory usage (KB → MB)
+awk -F, 'NR>1 {if ($3 > max) max=$3} END {printf "%.2f MB\n", max/1024}' perf/perf_metrics.csv
 
 # Number of frames processed
 wc -l hpe_output/*.csv
 
 # Experiment duration (from RX trace)
-head -2 traces/bcc/hpe_video_rx.csv && echo "..." && tail -1 traces/bcc/hpe_video_rx.csv
+head -2 traces/bcc/video_rx.csv && echo "..." && tail -1 traces/bcc/video_rx.csv
 ```
 
 ---
@@ -626,10 +707,10 @@ head -2 traces/bcc/hpe_video_rx.csv && echo "..." && tail -1 traces/bcc/hpe_vide
 | Script | Input File | Output |
 |---|---|---|
 | `ffmpeg_hpe/plot_smi_output.py` | `gpu/gpu_metrics.csv` | GPU utilization, temperature, memory, power PNGs |
-| `ffmpeg_hpe/plot_rx_bytes_trimmed_reset.py` | `traces/bcc/hpe_video_rx.csv` | Network RX bytes timeline plot |
-| `ffmpeg_hpe/plot_rx_bytes.py` | `traces/bcc/hpe_video_rx.csv` | Raw RX bytes plot |
+| `ffmpeg_hpe/plot_rx_bytes_trimmed_reset.py` | `traces/bcc/video_rx.csv` | Network RX bytes timeline plot |
+| `ffmpeg_hpe/plot_rx_bytes.py` | `traces/bcc/video_rx.csv` | Raw RX bytes plot |
 | `ffmpeg_hpe/plot_graph.py` | `perf/perf_metrics.csv` or legacy `perf/pid_metrics.csv` | CPU% + memory usage over time |
-| `monitor_hpe/plot_graph.py` | `perf/aggregated_metrics.csv` | CPU% + memory usage over time |
+| `monitor_hpe/plot_graph.py` | `pid_metrics.csv` | CPU% + memory usage over time |
 | `Measure_plot_cpu_perf/plot_perf_metrics.py` | perf stat CSV | CPU cycles + utilization bar chart |
 | `Measure_gpu_dcgm/plot_smi_output.py` | gpu_metrics.csv | DCGM GPU metrics (alternative) |
 
@@ -642,13 +723,13 @@ cd ffmpeg_hpe/
 python3 plot_smi_output.py results_*/gpu/gpu_metrics.csv
 
 # Network RX timeline (trimmed/reset for cleaner view)
-python3 plot_rx_bytes_trimmed_reset.py results_*/traces/bcc/hpe_video_rx.csv
+python3 plot_rx_bytes_trimmed_reset.py results_*/traces/bcc/video_rx.csv
 
 # CPU and memory plot for ffmpeg_hpe perf metrics
 python3 plot_graph.py results_*/perf/perf_metrics.csv
 
 # CPU and memory plot
-python3 ../monitor_hpe/plot_graph.py results_*/perf/aggregated_metrics.csv
+python3 ../monitor_hpe/plot_graph.py results_*/pid_metrics.csv
 ```
 
 ---
@@ -799,7 +880,7 @@ bash models/AlphaPose/build_extensions.sh
 
 ### Python Style
 
-- Python **3.8** syntax only.
+- Python **3.9** syntax only.
 - **4-space indentation**, Black-style formatting.
 - **Type hints** where feasible on function signatures.
 - **Explicit imports** — no wildcard `from module import *`.
@@ -809,7 +890,7 @@ bash models/AlphaPose/build_extensions.sh
 ### Adding a New HPE Method
 
 1. Create `your_method_hpe.py` in the repo root, inheriting from `BaseHPE` in `base_hpe.py`.
-2. Implement `load_model()`, `run_inference(frame)`, and any I/O helpers.
+2. Implement `load_model()`, `run_model(padded)`, and `postprocess(predictions)` (see `base_hpe.py` for the abstract interface).
 3. Add your method to the `method_map` in `main.py`'s `get_hpe_method()` function.
 4. Add a test using a sample image/video in `unit_tests/`.
 5. Update `requirements.txt` with any new dependencies.
@@ -855,15 +936,17 @@ Refs #45
 
 | Branch | Purpose |
 |---|---|
-| `perf-tuning-base` | Performance tuning baseline — likely the most active branch |
-| `main` | Upstream default / stable |
-| `cuda-dev` | GPU/CUDA-specific optimizations |
-| `feat/ov-epyc-4vcpu` | EPYC CPU-targeted OpenVINO configuration (4 vCPU) |
-| `feat/openvino-opti-cpu` | CPU performance optimization with OpenVINO tuning |
-| `hpe-benchmark` | Dedicated benchmark suite |
-| `latest-alphapose-integration` | Latest AlphaPose integration work |
+| `perf-tuning-base` | Active development — benchmarking platform, Docker rigs, monitoring fixes |
+| `main` | Stable default branch |
+| `cuda-dev` | GPU/CUDA-specific optimizations, docker-compose GPU configuration |
+| `evaluation` | Evaluation framework work |
+| `feat/rtsp-mediamtx-migration` | RTSP streaming migration to MediaMTX |
+| `final-merge-validation` | Merge validation and documentation updates |
+| `fix/open-issues-12-15-todos-a-e` | Fixes for known issues #12–#15 and HPE TODOs |
+| `hpe-benchmark` | Dedicated HPE benchmark Docker Compose setup |
+| `refactor/video-detection-consolidation` | Video detection logic consolidation refactor |
 
-> Check `git log --oneline --all` to see current branch state and recent commits.
+> Check `git branch -r` to see current remote branches and `git log --oneline -5 origin/<branch>` for recent commits.
 
 ---
 
@@ -888,38 +971,50 @@ Refs #45
 For someone who just wants to run their first benchmark as fast as possible:
 
 ```bash
-# 1. Clone the repo and enter it
-git clone <repo-url> MeasurementsDTs
+# 1. Clone the repo, switch to perf-tuning-base, and enter it
+git clone https://github.com/Fogus-Gr/MeasurementsDTs.git
 cd MeasurementsDTs
+git checkout perf-tuning-base
 
-# 2. Download model weights (see Section 5 for full list)
-wget "https://drive.google.com/uc?export=download&id=1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI" \
+# 2. Create the videos/ folder and add benchmark videos (gitignored — not in clone)
+mkdir -p videos/rangeOfMotion
+# Place your .mp4 video files inside videos/rangeOfMotion/
+
+# 3. Download model weights (see Section 5 for full list)
+mkdir -p models/AlphaPose/pretrained_models models/AlphaPose/detector/yolo/data \
+  models/MoveNet models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001
+
+gdown "https://drive.google.com/uc?id=1p6bi10UybpUIcq5D2XDsgQRLPJIr2RyI" \
   -O models/AlphaPose/pretrained_models/fast_res50_256x192.pth
-# ... (download all other models)
+gdown "https://drive.google.com/uc?id=1D47msNOOiJKvPOXlnpyzdKA3k6E97NTC" \
+  -O models/AlphaPose/detector/yolo/data/yolov3-spp.weights
+gdown "https://drive.google.com/uc?id=15SZwY2jAh1KqHwT-YO6_UByOsQD70RSr" \
+  -O models/MoveNet/movenet_multipose_lightning_256x256_FP32.bin
+# ... (download remaining models from Section 5)
 
-# 3. Set up Python environment
-conda create -n hpe python=3.8.10 -y && conda activate hpe
+# 4. Set up Python environment (3.9.13 — matches .python-version on this branch)
+conda create -n hpe python=3.9.13 -y && conda activate hpe
 conda install pytorch==2.4.1 torchvision==0.19.1 -c pytorch
 conda install --file requirements.txt
 bash models/AlphaPose/build_extensions.sh
 
-# 4. Configure the video source
+# 5. Configure the video source
 echo "VIDEO_FILE=/app/videos/rangeOfMotion/vga_01_01.mp4" > ffmpeg_hpe/.env
 
-# 5. Build Docker images
+# 6. Build Docker images
 cd ffmpeg_hpe/
 docker compose build
 
-# 6. Run your first experiment
+# 7. Run your first experiment
 ./run_experiment_bcc.sh alphapose
 
 # Wait for the experiment to complete (~duration of the video)...
-# Results land in: results_alphapose_<cpu-model>_<timestamp>/
+# Results land in: results_alphapose_<cores>cores_<device>_<video-file>_<timestamp>/
 
-# 7. Plot the results
+# 8. Plot the results
 python3 plot_smi_output.py results_*/gpu/gpu_metrics.csv
-python3 plot_rx_bytes_trimmed_reset.py results_*/traces/bcc/hpe_video_rx.csv
-python3 ../monitor_hpe/plot_graph.py results_*/perf/aggregated_metrics.csv
+python3 plot_rx_bytes_trimmed_reset.py results_*/traces/bcc/video_rx.csv
+python3 plot_graph.py results_*/perf/perf_metrics.csv
 ```
 
 ---
