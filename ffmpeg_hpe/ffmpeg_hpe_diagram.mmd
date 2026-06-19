@@ -1,0 +1,58 @@
+%%{init: {"flowchart": {"nodeSpacing": 22, "rankSpacing": 28, "curve": "linear"}} }%%
+flowchart TB
+    %% Orchestration
+    Orch["run_experiment.sh<br/>(Orchestrator)"]
+    Compose["docker-compose.yml<br/>(all services)"]
+
+    %% Workload services
+    Streamer["stream_video_server<br/>(Flask / RTSP)"]
+    HPE["HPE Engine<br/>(main.py)"]
+
+    %% Observability sidecars
+    PerfMon["perf_monitor<br/>pidstat + bpftrace"]
+    BCCTrace["bcc-tracer<br/>eBPF RX tracing"]
+    GPUMetrics["gpu-metrics<br/>nvidia-smi"]
+
+    %% Outputs
+    OutKeypoints["out/<br/>COCO JSON / CSV keypoints"]
+    CSV1["out/perf/pid_metrics.csv"]
+    CSV2["out/perf/hpe_video_rx.csv"]
+    CSV3["out/perf/gpu_metrics.csv"]
+
+    %% Launch flow
+    Orch -->|"launches"| Compose
+
+    Compose -->|"starts"| Streamer
+    Compose -->|"starts"| HPE
+    Compose -->|"starts"| PerfMon
+    Compose -->|"starts"| BCCTrace
+    Compose -->|"starts"| GPUMetrics
+
+    %% Runtime flow
+    Streamer -->|"video frames"| HPE
+    HPE -->|"predictions"| OutKeypoints
+
+    %% Monitoring flow
+    PerfMon -.->|"monitors CPU, RAM, TX"| HPE
+    BCCTrace -.->|"monitors video RX bytes"| HPE
+    GPUMetrics -.->|"monitors GPU util, temp, power"| HPE
+
+    %% CSV flow
+    PerfMon -->|"writes"| CSV1
+    BCCTrace -->|"writes"| CSV2
+    GPUMetrics -->|"writes"| CSV3
+
+    %% Styling
+    classDef orch fill:#1f2937,stroke:#374151,stroke-width:2px,color:#fff
+    classDef compose fill:#1e3a8a,stroke:#3b82f6,stroke-width:2px,color:#fff
+    classDef hpe fill:#0f766e,stroke:#14b8a6,stroke-width:2px,color:#fff
+    classDef streamer fill:#b45309,stroke:#f59e0b,stroke-width:2px,color:#fff
+    classDef sidecar fill:#eef2ff,stroke:#a78bfa,stroke-width:2px,color:#111827
+    classDef output fill:#eef2ff,stroke:#a78bfa,stroke-width:2px,color:#111827
+
+    class Orch orch
+    class Compose compose
+    class HPE hpe
+    class Streamer streamer
+    class PerfMon,BCCTrace,GPUMetrics sidecar
+    class OutKeypoints,CSV1,CSV2,CSV3 output

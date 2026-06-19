@@ -14,7 +14,7 @@ The `perf-tuning-base` branch adds Docker-based experiment rigs for measuring
 HPE inference performance — throughput, CPU/GPU utilisation, memory, and
 network bandwidth — under realistic streaming conditions.
 
-**Stack:** Python 3.8.10 · OpenVINO 2024.2.0 · PyTorch 2.4.1+cu121 · OpenCV · Docker · NVIDIA DCGM
+**Stack:** Python 3.9.13 · OpenVINO 2024.4.0 · PyTorch 2.4.1+cu121 · OpenCV · Docker · NVIDIA DCGM
 
 ---
 
@@ -41,14 +41,16 @@ unit_tests/
 
 # Benchmarking platform (this branch)
 monitor_hpe/                   # Rig 1: baseline CPU monitoring (no streaming server)
-ffmpeg_hpe/                    # Rig 2: H.264 stream + full monitoring stack
+ffmpeg_hpe/                    # Rig 2: H.264 stream + full monitoring stack (GPU)
+ffmpeg_hpe_cpu/                # Rig 2b: CPU-only H.264 stream + monitoring (no GPU required)
 recent-dash/                   # Rig 3: DASH/HTTP caching experiment (separate research thread)
-rtsp-ipcam/                    # Shared H.264 streaming server used by ffmpeg_hpe/
+rtsp-ipcam/                    # Shared H.264 streaming server used by ffmpeg_hpe/ and ffmpeg_hpe_cpu/
 Measure_Flops/                 # Standalone: GPU FLOPS via Nsight Compute
 Measure_gpu_dcgm/              # Standalone: GPU power/temp/util via nvidia-smi
 Measure_plot_cpu_perf/         # Standalone: CPU cycles via perf stat
 optimizations/                 # OpenVINO CPU thread/stream tuning for 4-vCPU cloud instances
 Dockerfile_base                # Active HPE container image (used by monitor_hpe/ and ffmpeg_hpe/)
+Dockerfile_cpu                 # CPU-only HPE container image (used by ffmpeg_hpe_cpu/)
 archive/dockerfiles/           # Archived Dockerfile iterations and stale variants
 docker-compose.yml             # GPU observability stack (DCGM + Prometheus + Grafana)
 ```
@@ -97,7 +99,7 @@ Results directories are always timestamped so runs never overwrite each other.
 ## Development Conventions
 
 ### Code Style
-- Python 3.8 compatible — no walrus operator, no `match` statements.
+- Python 3.9 compatible — no walrus operator, no `match` statements.
 - No type annotations currently in use; do not add them unless the whole file
   is being refactored.
 - 4-space indentation. Match the surrounding file's style exactly.
@@ -127,9 +129,12 @@ into timestamped directories inside each rig folder. Do not hardcode other
 output paths.
 
 ### Docker Images
-`Dockerfile_base` is the active HPE container image. The archived Dockerfiles
-under `archive/dockerfiles/` are iteration history — do not use them for new
-work without checking whether `Dockerfile_base` already covers the need.
+`Dockerfile_base` is the active HPE container image (GPU, includes PyNvCodec).
+`Dockerfile_cpu` is the CPU-only variant — identical except PyNvCodec build is
+skipped (OpenCV fallback handles video decoding). Used by `ffmpeg_hpe_cpu/`.
+The archived Dockerfiles under `archive/dockerfiles/` are iteration history —
+do not use them for new work without checking whether `Dockerfile_base` or
+`Dockerfile_cpu` already covers the need.
 
 ### Network Monitoring — TX vs RX Tool Split
 
@@ -224,10 +229,11 @@ python3 main.py --method movenet --input http://<your-ip>:8080/video_feed --save
 ```bash
 cd monitor_hpe  && ./run_experiment.sh
 cd ffmpeg_hpe   && ./run_experiment_bcc.sh movenet
+cd ffmpeg_hpe_cpu && ./run_experiment_cpu.sh movenet
 cd recent-dash  && ./run_experiment.sh
 ```
 
-**OpenVINO threading:** The `ffmpeg_hpe` rig uses `ffmpeg_hpe/.env` defaults (`OV_MODE=latency`, `OV_STREAMS=1`, `OV_THREADS=3`, plus matching `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, and `OPENBLAS_NUM_THREADS`) via `docker-compose.yaml`. Without `OV_THREADS`, the code auto-sizes using cgroup-aware CPU detection (`sched_getaffinity`).
+**OpenVINO threading:** The `ffmpeg_hpe` rig uses `ffmpeg_hpe/.env` defaults (`OV_MODE=latency`, `OV_STREAMS=1`, `OV_THREADS=3`, plus matching `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, and `OPENBLAS_NUM_THREADS`) via `docker-compose.yaml`. The `ffmpeg_hpe_cpu` rig uses `ffmpeg_hpe_cpu/.env.cpu` defaults tuned for a 6-vCPU VM (`OV_THREADS=4`, `HPE_CPUS=4.0`, `STREAMER_CPUS=1.0`). Without `OV_THREADS`, the code auto-sizes using cgroup-aware CPU detection (`sched_getaffinity`).
 
 ### Standalone measurement tools
 ```bash
@@ -249,8 +255,8 @@ Requires a Conda environment — the devcontainer does **not** install
 dependencies automatically.
 
 ```bash
-conda create -n hpe python=3.8.10 -y
-conda activate hpe
+conda create -n hpe-perf python=3.9.13 -y
+conda activate hpe-perf
 conda install pytorch==2.4.1 torchvision==0.19.1 -c pytorch
 conda install --file requirements.txt
 bash models/AlphaPose/build_extensions.sh
