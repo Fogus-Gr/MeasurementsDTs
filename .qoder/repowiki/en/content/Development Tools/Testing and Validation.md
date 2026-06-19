@@ -19,6 +19,12 @@
 - [ffmpeg_hpe/run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
 - [ffmpeg_hpe/run_experiment_bcc.sh](file://ffmpeg_hpe/run_experiment_bcc.sh)
 - [ffmpeg_hpe/docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
+- [ffmpeg_hpe_cpu/run_experiment_cpu.sh](file://ffmpeg_hpe_cpu/run_experiment_cpu.sh)
+- [ffmpeg_hpe_cpu/validate_run.py](file://ffmpeg_hpe_cpu/validate_run.py)
+- [ffmpeg_hpe_cpu/docker-compose.cpu.yaml](file://ffmpeg_hpe_cpu/docker-compose.cpu.yaml)
+- [Dockerfile_cpu](file://Dockerfile_cpu)
+- [ffmpeg_hpe_cpu/plot_graph.py](file://ffmpeg_hpe_cpu/plot_graph.py)
+- [ffmpeg_hpe_cpu/plot_rx_bytes.py](file://ffmpeg_hpe_cpu/plot_rx_bytes.py)
 - [ffmpeg_hpe/bpftrace-tracer/README.md](file://ffmpeg_hpe/bpftrace-tracer/README.md)
 - [ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py)
 - [ffmpeg_hpe/Dockerfile.gpu_metrics](file://ffmpeg_hpe/Dockerfile.gpu_metrics)
@@ -27,13 +33,12 @@
 
 ## Update Summary
 **Changes Made**
-- Enhanced comprehensive validation framework documentation with multi-domain quality assurance checks
-- Documented advanced experiment orchestration capabilities and automated result validation system
-- Updated testing methodology to include FFmpeg HPE validation framework with container operation validation
-- Expanded architecture overview to include automated validation pipeline and multi-container orchestration
-- Added new validation components to project structure visualization with enhanced monitoring capabilities
-- Updated troubleshooting guide with validation-specific issues and BPF tracing considerations
-- Documented GPU metrics collection and BPF tracing integration for comprehensive quality assurance
+- Added comprehensive documentation for the new CPU-only testing platform with run_experiment_cpu.sh
+- Documented enhanced validation system with CPU-only validation capabilities
+- Updated experiment execution flows to cover both GPU and CPU-only platforms
+- Added new CPU-only Docker Compose configuration and Dockerfile
+- Enhanced validation system documentation with dual-platform support
+- Updated troubleshooting guide with CPU-only platform considerations
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -48,7 +53,7 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document describes the comprehensive testing and validation utilities for the Human Pose Estimation (HPE) framework. The testing ecosystem now includes multiple sophisticated testing methodologies with a focus on automated quality assurance and comprehensive validation:
+This document describes the comprehensive testing and validation utilities for the Human Pose Estimation (HPE) framework. The testing ecosystem now includes multiple sophisticated testing methodologies with a focus on automated quality assurance and comprehensive validation across both GPU and CPU-only platforms:
 
 - **Contact Sheet Smoke Testing**: Automated multi-method comparison with visual output and detailed reporting
 - **Coordinate Smoke Testing**: Regression validation for coordinate accuracy and bounds checking
@@ -57,11 +62,12 @@ This document describes the comprehensive testing and validation utilities for t
 - **Installation and Environment Validation**: Reproducible environment setup verification
 - **HTTP Stream Testing**: Local development server for IP-based input validation
 - **FFmpeg HPE Validation Framework**: Comprehensive quality assurance system with multi-domain validation checks
+- **CPU-Only Platform Testing**: Specialized testing infrastructure for CPU-only deployment scenarios
 
-The new FFmpeg HPE validation framework provides a sophisticated quality assurance system that validates HPE container operation, JSON output integrity, network monitoring accuracy, performance metrics consistency, and GPU utilization monitoring. This framework ensures reproducible and defensible results for research and production deployments through automated validation and comprehensive monitoring.
+The new CPU-only platform provides a comprehensive testing environment that mirrors GPU-based experiments while optimizing for CPU-only hardware configurations. This includes specialized orchestration scripts, validation systems, and Docker configurations designed specifically for CPU-only deployments.
 
 ## Project Structure
-The testing ecosystem has evolved to include dedicated testing directories with specialized functionality, including the new FFmpeg HPE validation framework with comprehensive monitoring capabilities:
+The testing ecosystem has evolved to include dedicated testing directories with specialized functionality, including the new CPU-only platform with comprehensive monitoring capabilities:
 
 ```mermaid
 graph TB
@@ -76,7 +82,7 @@ CSS["tests/contact_sheet_smoke/"]
 CTS["unit_tests/test_hpe_coordinate_smoke.py"]
 RT["tests/test_hpe_regressions.py"]
 end
-subgraph "FFmpeg HPE Validation Framework"
+subgraph "GPU Platform Validation"
 VR["ffmpeg_hpe/validate_run.py"]
 RE["ffmpeg_hpe/run_experiment.sh"]
 REB["ffmpeg_hpe/run_experiment_bcc.sh"]
@@ -84,6 +90,14 @@ DC["ffmpeg_hpe/docker-compose.yaml"]
 BT["ffmpeg_hpe/bpftrace-tracer/"]
 GM["ffmpeg_hpe/run_nvidia_dcgm.sh"]
 DF["ffmpeg_hpe/Dockerfile.gpu_metrics"]
+end
+subgraph "CPU-Only Platform"
+VRC["ffmpeg_hpe_cpu/validate_run.py"]
+REC["ffmpeg_hpe_cpu/run_experiment_cpu.sh"]
+DCC["ffmpeg_hpe_cpu/docker-compose.cpu.yaml"]
+DFC["Dockerfile_cpu"]
+PG["ffmpeg_hpe_cpu/plot_graph.py"]
+PRB["ffmpeg_hpe_cpu/plot_rx_bytes.py"]
 end
 subgraph "Application"
 MAIN["main.py"]
@@ -107,6 +121,11 @@ RE --> DC
 REB --> DC
 REB --> BT
 REB --> GM
+VRC --> REC
+VRC --> DCC
+REC --> DCC
+DCC --> BT
+DCC --> GM
 MAIN --> OVB
 MAIN --> MN
 OVB --> BASE
@@ -130,6 +149,12 @@ MN --> BASE
 - [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
 - [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
 - [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
+- [ffmpeg_hpe_cpu/run_experiment_cpu.sh:1-328](file://ffmpeg_hpe_cpu/run_experiment_cpu.sh#L1-L328)
+- [ffmpeg_hpe_cpu/validate_run.py:1-521](file://ffmpeg_hpe_cpu/validate_run.py#L1-L521)
+- [ffmpeg_hpe_cpu/docker-compose.cpu.yaml:1-152](file://ffmpeg_hpe_cpu/docker-compose.cpu.yaml#L1-L152)
+- [Dockerfile_cpu:1-100](file://Dockerfile_cpu#L1-L100)
+- [ffmpeg_hpe_cpu/plot_graph.py:1-62](file://ffmpeg_hpe_cpu/plot_graph.py#L1-L62)
+- [ffmpeg_hpe_cpu/plot_rx_bytes.py:1-33](file://ffmpeg_hpe_cpu/plot_rx_bytes.py#L1-L33)
 - [ffmpeg_hpe/bpftrace-tracer/README.md:1-71](file://ffmpeg_hpe/bpftrace-tracer/README.md#L1-L71)
 
 **Section sources**
@@ -150,10 +175,16 @@ MN --> BASE
 - [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
 - [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
 - [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
+- [ffmpeg_hpe_cpu/run_experiment_cpu.sh:1-328](file://ffmpeg_hpe_cpu/run_experiment_cpu.sh#L1-L328)
+- [ffmpeg_hpe_cpu/validate_run.py:1-521](file://ffmpeg_hpe_cpu/validate_run.py#L1-L521)
+- [ffmpeg_hpe_cpu/docker-compose.cpu.yaml:1-152](file://ffmpeg_hpe_cpu/docker-compose.cpu.yaml#L1-L152)
+- [Dockerfile_cpu:1-100](file://Dockerfile_cpu#L1-L100)
+- [ffmpeg_hpe_cpu/plot_graph.py:1-62](file://ffmpeg_hpe_cpu/plot_graph.py#L1-L62)
+- [ffmpeg_hpe_cpu/plot_rx_bytes.py:1-33](file://ffmpeg_hpe_cpu/plot_rx_bytes.py#L1-L33)
 - [ffmpeg_hpe/bpftrace-tracer/README.md:1-71](file://ffmpeg_hpe/bpftrace-tracer/README.md#L1-L71)
 
 ## Core Components
-The testing ecosystem now encompasses multiple specialized testing frameworks with enhanced validation capabilities:
+The testing ecosystem now encompasses multiple specialized testing frameworks with enhanced validation capabilities across both GPU and CPU-only platforms:
 
 ### Traditional Smoke Testing
 - **Smoke Test Script**: Executes representative runs for MoveNet, AlphaPose, and EfficientHRNet variants across image, directory, and video inputs. Respects device selection and handles missing AlphaPose models gracefully.
@@ -171,6 +202,13 @@ The testing ecosystem now encompasses multiple specialized testing frameworks wi
 - **Docker Compose Orchestration**: Multi-container setup for HPE processing, performance monitoring, BPF tracing, and GPU metrics collection with shared networking.
 - **BPF Tracing**: Kernel-level network traffic monitoring for accurate RX byte counting and port detection with automatic port discovery.
 - **GPU Metrics Collection**: Real-time GPU utilization and thermal monitoring using nvidia-smi with comprehensive metric tracking.
+
+### CPU-Only Platform Testing
+- **CPU-Only Experiment Runner**: Specialized orchestration script for CPU-only deployments that manages container startup, monitoring, and result collection without GPU dependencies.
+- **CPU-Only Validation System**: Enhanced validation framework that accommodates CPU-only configurations while maintaining comprehensive quality assurance.
+- **CPU-Only Docker Compose**: Optimized container orchestration for CPU-only hardware with reduced resource requirements and simplified dependencies.
+- **CPU-Optimized Dockerfile**: Specialized container configuration that excludes GPU dependencies while maintaining full HPE functionality.
+- **CPU Performance Visualization**: Plotting tools for CPU utilization and memory usage metrics specific to CPU-only deployments.
 
 ### Application Integration
 - **Simple Test**: Demonstrates synchronous webcam processing with OpenVINO, including camera availability checks, inference timing, and pose rendering.
@@ -194,31 +232,52 @@ The testing ecosystem now encompasses multiple specialized testing frameworks wi
 - [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
 - [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
 - [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
+- [ffmpeg_hpe_cpu/run_experiment_cpu.sh:1-328](file://ffmpeg_hpe_cpu/run_experiment_cpu.sh#L1-L328)
+- [ffmpeg_hpe_cpu/validate_run.py:1-521](file://ffmpeg_hpe_cpu/validate_run.py#L1-L521)
+- [ffmpeg_hpe_cpu/docker-compose.cpu.yaml:1-152](file://ffmpeg_hpe_cpu/docker-compose.cpu.yaml#L1-L152)
+- [Dockerfile_cpu:1-100](file://Dockerfile_cpu#L1-L100)
+- [ffmpeg_hpe_cpu/plot_graph.py:1-62](file://ffmpeg_hpe_cpu/plot_graph.py#L1-L62)
+- [ffmpeg_hpe_cpu/plot_rx_bytes.py:1-33](file://ffmpeg_hpe_cpu/plot_rx_bytes.py#L1-L33)
 - [ffmpeg_hpe/bpftrace-tracer/README.md:1-71](file://ffmpeg_hpe/bpftrace-tracer/README.md#L1-L71)
 
 ## Architecture Overview
-The testing architecture now includes multiple layers of validation, from basic smoke tests to comprehensive regression testing and the new FFmpeg HPE validation framework with automated quality assurance:
+The testing architecture now includes multiple layers of validation, from basic smoke tests to comprehensive regression testing and the new FFmpeg HPE validation framework with automated quality assurance across both GPU and CPU-only platforms:
 
 ```mermaid
 sequenceDiagram
 participant User as "User/Test Runner"
-participant VR as "validate_run.py"
+participant VRC as "validate_run.py (CPU)"
+participant VR as "validate_run.py (GPU)"
+participant REC as "run_experiment_cpu.sh"
 participant RE as "run_experiment.sh"
 participant REB as "run_experiment_bcc.sh"
+participant DCC as "docker-compose.cpu.yaml"
 participant DC as "docker-compose.yaml"
 participant BT as "BPF Tracer"
 participant GM as "GPU Metrics"
 participant PM as "Perf Monitor"
 participant Main as "main.py"
 participant Impl as "HPE Implementation"
-User->>RE : Run experiment
-RE->>DC : Start containers
+User->>REC : Run CPU experiment
+REC->>DCC : Start CPU containers
+DCC->>BT : Launch BPF tracer
+DCC->>PM : Launch perf monitor
+REC->>Main : Execute HPE processing
+Main->>Impl : Process video stream
+Impl-->>Main : Generate outputs
+REC->>VRC : Validate results
+VRC->>VRC : Check exit codes
+VRC->>VRC : Validate JSON outputs
+VRC->>VRC : Validate network RX
+VRC->>VRC : Validate performance
+VRC->>VRC : Skip GPU metrics (CPU-only)
+VRC-->>User : PASS/FAIL report
+User->>RE : Run GPU experiment
+RE->>DC : Start GPU containers
 DC->>BT : Launch BPF tracer
 DC->>GM : Launch GPU metrics
 DC->>PM : Launch perf monitor
 RE->>Main : Execute HPE processing
-Main->>Impl : Process video stream
-Impl-->>Main : Generate outputs
 RE->>VR : Validate results
 VR->>VR : Check exit codes
 VR->>VR : Validate JSON outputs
@@ -229,14 +288,95 @@ VR-->>User : PASS/FAIL report
 ```
 
 **Diagram sources**
+- [ffmpeg_hpe_cpu/validate_run.py:467-521](file://ffmpeg_hpe_cpu/validate_run.py#L467-L521)
 - [ffmpeg_hpe/validate_run.py:467-521](file://ffmpeg_hpe/validate_run.py#L467-L521)
+- [ffmpeg_hpe_cpu/run_experiment_cpu.sh:1-328](file://ffmpeg_hpe_cpu/run_experiment_cpu.sh#L1-L328)
 - [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
 - [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
+- [ffmpeg_hpe_cpu/docker-compose.cpu.yaml:1-152](file://ffmpeg_hpe_cpu/docker-compose.cpu.yaml#L1-L152)
 - [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
 - [ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py:1-120](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py#L1-L120)
 - [ffmpeg_hpe/run_nvidia_dcgm.sh:1-86](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L86)
 
 ## Detailed Component Analysis
+
+### CPU-Only Platform Testing Framework
+**Purpose**: Comprehensive testing infrastructure specifically designed for CPU-only deployment scenarios with optimized resource utilization and simplified dependencies.
+
+**Key Features**:
+- **CPU-Only Experiment Orchestration**: Specialized script that manages container startup, monitoring, and result collection without GPU dependencies
+- **Dual-Platform Validation**: Enhanced validation system that accommodates both GPU and CPU configurations seamlessly
+- **Optimized Resource Management**: Reduced resource requirements and simplified container dependencies for CPU-only hardware
+- **Performance Monitoring**: Comprehensive CPU utilization and memory monitoring with process-level granularity
+- **Network Traffic Analysis**: Accurate RX byte counting and port detection without GPU metrics
+
+**CPU-Only Experiment Runner**:
+- **Container Startup Timing**: Measures and records container instantiation times for CPU-only deployments
+- **Health Check Integration**: Monitors container health and responds to failures appropriately
+- **Data Collection Automation**: Automatically collects performance metrics, network traces, and HPE outputs
+- **Resource Management**: Configures CPU limits, memory reservations, and optimized threading for CPU-only hardware
+- **Diagnostic Logging**: Captures comprehensive diagnostic information for troubleshooting CPU-only deployments
+
+**CPU-Only Docker Compose Configuration**:
+- **Service Optimization**: Removes GPU-specific services and dependencies while maintaining full functionality
+- **Resource Allocation**: Optimized CPU and memory limits for CPU-only hardware constraints
+- **Environment Variables**: Specialized environment variables for CPU optimization and OpenVINO tuning
+- **Network Configuration**: Simplified networking for CPU-only deployments with reduced complexity
+
+**Section sources**
+- [ffmpeg_hpe_cpu/run_experiment_cpu.sh:1-328](file://ffmpeg_hpe_cpu/run_experiment_cpu.sh#L1-L328)
+- [ffmpeg_hpe_cpu/docker-compose.cpu.yaml:1-152](file://ffmpeg_hpe_cpu/docker-compose.cpu.yaml#L1-L152)
+- [Dockerfile_cpu:1-100](file://Dockerfile_cpu#L1-L100)
+
+### Enhanced Validation System
+**Purpose**: Comprehensive quality assurance system that validates HPE container operation, output integrity, and performance metrics across both GPU and CPU-only platforms with automated result validation.
+
+**Key Features**:
+- **Multi-Domain Validation**: Checks HPE container exit codes, JSON output integrity, network monitoring accuracy, performance metrics, and GPU utilization
+- **Dual-Platform Support**: Validates both GPU and CPU configurations with platform-appropriate checks
+- **Automated Reporting**: Generates structured validation reports with PASS/FAIL status and detailed metrics
+- **Threshold Configuration**: Configurable tolerances for network byte matching and performance validation
+- **Comprehensive Coverage**: Validates all aspects of HPE processing from container startup to output generation
+
+**Validation Domains**:
+- **HPE Container Validation**: Ensures container exits with code 0 and logs contain expected processing information
+- **JSON Output Validation**: Verifies presence of exactly one JSON CSV, parseable content, sequential frame numbering, and frame count consistency
+- **Network Monitoring Validation**: Compares BCC RX byte counts with FFmpeg bytes-read within configurable tolerance
+- **Performance Metrics Validation**: Validates CPU utilization, memory usage, and Docker memory consistency
+- **GPU Metrics Validation**: Ensures GPU metrics collection and proper utilization reporting (skipped on CPU-only platforms)
+
+**Execution Flow**:
+```mermaid
+flowchart TD
+Start(["Start Validation"]) --> ParseArgs["Parse Arguments"]
+ParseArgs --> FindDir["Find Latest Results Directory"]
+FindDir --> ValidateExit["Validate HPE Exit Code"]
+ValidateExit --> ParseLog["Parse HPE Log"]
+ParseLog --> ValidateJSON["Validate JSON Output"]
+ValidateJSON --> ValidateTX["Validate TX Output"]
+ValidateTX --> ValidateBCC["Validate BCC RX"]
+ValidateBCC --> ValidatePerf["Validate Performance"]
+ValidatePerf --> CheckPlatform["Check Platform Type"]
+CheckPlatform --> IsGPU{"GPU Platform?"}
+IsGPU --> |Yes| ValidateGPU["Validate GPU Metrics"]
+IsGPU --> |No| SkipGPU["Skip GPU Metrics"]
+ValidateGPU --> GenerateReport["Generate Validation Report"]
+SkipGPU --> GenerateReport
+GenerateReport --> End(["Validation Complete"])
+```
+
+**Diagram sources**
+- [ffmpeg_hpe_cpu/validate_run.py:467-521](file://ffmpeg_hpe_cpu/validate_run.py#L467-L521)
+
+**Expected Outcomes**:
+- PASS status when all validation checks succeed within configured tolerances
+- FAIL status with detailed explanations when validation fails
+- Structured validation_report.json and validation_report.txt files
+- Metrics dictionary containing detailed performance and validation metrics
+- Platform-appropriate validation results (GPU metrics included/excluded as applicable)
+
+**Section sources**
+- [ffmpeg_hpe_cpu/validate_run.py:1-521](file://ffmpeg_hpe_cpu/validate_run.py#L1-L521)
 
 ### FFmpeg HPE Validation Framework
 **Purpose**: Comprehensive quality assurance system that validates HPE container operation, output integrity, and performance metrics across multiple domains with automated result validation.
@@ -292,20 +432,33 @@ GenerateReport --> End(["Validation Complete"])
 - **Resource Management**: Configures CPU limits, memory reservations, and GPU device allocation
 - **Diagnostic Logging**: Captures comprehensive diagnostic information for troubleshooting
 
-**Run Experiment Script**:
+**CPU-Only Experiment Script**:
+- **CPU-Only Orchestration**: Optimized for CPU-only deployments with simplified container dependencies
+- **Performance Monitoring**: Specialized monitoring for CPU utilization and memory usage
+- **Network Traffic Analysis**: Accurate RX byte counting and port detection without GPU metrics
+- **Resource Optimization**: Configures CPU limits, memory reservations, and OpenVINO threading for optimal CPU performance
+
+**GPU Experiment Scripts**:
 - **Standard Experiment**: Runs experiments with perf_monitor, bcc-tracer, and gpu-metrics containers
 - **BCC Experiment**: Enhanced version with BPF tracing and detailed port detection
 - **Automatic Cleanup**: Ensures proper container cleanup and resource deallocation
 - **Result Organization**: Creates structured results directories with organized output files
 
 **Section sources**
+- [ffmpeg_hpe_cpu/run_experiment_cpu.sh:1-328](file://ffmpeg_hpe_cpu/run_experiment_cpu.sh#L1-L328)
 - [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
 - [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
 
 ### Docker Compose Orchestration
 **Purpose**: Multi-container setup for coordinated HPE processing with monitoring and validation capabilities.
 
-**Service Configuration**:
+**CPU-Only Configuration**:
+- **Service Optimization**: Removes GPU-specific services and dependencies while maintaining full functionality
+- **Resource Allocation**: Optimized CPU and memory limits for CPU-only hardware constraints
+- **Environment Variables**: Specialized environment variables for CPU optimization and OpenVINO tuning
+- **Network Configuration**: Simplified networking for CPU-only deployments with reduced complexity
+
+**GPU Platform Configuration**:
 - **HPE Service**: Main HPE processing container with GPU support and OpenVINO optimization
 - **Streaming Server**: RTSP/H.264 streaming server with health checks and resource limits
 - **Performance Monitor**: Containerized performance monitoring with process-level metrics
@@ -318,6 +471,7 @@ GenerateReport --> End(["Validation Complete"])
 - **Resource Isolation**: Separate CPU and memory limits for each service
 
 **Section sources**
+- [ffmpeg_hpe_cpu/docker-compose.cpu.yaml:1-152](file://ffmpeg_hpe_cpu/docker-compose.cpu.yaml#L1-L152)
 - [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
 
 ### BPF Tracing and Network Monitoring
@@ -357,6 +511,23 @@ GenerateReport --> End(["Validation Complete"])
 **Section sources**
 - [ffmpeg_hpe/run_nvidia_dcgm.sh:1-86](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L86)
 - [ffmpeg_hpe/Dockerfile.gpu_metrics](file://ffmpeg_hpe/Dockerfile.gpu_metrics)
+
+### CPU Performance Visualization
+**Purpose**: Visualization tools for CPU utilization and memory usage metrics specific to CPU-only deployments.
+
+**Key Features**:
+- **CPU/Memory Plotting**: Generates time-series plots of CPU utilization and memory usage
+- **Timestamp Handling**: Automatic detection and conversion of timestamp formats
+- **Multiple CSV Formats**: Supports both legacy and modern CSV column formats
+- **Interactive Display**: Optional interactive plot display when X11 is available
+
+**Plotting Capabilities**:
+- **CPU Usage Over Time**: Line plot showing CPU utilization percentage over time
+- **Memory Usage Over Time**: Line plot showing memory usage in MB over time
+- **Customizable Output**: PNG file output with customizable figure size and styling
+
+**Section sources**
+- [ffmpeg_hpe_cpu/plot_graph.py:1-62](file://ffmpeg_hpe_cpu/plot_graph.py#L1-L62)
 
 ### Contact Sheet Smoke Testing Framework
 **Purpose**: Comprehensive multi-method comparison testing with visual output and detailed reporting.
@@ -544,7 +715,7 @@ ValidateBoxSize --> Success["Test Pass"]
 - [movenet_hpe.py:1-111](file://movenet_hpe.py#L1-L111)
 
 ## Dependency Analysis
-The enhanced testing ecosystem creates a layered dependency structure with specialized testing components, including the new FFmpeg HPE validation framework with comprehensive monitoring capabilities:
+The enhanced testing ecosystem creates a layered dependency structure with specialized testing components, including the new CPU-only platform with comprehensive monitoring capabilities:
 
 ```mermaid
 graph LR
@@ -559,7 +730,7 @@ CSS["contact_sheet_smoke.py"] --> MAIN
 CTS["coordinate_smoke_test.py"] --> MAIN
 RT["test_hpe_regressions.py"] --> MAIN
 end
-subgraph "FFmpeg HPE Validation"
+subgraph "GPU Platform Validation"
 VR["validate_run.py"] --> RE["run_experiment.sh"]
 VR --> REB["run_experiment_bcc.sh"]
 VR --> DC["docker-compose.yaml"]
@@ -569,6 +740,13 @@ RE --> DC
 REB --> DC
 DC --> BT
 DC --> GM
+end
+subgraph "CPU-Only Platform"
+VRC["validate_run.py (CPU)"] --> REC["run_experiment_cpu.sh"]
+VRC --> DCC["docker-compose.cpu.yaml"]
+REC --> DCC
+DCC --> BT
+DCC --> GM
 end
 MAIN --> OVB
 MAIN --> MN["movenet_hpe.py"]
@@ -592,6 +770,9 @@ MN --> BASE
 - [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
 - [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
 - [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
+- [ffmpeg_hpe_cpu/validate_run.py:1-521](file://ffmpeg_hpe_cpu/validate_run.py#L1-L521)
+- [ffmpeg_hpe_cpu/run_experiment_cpu.sh:1-328](file://ffmpeg_hpe_cpu/run_experiment_cpu.sh#L1-L328)
+- [ffmpeg_hpe_cpu/docker-compose.cpu.yaml:1-152](file://ffmpeg_hpe_cpu/docker-compose.cpu.yaml#L1-L152)
 - [ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py:1-120](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py#L1-L120)
 - [ffmpeg_hpe/run_nvidia_dcgm.sh:1-86](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L86)
 
@@ -610,6 +791,9 @@ MN --> BASE
 - [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
 - [ffmpeg_hpe/run_experiment_bcc.sh:1-334](file://ffmpeg_hpe/run_experiment_bcc.sh#L1-L334)
 - [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
+- [ffmpeg_hpe_cpu/validate_run.py:1-521](file://ffmpeg_hpe_cpu/validate_run.py#L1-L521)
+- [ffmpeg_hpe_cpu/run_experiment_cpu.sh:1-328](file://ffmpeg_hpe_cpu/run_experiment_cpu.sh#L1-L328)
+- [ffmpeg_hpe_cpu/docker-compose.cpu.yaml:1-152](file://ffmpeg_hpe_cpu/docker-compose.cpu.yaml#L1-L152)
 - [ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py:1-120](file://ffmpeg_hpe/bpftrace-tracer/bcc_rx_bytes.py#L1-L120)
 - [ffmpeg_hpe/run_nvidia_dcgm.sh:1-86](file://ffmpeg_hpe/run_nvidia_dcgm.sh#L1-L86)
 
@@ -619,6 +803,7 @@ MN --> BASE
 - **Coordinate Testing Optimization**: Uses minimal processing with focused validation metrics
 - **Regression Test Efficiency**: Source code analysis is lightweight compared to runtime testing
 - **Validation Framework Overhead**: Comprehensive validation adds minimal overhead to experiment execution
+- **CPU-Only Optimization**: CPU-only platform reduces resource requirements while maintaining validation accuracy
 - **Network Monitoring Impact**: BPF tracing introduces negligible CPU overhead during experiments
 - **GPU Metrics Overhead**: nvidia-smi monitoring runs at configurable intervals to minimize impact
 - **Timeout Management**: Configurable timeouts prevent hanging during testing
@@ -629,7 +814,8 @@ MN --> BASE
 - **Contact Sheet Testing**: Supports both CPU and GPU devices with configurable timeout per model
 - **Coordinate Testing**: Currently configured for CPU-only processing
 - **Regression Testing**: No device requirements as it analyzes source code
-- **Validation Framework**: Supports both CPU and GPU configurations depending on HPE method
+- **CPU-Only Platform**: Optimized for CPU-only deployments with reduced resource requirements
+- **GPU Platform**: Supports both CPU and GPU configurations depending on HPE method
 - **Network Monitoring**: Requires root privileges and BPF kernel support for accurate packet filtering
 
 ## Troubleshooting Guide
@@ -654,6 +840,14 @@ MN --> BASE
 - **Import Path Issues**: Ensure all modules are importable from the repository root
 - **String Pattern Changes**: Tests rely on specific string patterns in source code
 - **Environment Issues**: Regression tests require access to all source files
+
+### CPU-Only Platform Issues
+- **Missing CPU Environment**: Ensure CPU-only environment variables are properly configured
+- **Container Startup Failures**: Verify CPU-only Docker Compose configuration and resource limits
+- **Performance Monitoring Issues**: Check CPU-only monitoring container permissions and access
+- **Network Traffic Analysis**: Ensure BPF tracer has proper network access and kernel support
+- **Resource Allocation**: Verify CPU and memory limits are appropriate for CPU-only hardware
+- **Health Check Failures**: Investigate CPU-only container startup issues and dependency problems
 
 ### FFmpeg HPE Validation Framework Issues
 - **Results Directory Not Found**: Ensure the validation script points to a valid results directory
@@ -690,24 +884,29 @@ MN --> BASE
 - [openvino_base_hpe.py:87-89](file://openvino_base_hpe.py#L87-L89)
 - [movenet_hpe.py:28-30](file://movenet_hpe.py#L28-L30)
 - [main.py:29-45](file://main.py#L29-L45)
+- [ffmpeg_hpe_cpu/validate_run.py:480-483](file://ffmpeg_hpe_cpu/validate_run.py#L480-L483)
+- [ffmpeg_hpe_cpu/run_experiment_cpu.sh:28-46](file://ffmpeg_hpe_cpu/run_experiment_cpu.sh#L28-L46)
 - [ffmpeg_hpe/validate_run.py:480-483](file://ffmpeg_hpe/validate_run.py#L480-L483)
 - [ffmpeg_hpe/run_experiment.sh:28-44](file://ffmpeg_hpe/run_experiment.sh#L28-L44)
 - [ffmpeg_hpe/run_experiment_bcc.sh:31-54](file://ffmpeg_hpe/run_experiment_bcc.sh#L31-L54)
 
 ## Conclusion
-The enhanced testing and validation utilities provide a comprehensive framework for continuous validation of the Human Pose Estimation framework. The addition of the FFmpeg HPE validation framework creates a multi-layered validation system that ensures reproducible and defensible results through automated quality assurance:
+The enhanced testing and validation utilities provide a comprehensive framework for continuous validation of the Human Pose Estimation framework across both GPU and CPU-only platforms. The addition of the CPU-only platform creates a multi-layered validation system that ensures reproducible and defensible results through automated quality assurance:
 
 - **Contact Sheet Testing**: Provides visual comparison across all HPE methods for quick assessment
 - **Coordinate Testing**: Ensures algorithmic correctness and prevents coordinate projection regressions  
 - **Regression Testing**: Maintains code quality and architectural integrity
 - **Traditional Testing**: Validates basic functionality and environment setup
 - **FFmpeg HPE Validation Framework**: Comprehensive quality assurance across container operation, output integrity, network monitoring, and performance metrics
+- **CPU-Only Platform Testing**: Specialized testing infrastructure for CPU-only deployment scenarios with optimized resource utilization
 
-The new validation framework addresses the need for automated result validation in research-grade experiments, ensuring that each run passes strict quality checks before results are considered valid. This includes validation of HPE container exit codes, JSON output integrity, network RX byte accuracy, performance metrics consistency, and GPU utilization monitoring.
+The new CPU-only platform addresses the growing need for testing HPE deployments on CPU-only hardware, providing a streamlined testing environment that maintains validation accuracy while reducing resource requirements. This includes specialized orchestration scripts, validation systems, and Docker configurations designed specifically for CPU-only deployments.
 
-The framework leverages Docker Compose orchestration to create isolated, reproducible testing environments with comprehensive monitoring capabilities. The validation system automatically collects and analyzes performance metrics, network traffic data, and GPU utilization statistics to provide detailed insights into system behavior.
+The enhanced validation framework supports both GPU and CPU configurations seamlessly, automatically adapting validation checks based on the platform type. The CPU-only validation system includes platform-appropriate checks such as skipping GPU metrics while maintaining comprehensive validation of CPU performance, network traffic, and output integrity.
 
-Together with the existing smoke test, installation validation, and HTTP stream testing, this comprehensive testing ecosystem ensures robust validation of the HPE framework across multiple dimensions and use cases, supporting both development and research applications with automated quality assurance and comprehensive result validation.
+The framework leverages Docker Compose orchestration to create isolated, reproducible testing environments with comprehensive monitoring capabilities. The validation system automatically collects and analyzes performance metrics, network traffic data, and output quality statistics to provide detailed insights into system behavior across different hardware configurations.
+
+Together with the existing smoke test, installation validation, and HTTP stream testing, this comprehensive testing ecosystem ensures robust validation of the HPE framework across multiple dimensions and use cases, supporting both development and research applications with automated quality assurance and comprehensive result validation across GPU and CPU-only platforms.
 
 ## Appendices
 
@@ -830,16 +1029,71 @@ python main.py --method movenet --input http://localhost:5000/video_feed
 - [dev_tools/stream_video_server.py:206-228](file://dev_tools/stream_video_server.py#L206-L228)
 - [README.md:116-125](file://README.md#L116-L125)
 
-### Running FFmpeg HPE Validation
-**Purpose**: Validate experiment results and generate comprehensive quality reports.
+### Running CPU-Only FFmpeg HPE Validation
+**Purpose**: Validate CPU-only experiment results and generate comprehensive quality reports.
 
 **Usage**:
 ```bash
-# Validate latest results directory
+# Validate latest CPU-only results directory
+python ffmpeg_hpe_cpu/validate_run.py
+
+# Validate specific CPU-only results directory
+python ffmpeg_hpe_cpu/validate_run.py results_movenet_6cores_CPU_vga_01_01.mp4_20240101_120000
+
+# Configure validation thresholds
+python ffmpeg_hpe_cpu/validate_run.py --rx-tolerance-percent 1.5 --min-avg-cpu-percent 0.5 --min-memory-mb 25.0
+```
+
+**Validation Domains**:
+- **HPE Container Exit Codes**: Ensures container exits with code 0
+- **JSON Output Integrity**: Validates presence and parseability of JSON CSV files
+- **Network Monitoring Accuracy**: Compares BCC RX bytes with FFmpeg bytes-read within tolerance
+- **Performance Metrics**: Validates CPU utilization, memory usage, and Docker memory consistency
+- **GPU Metrics**: Skipped on CPU-only platforms (expected behavior)
+
+**Output**: validation_report.json and validation_report.txt files with PASS/FAIL status and detailed metrics.
+
+**Section sources**
+- [ffmpeg_hpe_cpu/validate_run.py:13-19](file://ffmpeg_hpe_cpu/validate_run.py#L13-L19)
+- [ffmpeg_hpe_cpu/validate_run.py:467-521](file://ffmpeg_hpe_cpu/validate_run.py#L467-L521)
+
+### Running CPU-Only FFmpeg HPE Experiments
+**Purpose**: Execute comprehensive CPU-only HPE experiments with monitoring and validation.
+
+**Usage**:
+```bash
+# CPU-only experiment with perf_monitor and bcc-tracer
+./ffmpeg_hpe_cpu/run_experiment_cpu.sh movenet
+
+# CPU-only experiment with custom arguments
+./ffmpeg_hpe_cpu/run_experiment_cpu.sh openpose --device CPU --max_frames 500
+
+# CPU-only experiment with custom timeout
+./ffmpeg_hpe_cpu/run_experiment_cpu.sh hrnet --timeout 60
+```
+
+**Features**:
+- **CPU-Only Orchestration**: Optimized for CPU-only deployments with simplified container dependencies
+- **Performance Monitoring**: Specialized monitoring for CPU utilization and memory usage
+- **Network Traffic Analysis**: Accurate RX byte counting and port detection without GPU metrics
+- **Resource Optimization**: Configures CPU limits, memory reservations, and OpenVINO threading for optimal CPU performance
+- **Diagnostic Logging**: Captures comprehensive diagnostic information for troubleshooting CPU-only deployments
+
+**Output**: Structured results directory with organized CSV files, logs, and validation reports.
+
+**Section sources**
+- [ffmpeg_hpe_cpu/run_experiment_cpu.sh:1-328](file://ffmpeg_hpe_cpu/run_experiment_cpu.sh#L1-L328)
+
+### Running GPU Platform FFmpeg HPE Validation
+**Purpose**: Validate GPU experiment results and generate comprehensive quality reports.
+
+**Usage**:
+```bash
+# Validate latest GPU results directory
 python ffmpeg_hpe/validate_run.py
 
-# Validate specific results directory
-python ffmpeg_hpe/validate_run.py results_movenet_CPU_20240101_120000
+# Validate specific GPU results directory
+python ffmpeg_hpe/validate_run.py results_movenet_GPU_20240101_120000
 
 # Configure validation thresholds
 python ffmpeg_hpe/validate_run.py --rx-tolerance-percent 1.5 --min-avg-cpu-percent 0.5 --min-memory-mb 25.0
@@ -850,7 +1104,7 @@ python ffmpeg_hpe/validate_run.py --rx-tolerance-percent 1.5 --min-avg-cpu-perce
 - **JSON Output Integrity**: Validates presence and parseability of JSON CSV files
 - **Network Monitoring Accuracy**: Compares BCC RX bytes with FFmpeg bytes-read within tolerance
 - **Performance Metrics**: Validates CPU utilization, memory usage, and Docker memory consistency
-- **GPU Metrics**: Ensures GPU utilization and thermal monitoring
+- **GPU Metrics**: Validates GPU utilization and thermal monitoring
 
 **Output**: validation_report.json and validation_report.txt files with PASS/FAIL status and detailed metrics.
 
@@ -858,7 +1112,7 @@ python ffmpeg_hpe/validate_run.py --rx-tolerance-percent 1.5 --min-avg-cpu-perce
 - [ffmpeg_hpe/validate_run.py:13-19](file://ffmpeg_hpe/validate_run.py#L13-L19)
 - [ffmpeg_hpe/validate_run.py:467-521](file://ffmpeg_hpe/validate_run.py#L467-L521)
 
-### Running FFmpeg HPE Experiments
+### Running GPU Platform FFmpeg HPE Experiments
 **Purpose**: Execute comprehensive HPE experiments with monitoring and validation.
 
 **Usage**:
@@ -889,29 +1143,69 @@ python ffmpeg_hpe/validate_run.py --rx-tolerance-percent 1.5 --min-avg-cpu-perce
 ### Docker Compose Configuration
 **Purpose**: Multi-container orchestration for HPE processing with monitoring capabilities.
 
-**Usage**:
+**CPU-Only Configuration**:
 ```bash
-# Start all services
+# Start all CPU-only services
+docker compose -f ffmpeg_hpe_cpu/docker-compose.cpu.yaml up -d
+
+# Start specific CPU-only services
+docker compose -f ffmpeg_hpe_cpu/docker-compose.cpu.yaml up -d hpe perf_monitor bcc-tracer
+
+# View CPU-only service status
+docker compose -f ffmpeg_hpe_cpu/docker-compose.cpu.yaml ps
+
+# View CPU-only service logs
+docker compose -f ffmpeg_hpe_cpu/docker-compose.cpu.yaml logs -f hpe
+```
+
+**GPU Platform Configuration**:
+```bash
+# Start all GPU services
 docker compose -f ffmpeg_hpe/docker-compose.yaml up -d
 
-# Start specific services
-docker compose -f ffmpeg_hpe/docker-compose.yaml up -d hpe perf_monitor bcc-tracer
+# Start specific GPU services
+docker compose -f ffmpeg_hpe/docker-compose.yaml up -d hpe perf_monitor bcc-tracer gpu-metrics
 
-# View service status
+# View GPU service status
 docker compose -f ffmpeg_hpe/docker-compose.yaml ps
 
-# View service logs
+# View GPU service logs
 docker compose -f ffmpeg_hpe/docker-compose.yaml logs -f hpe
 ```
 
 **Services**:
 - **h264-streaming-server**: RTSP/H.264 streaming server with health checks
-- **hpe**: Main HPE processing container with GPU support
+- **hpe**: Main HPE processing container with CPU optimization
 - **perf_monitor**: Containerized performance monitoring
 - **bcc-tracer**: Kernel-level network traffic monitoring
-- **gpu-metrics**: Real-time GPU utilization monitoring
+- **gpu-metrics**: Real-time GPU utilization monitoring (GPU platform only)
 
 **Networking**: Services communicate through the streaming-network bridge network with proper resource isolation.
 
 **Section sources**
+- [ffmpeg_hpe_cpu/docker-compose.cpu.yaml:1-152](file://ffmpeg_hpe_cpu/docker-compose.cpu.yaml#L1-L152)
 - [ffmpeg_hpe/docker-compose.yaml:1-206](file://ffmpeg_hpe/docker-compose.yaml#L1-L206)
+
+### CPU Performance Visualization
+**Purpose**: Visualize CPU utilization and memory usage metrics from CPU-only experiments.
+
+**Usage**:
+```bash
+# Plot CPU and memory metrics from perf_metrics.csv
+python ffmpeg_hpe_cpu/plot_graph.py results_movenet_6cores_CPU_vga_01_01.mp4_20240101_120000/perf/perf_metrics.csv
+
+# Plot RX bytes from BCC tracer
+python ffmpeg_hpe_cpu/plot_rx_bytes.py results_movenet_6cores_CPU_vga_01_01.mp4_20240101_120000/traces/bcc/video_rx.csv
+```
+
+**Features**:
+- **CPU/Memory Plotting**: Generates time-series plots of CPU utilization and memory usage
+- **Timestamp Handling**: Automatic detection and conversion of timestamp formats
+- **Multiple CSV Formats**: Supports both legacy and modern CSV column formats
+- **Interactive Display**: Optional interactive plot display when X11 is available
+
+**Output**: PNG files with CPU and memory usage plots, RX byte plots, and customizable styling.
+
+**Section sources**
+- [ffmpeg_hpe_cpu/plot_graph.py:1-62](file://ffmpeg_hpe_cpu/plot_graph.py#L1-L62)
+- [ffmpeg_hpe_cpu/plot_rx_bytes.py:1-33](file://ffmpeg_hpe_cpu/plot_rx_bytes.py#L1-L33)

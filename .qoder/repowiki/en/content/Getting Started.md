@@ -17,16 +17,22 @@
 - [build_ffmpeg_cuda.sh](file://build_ffmpeg_cuda.sh)
 - [check_stream_compat.sh](file://check_stream_compat.sh)
 - [ffmpeg_hpe/docker-compose.yaml](file://ffmpeg_hpe/docker-compose.yaml)
+- [Dockerfile_cpu](file://Dockerfile_cpu)
+- [ffmpeg_hpe_cpu/docker-compose.cpu.yaml](file://ffmpeg_hpe_cpu/docker-compose.cpu.yaml)
+- [ffmpeg_hpe_cpu/run_experiment_cpu.sh](file://ffmpeg_hpe_cpu/run_experiment_cpu.sh)
+- [ffmpeg_hpe_cpu/.env.cpu](file://ffmpeg_hpe_cpu/.env.cpu)
+- [docs/perf-tuning-base-diff-report.md](file://docs/perf-tuning-base-diff-report.md)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Added comprehensive ONBOARDING.md guidance with step-by-step setup instructions
-- Enhanced environment setup documentation with detailed prerequisites and requirements
-- Expanded model download instructions with specific file paths and verification steps
-- Added Docker-based experiment pipeline documentation with monitoring capabilities
-- Included troubleshooting guides for common setup and runtime issues
-- Updated performance optimization documentation with CPU tuning guidelines
+- Updated Python version requirement to 3.9.13 for perf-tuning-base branch
+- Added comprehensive CPU-only platform configuration with Dockerfile_cpu
+- Enhanced video source configuration guidance with detailed .env management
+- Added unified CPU/GPU benchmarking platform documentation
+- Updated OpenVINO CPU tuning documentation with environment variables
+- Expanded HTTP stream support with automatic video property detection
+- Added CPU-only experiment rig with dedicated run script and compose file
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -43,12 +49,12 @@
 12. [Conclusion](#conclusion)
 
 ## Introduction
-This comprehensive guide provides complete setup instructions for the Human Pose Estimation framework, incorporating the new ONBOARDING.md documentation. The framework supports multiple state-of-the-art methods including AlphaPose, MoveNet, OpenPose, HigherHRNet, and EfficientHRNet variants. It offers both local execution and Docker-based benchmarking capabilities with comprehensive performance monitoring.
+This comprehensive guide provides complete setup instructions for the Human Pose Estimation framework, incorporating the new perf-tuning-base branch with Python 3.9.13 requirements and CPU-only platform configuration. The framework supports multiple state-of-the-art methods including AlphaPose, MoveNet, OpenPose, HigherHRNet, and EfficientHRNet variants. It offers both local execution and Docker-based benchmarking capabilities with comprehensive performance monitoring, now unified across CPU and GPU platforms.
 
-**Updated** Enhanced with detailed onboarding procedures from the comprehensive ONBOARDING.md guide, providing step-by-step instructions for environment setup, model configuration, and experiment execution.
+**Updated** Enhanced with detailed onboarding procedures from the comprehensive ONBOARDING.md guide, providing step-by-step instructions for environment setup, model configuration, and experiment execution on both CPU-only and GPU-enabled platforms.
 
 ## Project Structure
-The repository provides a complete HPE benchmarking system with modular components:
+The repository provides a complete HPE benchmarking system with modular components and unified CPU/GPU platform support:
 
 ```mermaid
 graph TB
@@ -59,9 +65,11 @@ B --> E["AlphaPoseHPE<br/>alphapose_hpe.py"]
 D --> F["OpenVINO models<br/>models/OpenVINO/pretrained_models"]
 E --> G["AlphaPose models<br/>models/AlphaPose/pretrained_models"]
 H["Experiment Pipeline<br/>ffmpeg_hpe/"] --> I["Docker Compose<br/>Multi-service orchestration"]
-J["Monitoring Tools"] --> K["GPU Metrics<br/>nvidia-smi polling"]
-J --> L["CPU Monitoring<br/>bpftrace/perf"]
-J --> M["Network Tracing<br/>BCC/BPF"]
+J["CPU-Only Platform<br/>ffmpeg_hpe_cpu/"] --> K["Dockerfile_cpu<br/>CPU-only HPE container"]
+L["Monitoring Tools"] --> M["GPU Metrics<br/>nvidia-smi polling"]
+L --> N["CPU Monitoring<br/>bpftrace/perf"]
+L --> O["Network Tracing<br/>BCC/BPF"]
+P["Unified Platform<br/>Both CPU/GPU"] --> Q["HTTP Stream Support<br/>Automatic video property detection"]
 ```
 
 **Diagram sources**
@@ -70,21 +78,23 @@ J --> M["Network Tracing<br/>BCC/BPF"]
 - [movenet_hpe.py:12-111](file://movenet_hpe.py#L12-L111)
 - [openvino_base_hpe.py:55-395](file://openvino_base_hpe.py#L55-L395)
 - [alphapose_hpe.py:33-334](file://alphapose_hpe.py#L33-L334)
+- [Dockerfile_cpu:1-100](file://Dockerfile_cpu#L1-L100)
+- [ffmpeg_hpe_cpu/docker-compose.cpu.yaml:1-152](file://ffmpeg_hpe_cpu/docker-compose.cpu.yaml#L1-L152)
 
 **Section sources**
 - [README.md:63-231](file://README.md#L63-L231)
 - [ONBOARDING.md:63-142](file://ONBOARDING.md#L63-L142)
 
 ## Core Components
-The framework consists of several key components working together:
+The framework consists of several key components working together with unified CPU/GPU support:
 
-- **CLI Entry Point**: Parses arguments, selects method, loads model, and manages processing loops
-- **BaseHPE**: Common logic for input handling, preprocessing, inference timing, and output generation
-- **Method-Specific Classes**: Specialized implementations for each HPE algorithm
-- **Experiment Pipeline**: Docker-based benchmarking with comprehensive monitoring
-- **Monitoring Stack**: CPU, GPU, and network performance tracking
+- **CLI Entry Point**: Parses arguments, selects method, loads model, and manages processing loops with timeout and frame limiting
+- **BaseHPE**: Common logic for input handling, preprocessing, inference timing, and output generation with HTTP stream support
+- **Method-Specific Classes**: Specialized implementations for each HPE algorithm with GPU acceleration support
+- **Experiment Pipeline**: Docker-based benchmarking with comprehensive monitoring for both CPU-only and GPU platforms
+- **Monitoring Stack**: CPU, GPU, and network performance tracking with unified architecture
 
-Key capabilities include automatic video property detection, HTTP stream support, JSON/COCO CSV export, and optional visualization output.
+Key capabilities include automatic video property detection, HTTP stream support, JSON/COCO CSV export, optional visualization output, and configurable timeout/frame limiting for controlled benchmarking.
 
 **Section sources**
 - [main.py:51-200](file://main.py#L51-L200)
@@ -92,7 +102,7 @@ Key capabilities include automatic video property detection, HTTP stream support
 - [ONBOARDING.md:285-301](file://ONBOARDING.md#L285-L301)
 
 ## Architecture Overview
-The system provides both local execution and containerized benchmarking:
+The system provides both local execution and containerized benchmarking with unified CPU/GPU platform support:
 
 ```mermaid
 sequenceDiagram
@@ -101,12 +111,12 @@ participant M as "main.py"
 participant B as "BaseHPE"
 participant H as "MethodHPE"
 participant V as "Input Source"
-U->>M : "python3 main.py --method <method> --input <src>"
+U->>M : "python3 main.py --method <method> --input <src> --timeout <sec>"
 M->>M : "parse_arguments()"
 M->>M : "get_hpe_method(args)"
 M->>H : "load_model()"
 H->>B : "initialize BaseHPE(...)"
-U->>M : "run main_loop/main_loop_with_timeout"
+U->>M : "run main_loop_with_timeout"
 M->>B : "process_frame(frame)"
 B->>H : "pad_and_resize(frame)"
 H->>H : "run_model(padded)"
@@ -114,6 +124,7 @@ H-->>B : "predictions"
 B->>H : "postprocess(predictions)"
 H-->>B : "bodies"
 B-->>U : "render/save outputs"
+Note over B,V : "HTTP stream detection with automatic video property<br/>FPS conversion and timeout control"
 ```
 
 **Diagram sources**
@@ -123,11 +134,11 @@ B-->>U : "render/save outputs"
 ## Installation and Setup
 
 ### Prerequisites
-The framework requires specific hardware and software prerequisites:
+The framework requires specific hardware and software prerequisites with Python 3.9.13 requirements:
 
-- **Operating System**: Ubuntu 20.04 (tested and recommended)
-- **Python**: 3.8.10 with conda environment support
-- **CUDA**: Toolkit 12.6 for GPU acceleration
+- **Operating System**: Ubuntu 20.04/22.04 (tested and recommended)
+- **Python**: 3.9.13 with conda environment support (updated from 3.8.10)
+- **CUDA**: Toolkit 12.6 for GPU acceleration (optional for CPU-only setup)
 - **Docker**: Docker Engine + Docker Compose v20+ for containerized experiments
 - **Hardware**: NVIDIA GPU with CUDA support (CPU-only mode also supported)
 
@@ -135,14 +146,14 @@ The framework requires specific hardware and software prerequisites:
 
 #### Option A: Conda Environment (Recommended)
 ```bash
-# Create and activate environment
-conda create -n hpe python=3.8.10 -y
+# Create and activate environment with Python 3.9.13
+conda create -n hpe python=3.9.13 -y
 conda activate hpe
 
 # Install PyTorch with CUDA support
 conda install pytorch==2.4.1 torchvision==0.19.1 -c pytorch
 
-# Install all remaining dependencies
+# Install all remaining dependencies (pinned to Python 3.9.13)
 conda install --file requirements.txt
 ```
 
@@ -157,6 +168,27 @@ pip install -r requirements.txt
 - [ONBOARDING.md:148-167](file://ONBOARDING.md#L148-L167)
 - [ONBOARDING.md:170-223](file://ONBOARDING.md#L170-L223)
 - [README.md:7-17](file://README.md#L7-L17)
+
+### CPU-Only Platform Setup
+For systems without NVIDIA GPU, use the dedicated CPU-only platform:
+
+```bash
+# Build CPU-only Docker image
+docker build -t hpe-cpu -f Dockerfile_cpu .
+
+# Run CPU-only HPE inference
+docker run --rm hpe-cpu python3 main.py --method movenet --input video.mp4 --device CPU
+```
+
+The CPU-only platform includes:
+- PyTorch base with CUDA development headers for AlphaPose extension compilation
+- Skip PyNvCodec build (requires NVIDIA drivers at runtime)
+- Automatic fallback to OpenCV video decoding
+- OpenVINO CPU-only installation
+
+**Section sources**
+- [Dockerfile_cpu:1-100](file://Dockerfile_cpu#L1-L100)
+- [ffmpeg_hpe_cpu/docker-compose.cpu.yaml:1-152](file://ffmpeg_hpe_cpu/docker-compose.cpu.yaml#L1-L152)
 
 ### AlphaPose Extension Building
 AlphaPose requires compiled Cython and CUDA extensions:
@@ -252,9 +284,9 @@ python3 main.py --method ae1 --input unit_tests/video/giphy.gif --save_video
 python3 main.py --method movenet --input http://192.168.1.10:8089/stream.h264 --device CPU
 ```
 
-#### AlphaPose with Custom Settings
+#### Controlled Benchmarking with Timeout
 ```bash
-python3 main.py --method alphapose --input video.mp4 --csv --device GPU --output_dir results/
+python3 main.py --method alphapose --input video.mp4 --csv --device GPU --timeout 60 --max_frames 1000
 ```
 
 ### All CLI Flags
@@ -269,7 +301,7 @@ python3 main.py --method alphapose --input video.mp4 --csv --device GPU --output
 | `--save_image` | False | Save annotated image(s) |
 | `--save_video` | False | Save annotated video |
 | `--detbatch` | `5` | Detection batch size (AlphaPose only) |
-| `--timeout` | `300` | Timeout in seconds for HTTP streams |
+| `--timeout` | `0` | Timeout in seconds for HTTP streams and video files |
 | `--max_frames` | `0` | Max frames to process (0 = unlimited) |
 | `--measurement_interval_ms` | `100` | Interval for measuring data volume |
 
@@ -281,50 +313,60 @@ python3 main.py --method alphapose --input video.mp4 --csv --device GPU --output
 ## Experiment Pipeline
 
 ### Docker-Based Benchmarking Architecture
-The framework provides comprehensive containerized benchmarking with multi-service orchestration:
+The framework provides comprehensive containerized benchmarking with unified CPU/GPU platform support:
 
 ```mermaid
 graph TD
 A["h264-streaming-server<br/>FFmpeg/NGINX, :8089"] --> B["H.264 HTTP Stream"]
-B --> C["hpe Container<br/>Python + OpenCV + Pose Estimation"]
+B --> C["HPE Container<br/>Python + OpenCV + Pose Estimation"]
 C --> D["perf_monitor<br/>bpftrace CPU/memory"]
 C --> E["bcc-tracer<br/>BPF network tracing"]
-C --> F["gpu-metrics<br/>nvidia-smi polling"]
+C --> F["gpu-metrics<br/>nvidia-smi polling (GPU only)"]
 D --> G["aggregated_metrics.csv"]
 E --> H["video_rx.csv"]
 F --> I["gpu_metrics.csv"]
 C --> J["hpe_output/*.csv"]
+K["CPU-only Platform"] --> L["hpe-cpu<br/>CPU-only container"]
+L --> M["OpenVINO CPU tuning"]
 ```
 
 **Diagram sources**
 - [ONBOARDING.md:361-427](file://ONBOARDING.md#L361-L427)
+- [Dockerfile_cpu:1-100](file://Dockerfile_cpu#L1-L100)
 
-### Docker Services Configuration
-The experiment pipeline consists of five coordinated services:
+### Unified Docker Services Configuration
+The experiment pipeline consists of coordinated services with CPU-only alternatives:
 
 #### 1. h264-streaming-server
 - **Purpose**: Serves benchmark video as H.264 HTTP stream on port 8089
-- **Resource Limits**: 2 CPU cores, 1 GB RAM
+- **Resource Limits**: 1 CPU core, 1 GB RAM
 - **Configuration**: `VIDEO_FILE` from `.env`, `SERVER_PORT=8089`
 - **Healthcheck**: TCP connection to port 8089
 
-#### 2. hpe Container
+#### 2. HPE Container (Unified)
 - **Purpose**: Main inference container running pose estimation
+- **CPU/GPU Support**: Runs on either CPU-only or GPU platforms
 - **Resource Limits**: 4 CPU cores, 16 GB RAM, NVIDIA GPU (via `runtime: nvidia`)
 - **Shared Memory**: 8 GB (`shm_size`) for large batch operations
 - **Command**: `python3 main.py --method <METHOD> --input http://h264-streaming-server:8089/stream.h264`
 
-#### 3. gpu-metrics Sidecar
+#### 3. CPU-only HPE Container
+- **Purpose**: CPU-only inference container for systems without NVIDIA GPU
+- **Build**: Uses `Dockerfile_cpu` with PyTorch CUDA development headers
+- **Fallback**: Automatic OpenCV video decoding when PyNvCodec unavailable
+- **Command**: Same as GPU version but with `--device CPU`
+
+#### 4. GPU Metrics Sidecar
 - **Purpose**: Polls `nvidia-smi` every 500ms for GPU statistics
 - **Output**: `results/gpu/gpu_metrics.csv`
 - **Requirements**: NVIDIA GPU and `nvidia-container-toolkit`
 
-#### 4. perf_monitor Sidecar
+#### 5. Perf Monitor Sidecar
 - **Purpose**: Monitors CPU usage and memory RSS via bpftrace
 - **Output**: `results/perf/aggregated_metrics.csv`
 - **Privileges**: `privileged: true`, `SYS_ADMIN`, `NET_ADMIN`
 
-#### 5. bcc-tracer Sidecar
+#### 6. BCC Tracer Sidecar
 - **Purpose**: Kernel-level network RX byte tracing using BCC/BPF
 - **Output**: `tracer_output/hpe_video_rx.csv`
 - **Network Mode**: Shares HPE container's network namespace
@@ -349,10 +391,14 @@ The `run_experiment_bcc.sh` script orchestrates the complete benchmarking proces
 ## Performance Optimization
 
 ### CPU Performance Tuning
-The framework includes automated CPU optimization for OpenVINO inference:
+The framework includes automated CPU optimization for OpenVINO inference with environment variables:
 
 ```bash
-python3 optimizations/optimized_main.py --method openpose --input video.mp4 --device CPU --enable-cpu-opt
+# CPU-only experiment with tuned OpenVINO settings
+HPE_DEVICE=CPU OV_MODE=latency OV_THREADS=4 OV_STREAMS=1 ./run_experiment_cpu.sh movenet
+
+# Unified GPU experiment with CPU tuning
+HPE_DEVICE=CPU OV_MODE=throughput OV_THREADS=6 OV_STREAMS=2 ./run_experiment_bcc.sh openpose
 ```
 
 Key optimizations include:
@@ -367,6 +413,18 @@ For GPU-enabled environments:
 - Verify `nvidia-container-toolkit` installation
 - Use `HPE_DEVICE=GPU` environment variable for explicit GPU selection
 - Monitor GPU utilization with `nvidia-smi`
+
+### HTTP Stream Optimization
+Enhanced HTTP stream support with automatic video property detection:
+
+```bash
+# HTTP stream with automatic timeout and frame limiting
+python3 main.py --method movenet --input http://192.168.1.10:8089/stream.h264 --timeout 60 --max_frames 1000
+
+# Local development with automatic FPS detection
+python3 dev_tools/stream_video_server.py
+python3 main.py --method movenet --input http://$(hostname -I | awk '{print $1}'):8080/video_feed --csv
+```
 
 ### FFmpeg CUDA Integration
 Optional FFmpeg build with hardware acceleration:
@@ -392,6 +450,9 @@ bash dev_tools/smoke_test.sh CPU hpe
 
 # GPU smoke test (if available)
 bash dev_tools/smoke_test.sh GPU hpe
+
+# CPU-only smoke test
+docker run --rm hpe-cpu python3 main.py --method movenet --input unit_tests/images/testImage.jpg --save_image
 ```
 
 The smoke test validates:
@@ -416,6 +477,10 @@ Run a simple experiment to validate the containerized setup:
 ```bash
 cd ffmpeg_hpe/
 ./run_experiment_bcc.sh movenet
+
+# CPU-only experiment
+cd ffmpeg_hpe_cpu/
+./run_experiment_cpu.sh movenet
 ```
 
 **Section sources**
@@ -453,6 +518,20 @@ docker info | grep -i runtime
 docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu20.04 nvidia-smi
 ```
 
+### CPU-only Platform Issues
+For systems without NVIDIA GPU:
+
+```bash
+# Verify CPU-only image built successfully
+docker images | grep hpe-cpu
+
+# Check PyNvCodec fallback
+docker run --rm hpe-cpu python3 -c "import PyNvCodec; print('Available')" 2>/dev/null || echo "Fallback to OpenCV"
+
+# Test CPU-only inference
+docker run --rm hpe-cpu python3 main.py --method movenet --input unit_tests/images/testImage.jpg --device CPU
+```
+
 ### Model Loading Problems
 - Verify model files are downloaded to correct locations
 - Check AlphaPose YAML configuration references correct weights
@@ -483,6 +562,8 @@ docker rm -f hpe bcc-tracer gpu-metrics perf_monitor 2>/dev/null || true
 - [ONBOARDING.md:627-740](file://ONBOARDING.md#L627-L740)
 
 ## Conclusion
-You now have comprehensive guidance for setting up and using the Human Pose Estimation framework. The ONBOARDING.md documentation provides detailed step-by-step instructions for environment setup, model configuration, and experiment execution. Whether running locally or using the Docker-based benchmarking pipeline, the framework offers extensive monitoring capabilities and performance optimization features. Use the provided verification steps and troubleshooting guidance to ensure a smooth setup experience.
+You now have comprehensive guidance for setting up and using the Human Pose Estimation framework with Python 3.9.13 requirements and unified CPU/GPU platform support. The ONBOARDING.md documentation provides detailed step-by-step instructions for environment setup, model configuration, and experiment execution across both CPU-only and GPU-enabled platforms. 
 
-The framework supports multiple HPE methods with flexible deployment options, making it suitable for both development and production benchmarking scenarios. The comprehensive monitoring stack enables detailed performance analysis across CPU, GPU, and network domains.
+The framework offers extensive monitoring capabilities and performance optimization features with enhanced HTTP stream support and automatic video property detection. Use the provided verification steps and troubleshooting guidance to ensure a smooth setup experience across different hardware configurations.
+
+The framework supports multiple HPE methods with flexible deployment options, making it suitable for both development and production benchmarking scenarios. The comprehensive monitoring stack enables detailed performance analysis across CPU, GPU, and network domains, now unified across both CPU-only and GPU platforms.
