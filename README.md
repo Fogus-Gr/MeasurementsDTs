@@ -146,9 +146,9 @@ mkdir -p models/AlphaPose/pretrained_models
 mkdir -p models/AlphaPose/detector/yolo/data
 mkdir -p models/MoveNet
 mkdir -p models/OpenVINO/pretrained_models/intel/human-pose-estimation-0001
-mkdir -p models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP32
-mkdir -p models/OpenVINO/pretrained_models/intel/human-pose-estimation-0006/FP32
-mkdir -p models/OpenVINO/pretrained_models/intel/human-pose-estimation-0007/FP32
+mkdir -p models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32
+mkdir -p models/OpenVINO/pretrained_models/public/human-pose-estimation-0006/FP32
+mkdir -p models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32
 mkdir -p models/OpenVINO/pretrained_models/public/FP32
 ```
 
@@ -182,13 +182,13 @@ gdown "https://drive.google.com/uc?id=1fko47eVczJZQb9wWA2X7eQ0TuF4PDXzs" \
 **EfficientHRNet (3 variants)**
 ```bash
 gdown "https://drive.google.com/uc?id=1lEUFqQnWHVymQoZvaXuDFcnOyEEKsexP" \
-  -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
+  -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0005/FP32/human-pose-estimation-0005.bin
 
 gdown "https://drive.google.com/uc?id=1d8pGQrM9vEfz_oAIey0qRr7Gxp6dS2UE" \
-  -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0006/FP32/human-pose-estimation-0006.bin
+  -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0006/FP32/human-pose-estimation-0006.bin
 
 gdown "https://drive.google.com/uc?id=1ZSdsqgD4zUO4gyHMYBfxq3m4UMyQ187j" \
-  -O models/OpenVINO/pretrained_models/intel/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
+  -O models/OpenVINO/pretrained_models/public/human-pose-estimation-0007/FP32/human-pose-estimation-0007.bin
 ```
 
 If you already have the Open Model Zoo public layout, the same `.bin` files may
