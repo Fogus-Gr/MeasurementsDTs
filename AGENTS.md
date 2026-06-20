@@ -190,6 +190,7 @@ issues.
 | 14 | `ffmpeg_hpe/plot_graph.py` | Headless-safe CPU/memory plot helper for `perf_metrics.csv` and legacy `pid_metrics.csv` | ✅ Implemented |
 | 15 | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | ⚠️ Open |
 | 16 | `ffmpeg_hpe/run_experiment_bcc.sh` + `shared/perf_monitor/` | Host-PID monitor consumed a container-namespace PID, producing near-zero CPU and tiny memory for active HPE runs | ✅ Fixed — BCC rig now writes the host PID from `docker inspect` and measures the HPE process directly |
+| 17 | `ffmpeg_hpe/validate_run.py` | `bcc_port_detection` regex only matched old log-grep format `"Monitoring HPE traffic on port"`, but `run_experiment_bcc.sh` writes `"BCC detected HPE video port:"` when `$detected_port` is set — caused spurious FAIL on every BCC run | ✅ Fixed — regex now accepts both formats |
 
 ### Known TODOs in HPE Inference Code
 - `movenet_hpe.py`: keypoint-level score filtering not yet applied to body

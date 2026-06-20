@@ -269,7 +269,7 @@ def validate_bcc_rx(results_dir, ffmpeg_bytes, tolerance_percent, checks, metric
 
     port_info = results_dir / "traces" / "bcc" / "port_info.txt"
     port_text = read_text(port_info)
-    port_match = re.search(r"Monitoring HPE traffic on port\s+([0-9]+)", port_text)
+    port_match = re.search(r"(?:Monitoring HPE traffic on port\s+|BCC detected HPE video port:\s*)([0-9]+)", port_text)
     add_check(
         checks,
         "bcc_port_detection",

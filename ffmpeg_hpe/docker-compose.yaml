@@ -17,10 +17,10 @@ services:
     networks:
       - streaming-network
     healthcheck:
-      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/8089 || exit 1"]
-      interval: 5s
-      timeout: 10s
-      retries: 6
+      test: ["CMD", "curl", "-sfI", "http://localhost:8089/stream.h264"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
       start_period: 10s
     deploy:
       resources:
@@ -115,11 +115,16 @@ services:
       - h264-streaming-server
       - hpe
     healthcheck:
-      test: ["CMD", "pgrep", "-f", "nvidia-smi"]
+      test: ["CMD-SHELL", "test -f /output/gpu_metrics.csv"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
 
   perf_monitor:
     container_name: perf_monitor
@@ -146,6 +151,11 @@ services:
     user: root
     networks:
       - streaming-network
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
 
   # trace_container:
   #   image: video-bpftrace:latest
@@ -203,6 +213,11 @@ services:
     - SYS_RESOURCE
     security_opt:
     - seccomp:unconfined
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
 
 networks:
   streaming-network:
