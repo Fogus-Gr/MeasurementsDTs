@@ -45,8 +45,8 @@ resolve_resource_profile() {
   total_vcpus=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
   total_mem_gib=$(awk '/MemTotal:/ {printf "%d\n", ($2 + 1048575) / 1048576; exit}' /proc/meminfo)
 
-  if [ -z "$total_vcpus" ] || [ "$total_vcpus" -lt 4 ]; then
-    echo "[ERROR] This experiment requires at least 4 vCPUs. Found: ${total_vcpus:-unknown}"
+  if [ -z "$total_vcpus" ] || [ "$total_vcpus" -lt 3 ]; then
+    echo "[ERROR] This experiment requires at least 3 vCPUs. Found: ${total_vcpus:-unknown}"
     exit 1
   fi
 
@@ -115,11 +115,21 @@ capture_diagnostics() {
 # Use HPE_METHOD as container_type for results dir naming
 container_type="${1:-movenet}"
 
-# Load VIDEO_FILE from the rig-local .env if not set
-if [[ -z "$VIDEO_FILE" ]]; then
-  if [ -f "$SCRIPT_DIR/.env" ]; then
-    export $(grep -E '^VIDEO_FILE=' "$SCRIPT_DIR/.env" | xargs)
-  fi
+# Load all env variables from the rig-local .env if present and not already set
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    # Skip comments and empty lines
+    if [[ "$line" =~ ^[[:space:]]*# ]] || [[ -z "$line" ]]; then
+      continue
+    fi
+    # Extract key and value
+    key=$(echo "$line" | cut -d'=' -f1 | xargs)
+    val=$(echo "$line" | cut -d'=' -f2- | xargs)
+    # Set only if not already set in environment
+    if [ -z "${!key}" ]; then
+      export "$key=$val"
+    fi
+  done < "$SCRIPT_DIR/.env"
 fi
 
 # Require VIDEO_FILE to be set, else exit with error
@@ -132,12 +142,15 @@ VIDEO_FILE_INPUT="$VIDEO_FILE"
 if [[ "$VIDEO_FILE_INPUT" == /app/videos/* ]]; then
   VIDEO_FILE_RELATIVE="${VIDEO_FILE_INPUT#/app/videos/}"
   VIDEO_FILE_CONTAINER="$VIDEO_FILE_INPUT"
+elif [[ "$VIDEO_FILE_INPUT" == /videos/* ]]; then
+  VIDEO_FILE_RELATIVE="${VIDEO_FILE_INPUT#/videos/}"
+  VIDEO_FILE_CONTAINER="$VIDEO_FILE_INPUT"
 elif [[ "$VIDEO_FILE_INPUT" == /* ]]; then
   VIDEO_FILE_RELATIVE="$(basename "$VIDEO_FILE_INPUT")"
   VIDEO_FILE_CONTAINER="$VIDEO_FILE_INPUT"
 else
   VIDEO_FILE_RELATIVE="$VIDEO_FILE_INPUT"
-  VIDEO_FILE_CONTAINER="/app/videos/$VIDEO_FILE_INPUT"
+  VIDEO_FILE_CONTAINER="/videos/$VIDEO_FILE_INPUT"
 fi
 
 export VIDEO_FILE="$VIDEO_FILE_CONTAINER"
@@ -311,7 +324,12 @@ echo "[DEBUG] waiting for experiment to finish..."
 
 # Step 13b: Collect initial logs
 sleep 2  # Allow containers to stabilize
-docker logs $(docker ps -qf "name=^/hpe$") > "$results_dir/logs/hpe_startup.log" 2>&1
+HPE_CONTAINER_ID=$(docker ps -qf "name=^/hpe$")
+if [ -n "$HPE_CONTAINER_ID" ]; then
+  docker logs "$HPE_CONTAINER_ID" > "$results_dir/logs/hpe_startup.log" 2>&1
+else
+  echo "[WARNING] HPE container not running at startup log collection" > "$results_dir/logs/hpe_startup.log"
+fi
 docker logs $TRACE_CONTAINER > "$results_dir/logs/bcc_tracer_startup.log" 2>&1
 
 # Step 14: Monitor experiment progress

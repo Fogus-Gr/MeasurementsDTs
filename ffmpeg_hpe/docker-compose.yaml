@@ -10,10 +10,10 @@ services:
     volumes:
       - ./results:/output
       - ../rtsp-ipcam/config:/app/config:ro
-      - ../videos:/app/videos:ro
+      - ../videos:/videos:ro
     environment:
       - SERVER_PORT=8089
-      - VIDEO_FILE=${VIDEO_FILE:-/app/videos/rangeOfMotion/vga_01_01.mp4}
+      - VIDEO_FILE=${VIDEO_FILE:-/videos/rangeOfMotion/vga_01_01.mp4}
     networks:
       - streaming-network
     healthcheck:
@@ -67,6 +67,7 @@ services:
       # - HPE_INPUT=http://h264-streaming-server:8089/stream.h264
       - OPENCV_FFMPEG_OPEN_TIMEOUT=300000 # Increase timeout for FFMPEG
       - OPENCV_FFMPEG_READ_TIMEOUT=300000  # Increase read timeout for FFMPEG
+      - VIDEO_PATH=${VIDEO_FILE:-/videos/rangeOfMotion/vga_01_01.mp4}
     volumes:
       - ./results:/output:rw
       - ../videos:/videos:ro
