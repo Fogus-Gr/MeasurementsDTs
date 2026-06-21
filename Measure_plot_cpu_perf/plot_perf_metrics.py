@@ -119,11 +119,24 @@ def plot_metrics(data, output_dir):
     print("- perf_data.csv (raw data)")
 
 if __name__ == "__main__":
+    import sys
+    
     # Create output directory
     output_dir = create_output_directory()
     
-    # Capture the data
-    output = capture_perf_data()
+    # Check if a file argument is provided
+    if len(sys.argv) > 1:
+        file_path = sys.argv[1]
+        print(f"Reading perf data from file: {file_path}")
+        try:
+            with open(file_path, 'r') as f:
+                output = f.read()
+        except Exception as e:
+            print(f"Error reading file {file_path}: {e}")
+            sys.exit(1)
+    else:
+        # Capture the data live
+        output = capture_perf_data()
     
     # Parse the data
     data = parse_perf_output(output)
@@ -131,15 +144,3 @@ if __name__ == "__main__":
     # Plot the data
     plot_metrics(data, output_dir)
 
-if __name__ == "__main__":
-    # Create output directory
-    output_dir = create_output_directory()
-    
-    # Capture the data
-    output = capture_perf_data()
-    
-    # Parse the data
-    data = parse_perf_output(output)
-    
-    # Plot the data
-    plot_metrics(data, output_dir)
