@@ -21,6 +21,7 @@
 - [base_hpe.py](file://base_hpe.py)
 - [detector.py](file://models/AlphaPose/alphapose/utils/detector.py)
 - [openvino_base_hpe.py](file://openvino_base_hpe.py)
+- [live-stream-fixes-proposed.md](file://docs/live-stream-fixes-proposed.md)
 </cite>
 
 ## Update Summary
@@ -31,6 +32,8 @@
 - Improved HTTP server configuration with MPEG-TS streaming support
 - Enhanced queue management for AlphaPose detection and pose estimation
 - Added frame dropping logic and stream reconnection capabilities
+- **Updated**: Added comprehensive live-stream robustness improvements design document with detailed technical specifications for threaded capture system, LiveStreamMetrics class, and MPEG-TS container format support
+- **Updated**: Enhanced HTTP streaming infrastructure with improved queue management, metadata extraction, and PyNvCodec integration for hardware-accelerated video processing
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -41,15 +44,18 @@
 6. [Enhanced HTTP Streaming Infrastructure](#enhanced-http-streaming-infrastructure)
 7. [PyNvCodec Integration](#pynvcodec-integration)
 8. [AlphaPose HTTP Streaming Optimization](#alphapose-http-streaming-optimization)
-9. [Queue Management and Metadata Extraction](#queue-management-and-metadata-extraction)
-10. [Dependency Analysis](#dependency-analysis)
-11. [Performance Considerations](#performance-considerations)
-12. [Troubleshooting Guide](#troubleshooting-guide)
-13. [Conclusion](#conclusion)
-14. [Appendices](#appendices)
+9. [Live-Stream Robustness Improvements](#live-stream-robustness-improvements)
+10. [Queue Management and Metadata Extraction](#queue-management-and-metadata-extraction)
+11. [Dependency Analysis](#dependency-analysis)
+12. [Performance Considerations](#performance-considerations)
+13. [Troubleshooting Guide](#troubleshooting-guide)
+14. [Conclusion](#conclusion)
+15. [Appendices](#appendices)
 
 ## Introduction
 This document describes the HTTP streaming server implementation for delivering H.264 video over HTTP to media players and web clients. The implementation has been significantly enhanced with improved queue management, metadata extraction capabilities, and PyNvCodec integration for hardware-accelerated video processing. It covers RTSP/IP camera emulation concepts, HTTP server configuration, client connectivity patterns, real-time video feed management, adaptive streaming strategies, and performance tuning. The document also provides integration examples for web clients, mobile applications, and monitoring systems, along with guidance for latency, quality metrics, and troubleshooting.
+
+**Updated**: The implementation now includes comprehensive live-stream robustness improvements designed to handle slow models gracefully while maintaining accurate frame accounting and stream quality.
 
 ## Project Structure
 The streaming stack consists of:
@@ -59,6 +65,7 @@ The streaming stack consists of:
 - Monitoring and tracing utilities for network and performance analysis
 - Enhanced AlphaPose pipeline with PyNvCodec acceleration
 - Comprehensive queue management system for real-time video processing
+- **Updated**: Live-stream robustness improvements with threaded capture and frame dropping logic
 
 ```mermaid
 graph TB
@@ -68,6 +75,7 @@ end
 subgraph "Streaming Server"
 HTTP["Python HTTP Server<br/>direct_stream_server.py"]
 FF["FFmpeg Subprocess<br/>MPEG-TS Support"]
+TH["ThreadingHTTPServer<br/>Health Checks"]
 end
 subgraph "Optional Reverse Proxy"
 NGINX["Nginx Reverse Proxy<br/>nginx.conf"]
@@ -75,13 +83,16 @@ end
 subgraph "AlphaPose Pipeline"
 AP["AlphaPoseHPE<br/>PyNvCodec Integration"]
 DL["DetectionLoader<br/>Queue Management"]
+LS["LiveStreamMetrics<br/>Frame Accounting"]
 end
 Client --> |HTTP GET| HTTP
+HTTP --> TH
 HTTP --> FF
 HTTP -. optional .-> NGINX
 NGINX --> HTTP
 HTTP --> AP
 AP --> DL
+AP --> LS
 DL --> AP
 ```
 
@@ -90,6 +101,7 @@ DL --> AP
 - [nginx.conf:12-30](file://rtsp-ipcam/nginx.conf.template/nginx.conf#L12-L30)
 - [alphapose_hpe.py:33-67](file://alphapose_hpe.py#L33-L67)
 - [detector.py:18-110](file://models/AlphaPose/alphapose/utils/detector.py#L18-L110)
+- [live-stream-fixes-proposed.md:82-139](file://docs/live-stream-fixes-proposed.md#L82-L139)
 
 **Section sources**
 - [direct_stream_server.py:1-304](file://rtsp-ipcam/direct_stream_server.py#L1-L304)
@@ -97,6 +109,7 @@ DL --> AP
 - [docker-compose.yml:1-64](file://rtsp-ipcam/docker-compose.yml#L1-L64)
 - [nginx.conf:1-31](file://rtsp-ipcam/nginx.conf.template/nginx.conf#L1-L31)
 - [AlphaPose_HTTP_Streaming_Optimization.md:58-200](file://AlphaPose_HTTP_Streaming_Optimization.md#L58-L200)
+- [live-stream-fixes-proposed.md:1-490](file://docs/live-stream-fixes-proposed.md#L1-L490)
 
 ## Core Components
 - HTTP streaming handler: Serves H.264 over HTTP with configurable port, video path, and MPEG-TS support
@@ -105,9 +118,11 @@ DL --> AP
 - Optional Nginx proxy: Reverse proxy for HTTP routing and buffering behavior
 - Development tools: Flask-based adaptive streaming servers for JPEG and testing
 - Monitoring and experiments: Scripts and configurations for performance and network analysis
-- **Enhanced**: PyNvCodec integration for hardware-accelerated video decoding
+- **Enhanced**: PyNvCodec integration for hardware-accelerated video processing
 - **Enhanced**: Comprehensive queue management system for AlphaPose detection and pose estimation
 - **Enhanced**: Frame dropping logic and stream reconnection capabilities
+- **Updated**: LiveStreamMetrics class for comprehensive frame accounting and performance tracking
+- **Updated**: Threaded capture system with latest-frame queue for live stream robustness
 
 Key responsibilities:
 - Validate video file and serve HTTP responses with proper MIME types
@@ -118,6 +133,8 @@ Key responsibilities:
 - **Enhanced**: Integrate PyNvCodec for GPU-accelerated video processing
 - **Enhanced**: Implement robust queue management for real-time video analysis
 - **Enhanced**: Add frame dropping logic to prevent processing backlog
+- **Updated**: Implement threaded HTTP server with health check endpoint
+- **Updated**: Provide standardized MPEG-TS streaming format with consistent content types
 
 **Section sources**
 - [direct_stream_server.py:45-151](file://rtsp-ipcam/direct_stream_server.py#L45-L151)
@@ -128,19 +145,26 @@ Key responsibilities:
 - [stream_video_server_adaptive.py:1-195](file://dev_tools/stream_video_server_adaptive.py#L1-L195)
 - [alphapose_hpe.py:69-125](file://alphapose_hpe.py#L69-L125)
 - [detector.py:18-110](file://models/AlphaPose/alphapose/utils/detector.py#L18-L110)
+- [live-stream-fixes-proposed.md:63-273](file://docs/live-stream-fixes-proposed.md#L63-L273)
 
 ## Architecture Overview
 The HTTP streaming server integrates a Python HTTP server with FFmpeg to deliver H.264 video. The enhanced architecture now includes PyNvCodec integration for hardware-accelerated video processing and comprehensive queue management for real-time analysis. Clients connect via HTTP GET to a dedicated endpoint. The server validates the video file, configures FFmpeg with appropriate encoding parameters, and streams raw H.264 frames to the client. For production deployments, an optional Nginx reverse proxy can be used to improve buffering and HTTP handling.
+
+**Updated**: The architecture now includes live-stream robustness improvements with threaded capture, frame dropping logic, and comprehensive metrics tracking.
 
 ```mermaid
 sequenceDiagram
 participant Client as "Client"
 participant Server as "HTTP Server"
+participant TH as "ThreadingHTTPServer"
 participant FF as "FFmpeg Process"
 participant FS as "Video File"
 participant AP as "AlphaPose Pipeline"
 participant DL as "Detection Queue"
+participant LS as "LiveStreamMetrics"
 Client->>Server : "GET /stream.h264"
+Server->>TH : "Threaded request handling"
+TH->>Server : "Serve stream"
 Server->>Server : "Validate video path"
 Server->>FF : "Spawn FFmpeg with MPEG-TS params"
 FF->>FS : "Read frames"
@@ -150,6 +174,8 @@ Server-->>Client : "HTTP response body (chunk)"
 Server-->>AP : "Stream to AlphaPose"
 AP->>DL : "Queue frames for processing"
 DL-->>AP : "Dequeue and process"
+AP->>LS : "Record metrics"
+LS-->>AP : "Frame accounting"
 AP-->>Client : "Pose estimation results"
 end
 FF-->>Server : "Process exit"
@@ -161,11 +187,14 @@ Server-->>Client : "Connection closed"
 - [direct_stream_server.py:113-133](file://rtsp-ipcam/direct_stream_server.py#L113-L133)
 - [alphapose_hpe.py:126-293](file://alphapose_hpe.py#L126-L293)
 - [detector.py:101-110](file://models/AlphaPose/alphapose/utils/detector.py#L101-L110)
+- [live-stream-fixes-proposed.md:146-267](file://docs/live-stream-fixes-proposed.md#L146-L267)
 
 ## Detailed Component Analysis
 
 ### HTTP Streaming Handler
 The handler manages HTTP GET and HEAD requests for the H.264 stream endpoint with enhanced MPEG-TS support. It sets appropriate headers, validates the video file, spawns FFmpeg with optimized encoding parameters, and streams chunks to the client. The implementation now supports both FLV and MPEG-TS formats for different client compatibility requirements.
+
+**Updated**: The handler now includes threaded server support and health check endpoint for improved robustness.
 
 ```mermaid
 classDiagram
@@ -173,6 +202,7 @@ class H264StreamHandler {
 +do_GET()
 +do_HEAD()
 +log_message(format, *args)
+-health_check()
 -video_path
 -content_type
 }
@@ -184,16 +214,23 @@ class DirectStreamServer {
 -video_path
 -server
 }
+class ThreadingHTTPServer {
++daemon_threads
++handle_request()
+}
 H264StreamHandler <|-- DirectStreamServer : "uses handler"
+DirectStreamServer --> ThreadingHTTPServer : "uses threaded server"
 ```
 
 **Diagram sources**
 - [direct_stream_server.py:45-151](file://rtsp-ipcam/direct_stream_server.py#L45-L151)
 - [direct_stream_server.py:156-207](file://rtsp-ipcam/direct_stream_server.py#L156-L207)
+- [live-stream-fixes-proposed.md:280-305](file://docs/live-stream-fixes-proposed.md#L280-L305)
 
 **Section sources**
 - [direct_stream_server.py:45-151](file://rtsp-ipcam/direct_stream_server.py#L45-L151)
 - [direct_stream_server.py:156-207](file://rtsp-ipcam/direct_stream_server.py#L156-L207)
+- [live-stream-fixes-proposed.md:280-321](file://docs/live-stream-fixes-proposed.md#L280-L321)
 
 ### FFmpeg Encoding Pipeline
 The server invokes FFmpeg to encode the input video into H.264 and stream it over HTTP with enhanced MPEG-TS support. The pipeline includes:
@@ -205,10 +242,13 @@ The server invokes FFmpeg to encode the input video into H.264 and stream it ove
 
 Encoding parameters and options are defined in the handler's FFmpeg invocation with support for both copy and transcode modes.
 
+**Updated**: The FFmpeg pipeline now supports MPEG-TS format for standardized streaming and improved client compatibility.
+
 **Section sources**
 - [direct_stream_server.py:74-94](file://rtsp-ipcam/direct_stream_server.py#L74-L94)
 - [direct_stream_server.py:113-133](file://rtsp-ipcam/direct_stream_server.py#L113-L133)
 - [AlphaPose_HTTP_Streaming_Optimization.md:121-133](file://AlphaPose_HTTP_Streaming_Optimization.md#L121-L133)
+- [live-stream-fixes-proposed.md:330-357](file://docs/live-stream-fixes-proposed.md#L330-L357)
 
 ### Containerized Deployment
 The Dockerfile builds a minimal image with FFmpeg and Python, exposes the default port, and runs the HTTP server. The compose file defines:
@@ -217,9 +257,12 @@ The Dockerfile builds a minimal image with FFmpeg and Python, exposes the defaul
 - Resource limits and security hardening
 - Optional Nginx reverse proxy service
 
+**Updated**: The Docker compose now includes health check configuration for the streaming server.
+
 **Section sources**
 - [Dockerfile:1-40](file://rtsp-ipcam/Dockerfile#L1-L40)
 - [docker-compose.yml:1-64](file://rtsp-ipcam/docker-compose.yml#L1-L64)
+- [live-stream-fixes-proposed.md:323-328](file://docs/live-stream-fixes-proposed.md#L323-L328)
 
 ### Optional Nginx Reverse Proxy
 The Nginx configuration proxies HTTP requests to the streaming server, disables proxy buffering for live streaming, and forwards essential headers. This improves buffering behavior and HTTP handling for clients.
@@ -284,10 +327,13 @@ The HTTP streaming server now supports:
 - Improved connection management with proper timeouts
 - Better error handling and logging
 - Configurable buffering parameters for different client requirements
+- **Updated**: Threaded HTTP server support for concurrent request handling
+- **Updated**: Health check endpoint for container health monitoring
 
 **Section sources**
 - [direct_stream_server.py:65-69](file://rtsp-ipcam/direct_stream_server.py#L65-L69)
 - [direct_stream_server.py:143-149](file://rtsp-ipcam/direct_stream_server.py#L143-L149)
+- [live-stream-fixes-proposed.md:280-321](file://docs/live-stream-fixes-proposed.md#L280-L321)
 
 ## PyNvCodec Integration
 
@@ -384,6 +430,58 @@ Comprehensive performance tracking:
 **Section sources**
 - [AlphaPose_HTTP_Streaming_Optimization.md:169-182](file://AlphaPose_HTTP_Streaming_Optimization.md#L169-L182)
 
+## Live-Stream Robustness Improvements
+
+### LiveStreamMetrics Class
+The LiveStreamMetrics class provides comprehensive frame accounting and performance tracking for live streaming scenarios:
+- Tracks source frames observed, processed frames, and dropped frames
+- Records read failures and exit reasons for debugging
+- Maintains frame mapping for source-to-processed frame correlation
+- Generates CSV reports with detailed metrics including FPS and drop rates
+
+**Section sources**
+- [live-stream-fixes-proposed.md:82-139](file://docs/live-stream-fixes-proposed.md#L82-L139)
+
+### Threaded Capture System
+The threaded capture system implements a latest-frame queue design for robust live streaming:
+- Continuous frame capture in a separate thread
+- Bounded queue with maxsize=1 to keep only the newest frame
+- Intelligent frame dropping to prevent processing backlog
+- Consecutive failure detection and graceful shutdown
+
+**Section sources**
+- [live-stream-fixes-proposed.md:146-185](file://docs/live-stream-fixes-proposed.md#L146-L185)
+
+### Live Capture Loop Implementation
+The live capture loop provides the core functionality for threaded frame capture:
+- Monitors frame capture success/failure rates
+- Maintains source frame numbering for accurate tracking
+- Implements queue management with proper overflow handling
+- Provides detailed exit reasoning for debugging and validation
+
+**Section sources**
+- [live-stream-fixes-proposed.md:186-267](file://docs/live-stream-fixes-proposed.md#L186-L267)
+
+### Threaded HTTP Server Enhancements
+The HTTP server now supports threaded request handling for improved robustness:
+- ThreadingHTTPServer replaces standard HTTPServer for concurrent requests
+- Daemon threads prevent server shutdown blocking
+- Health check endpoint (/health) enables container health monitoring
+- Consistent MPEG-TS format handling for standardized streaming
+
+**Section sources**
+- [live-stream-fixes-proposed.md:280-357](file://docs/live-stream-fixes-proposed.md#L280-L357)
+
+### Stream Format Standardization
+The streaming infrastructure now provides consistent MPEG-TS format support:
+- Endpoint: /stream.ts (canonical) and /stream.h264 (compatibility)
+- Content-Type: video/MP2T for standardized streaming
+- FFmpeg output format: -f mpegts for consistent byte streams
+- Proper HEAD request handling for client probing
+
+**Section sources**
+- [live-stream-fixes-proposed.md:330-357](file://docs/live-stream-fixes-proposed.md#L330-L357)
+
 ## Queue Management and Metadata Extraction
 
 ### DetectionLoader Queue System
@@ -415,10 +513,12 @@ Enhanced metadata handling for streaming scenarios:
 - Efficient memory allocation for GPU tensors
 - Optimized data transfer between CPU and GPU
 - Real-time performance monitoring and adjustment
+- **Updated**: Comprehensive frame accounting and metrics tracking
 
 **Section sources**
 - [detector.py:101-110](file://models/AlphaPose/alphapose/utils/detector.py#L101-L110)
 - [base_hpe.py:174-177](file://base_hpe.py#L174-L177)
+- [live-stream-fixes-proposed.md:82-139](file://docs/live-stream-fixes-proposed.md#L82-L139)
 
 ## Dependency Analysis
 The HTTP streaming server relies on:
@@ -429,10 +529,13 @@ The HTTP streaming server relies on:
 - **Enhanced**: PyNvCodec for hardware-accelerated video processing
 - **Enhanced**: Queue management libraries for real-time processing
 - **Enhanced**: AlphaPose detection framework with optimized streaming support
+- **Updated**: ThreadingHTTPServer for concurrent request handling
+- **Updated**: LiveStreamMetrics for comprehensive frame accounting
 
 ```mermaid
 graph LR
 Py["Python Standard Lib"] --> HS["HTTP Server"]
+HS --> TH["ThreadingHTTPServer"]
 HS --> FF["FFmpeg"]
 HS --> DC["Docker Runtime"]
 DC --> Img["Docker Image"]
@@ -442,6 +545,7 @@ NG --> HS
 HS --> AP["AlphaPose Pipeline"]
 AP --> QC["PyNvCodec"]
 AP --> QM["Queue Management"]
+AP --> LS["LiveStreamMetrics"]
 ```
 
 **Diagram sources**
@@ -450,6 +554,7 @@ AP --> QM["Queue Management"]
 - [docker-compose.yml:1-64](file://rtsp-ipcam/docker-compose.yml#L1-L64)
 - [base_hpe.py:11-15](file://base_hpe.py#L11-L15)
 - [detector.py:4](file://models/AlphaPose/alphapose/utils/detector.py#L4)
+- [live-stream-fixes-proposed.md:82-139](file://docs/live-stream-fixes-proposed.md#L82-L139)
 
 **Section sources**
 - [requirements.txt:1-11](file://rtsp-ipcam/requirements.txt#L1-L11)
@@ -457,6 +562,7 @@ AP --> QM["Queue Management"]
 - [docker-compose.yml:1-64](file://rtsp-ipcam/docker-compose.yml#L1-L64)
 - [base_hpe.py:11-15](file://base_hpe.py#L11-L15)
 - [detector.py:4](file://models/AlphaPose/alphapose/utils/detector.py#L4)
+- [live-stream-fixes-proposed.md:82-139](file://docs/live-stream-fixes-proposed.md#L82-L139)
 
 ## Performance Considerations
 - Latency: The implementation targets low-latency streaming with FFmpeg presets tuned for zero-latency and fast-start flags, enhanced with MPEG-TS support
@@ -467,6 +573,8 @@ AP --> QM["Queue Management"]
 - **Enhanced**: PyNvCodec reduces CPU utilization by up to 80% for video processing tasks
 - **Enhanced**: Queue management prevents memory overflow and maintains stable processing performance
 - **Enhanced**: Frame dropping logic maintains real-time performance under heavy loads
+- **Updated**: Live-stream robustness improvements handle slow models gracefully while maintaining accurate frame accounting
+- **Updated**: Threaded capture system prevents stream blocking and improves server responsiveness
 
 Practical tips:
 - Use ultrafast preset and zerolatency tune for minimal latency
@@ -476,6 +584,8 @@ Practical tips:
 - **Enhanced**: Enable PyNvCodec for hardware acceleration when available
 - **Enhanced**: Monitor queue sizes to prevent processing backlog
 - **Enhanced**: Use MPEG-TS format for better HTTP streaming compatibility
+- **Updated**: Implement threaded capture for robust live streaming performance
+- **Updated**: Use LiveStreamMetrics for comprehensive frame accounting and debugging
 
 **Section sources**
 - [README.md:456-461](file://rtsp-ipcam/README.md#L456-L461)
@@ -483,6 +593,7 @@ Practical tips:
 - [review.md:20-72](file://ffmpeg_hpe/review.md#L20-L72)
 - [prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
 - [AlphaPose_HTTP_Streaming_Optimization.md:169-182](file://AlphaPose_HTTP_Streaming_Optimization.md#L169-L182)
+- [live-stream-fixes-proposed.md:473-490](file://docs/live-stream-fixes-proposed.md#L473-L490)
 
 ## Troubleshooting Guide
 Common issues and remedies:
@@ -494,6 +605,8 @@ Common issues and remedies:
 - **Enhanced**: PyNvCodec initialization failures: Check NVIDIA driver installation and CUDA compatibility
 - **Enhanced**: Queue overflow issues: Monitor queue sizes and adjust buffer parameters
 - **Enhanced**: Stream reconnection problems: Verify network stability and implement retry logic
+- **Updated**: Live stream failures: Check LiveStreamMetrics CSV files for frame accounting and exit reasons
+- **Updated**: Threaded server issues: Verify ThreadingHTTPServer import and daemon thread configuration
 
 Diagnostic steps:
 - Check server logs for error messages
@@ -503,6 +616,8 @@ Diagnostic steps:
 - **Enhanced**: Monitor GPU utilization and PyNvCodec status
 - **Enhanced**: Check queue depths and processing rates
 - **Enhanced**: Verify stream integrity with checksum verification
+- **Updated**: Review LiveStreamMetrics CSV for frame accounting and performance metrics
+- **Updated**: Test health check endpoint: curl -f http://localhost:8089/health
 
 **Section sources**
 - [direct_stream_server.py:127-132](file://rtsp-ipcam/direct_stream_server.py#L127-L132)
@@ -510,9 +625,12 @@ Diagnostic steps:
 - [docker-compose.yml:20-24](file://rtsp-ipcam/docker-compose.yml#L20-L24)
 - [base_hpe.py:272-274](file://base_hpe.py#L272-L274)
 - [detector.py:135-143](file://models/AlphaPose/alphapose/utils/detector.py#L135-L143)
+- [live-stream-fixes-proposed.md:314-321](file://docs/live-stream-fixes-proposed.md#L314-L321)
 
 ## Conclusion
 The HTTP streaming server delivers a simple, reliable, and low-latency H.264 streaming solution using FFmpeg and Python. The enhanced implementation now includes PyNvCodec integration for hardware-accelerated video processing, comprehensive queue management for real-time analysis, and AlphaPose optimization for HTTP streaming scenarios. It supports containerized deployment, optional reverse proxying, and development tools for adaptive streaming. With proper configuration and monitoring, it can be integrated into web clients, mobile applications, and monitoring systems while maintaining predictable performance and ease of operation.
+
+**Updated**: The implementation now includes comprehensive live-stream robustness improvements that handle slow models gracefully, maintain accurate frame accounting, and provide detailed performance metrics for scientific validation.
 
 ## Appendices
 
@@ -524,6 +642,8 @@ The HTTP streaming server delivers a simple, reliable, and low-latency H.264 str
 - **Enhanced**: PyNvCodec GPU ID configuration for hardware acceleration
 - **Enhanced**: Queue size parameters for optimal buffering
 - **Enhanced**: Stream-specific optimization parameters
+- **Updated**: LiveStreamMetrics configuration for frame accounting
+- **Updated**: ThreadingHTTPServer configuration for concurrent request handling
 
 **Section sources**
 - [direct_stream_server.py:208-240](file://rtsp-ipcam/direct_stream_server.py#L208-L240)
@@ -531,6 +651,7 @@ The HTTP streaming server delivers a simple, reliable, and low-latency H.264 str
 - [docker-compose.yml:14-16](file://rtsp-ipcam/docker-compose.yml#L14-L16)
 - [alphapose_hpe.py:65-66](file://alphapose_hpe.py#L65-L66)
 - [detector.py:19-20](file://models/AlphaPose/alphapose/utils/detector.py#L19-L20)
+- [live-stream-fixes-proposed.md:82-139](file://docs/live-stream-fixes-proposed.md#L82-L139)
 
 ### Client Connectivity Patterns
 - Media players: VLC, FFplay, MPV with HTTP raw H.264 support
@@ -538,11 +659,13 @@ The HTTP streaming server delivers a simple, reliable, and low-latency H.264 str
 - Mobile apps: HTTP streaming endpoints compatible with HTTP live streaming
 - **Enhanced**: AlphaPose integration for real-time pose estimation from streams
 - **Enhanced**: WebSocket integration for live pose data streaming
+- **Updated**: Health check endpoint for container monitoring and orchestration
 
 **Section sources**
 - [changes_improvemnts.txt:73-82](file://rtsp-ipcam/changes_improvemnts.txt#L73-L82)
 - [README.md:1-484](file://rtsp-ipcam/README.md#L1-L484)
 - [AlphaPose_HTTP_Streaming_Optimization.md:45-47](file://AlphaPose_HTTP_Streaming_Optimization.md#L45-L47)
+- [live-stream-fixes-proposed.md:314-321](file://docs/live-stream-fixes-proposed.md#L314-L321)
 
 ### Real-time Video Feed Management
 - Frame delivery: FFmpeg reads frames in real time and writes to HTTP response with MPEG-TS support
@@ -550,10 +673,13 @@ The HTTP streaming server delivers a simple, reliable, and low-latency H.264 str
 - Resolution and frame rate: Controlled by FFmpeg parameters and input video properties
 - **Enhanced**: PyNvCodec provides hardware-accelerated decoding for improved performance
 - **Enhanced**: Queue management ensures smooth processing without frame drops
+- **Updated**: Threaded capture prevents frame accumulation and maintains real-time performance
+- **Updated**: LiveStreamMetrics provides comprehensive frame accounting and performance tracking
 
 **Section sources**
 - [direct_stream_server.py:113-133](file://rtsp-ipcam/direct_stream_server.py#L113-L133)
 - [base_hpe.py:253-274](file://base_hpe.py#L253-L274)
+- [live-stream-fixes-proposed.md:146-267](file://docs/live-stream-fixes-proposed.md#L146-L267)
 
 ### Adaptive Streaming Server (JPEG)
 - Dynamic quality: Adjusts JPEG quality and resolution based on input video
@@ -569,12 +695,14 @@ The HTTP streaming server delivers a simple, reliable, and low-latency H.264 str
 - Monitoring systems: Use Prometheus and scripts to collect performance metrics
 - **Enhanced**: AlphaPose integration: Real-time pose estimation from HTTP streams
 - **Enhanced**: GPU acceleration: Leverage PyNvCodec for hardware-accelerated processing
+- **Updated**: Scientific validation: Use LiveStreamMetrics CSV files for research reproducibility
 
 **Section sources**
 - [stream_video_server.py:173-204](file://dev_tools/stream_video_server.py#L173-L204)
 - [prometheus.yml:1-23](file://recent-dash/prometheus.yml#L1-L23)
 - [run_experiment.sh:1-286](file://recent-dash/run_experiment.sh#L1-L286)
 - [AlphaPose_HTTP_Streaming_Optimization.md:45-47](file://AlphaPose_HTTP_Streaming_Optimization.md#L45-L47)
+- [live-stream-fixes-proposed.md:406-423](file://docs/live-stream-fixes-proposed.md#L406-L423)
 
 ### Latency, Quality Metrics, and Tracing
 - Latency: Target ~1–3 seconds depending on network and client buffering, with PyNvCodec reducing processing latency
@@ -582,12 +710,15 @@ The HTTP streaming server delivers a simple, reliable, and low-latency H.264 str
 - Tracing: BPF tracing and tcpdump capture for RX/TX analysis
 - **Enhanced**: Performance monitoring: Real-time queue depth tracking and processing rate monitoring
 - **Enhanced**: Stream integrity: Checksum verification for scientific experiments
+- **Updated**: Live metrics: Comprehensive frame accounting and performance tracking for research validation
+- **Updated**: Health monitoring: Container health checks and server robustness validation
 
 **Section sources**
 - [README.md:456-461](file://rtsp-ipcam/README.md#L456-L461)
 - [review.md:28-72](file://ffmpeg_hpe/review.md#L28-L72)
 - [full_shell_history.txt:219-233](file://full_shell_history.txt#L219-L233)
 - [AlphaPose_HTTP_Streaming_Optimization.md:29-57](file://AlphaPose_HTTP_Streaming_Optimization.md#L29-L57)
+- [live-stream-fixes-proposed.md:473-490](file://docs/live-stream-fixes-proposed.md#L473-L490)
 
 ### PyNvCodec Installation and Configuration
 - **Installation**: Install NVIDIA drivers and CUDA toolkit for GPU acceleration
@@ -598,3 +729,13 @@ The HTTP streaming server delivers a simple, reliable, and low-latency H.264 str
 **Section sources**
 - [base_hpe.py:11-15](file://base_hpe.py#L11-L15)
 - [alphapose_hpe.py:65-66](file://alphapose_hpe.py#L65-L66)
+
+### Live-Stream Robustness Implementation
+- **Threaded capture**: Latest-frame queue with intelligent frame dropping
+- **Metrics tracking**: Comprehensive frame accounting and performance monitoring
+- **Format standardization**: Consistent MPEG-TS streaming with proper content types
+- **Health monitoring**: Threaded HTTP server with health check endpoint
+- **Scientific validation**: Paper-grade frame accounting for research reproducibility
+
+**Section sources**
+- [live-stream-fixes-proposed.md:63-490](file://docs/live-stream-fixes-proposed.md#L63-L490)

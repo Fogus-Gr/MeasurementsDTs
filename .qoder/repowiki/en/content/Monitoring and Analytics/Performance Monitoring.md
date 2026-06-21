@@ -21,17 +21,19 @@
 - [shared/perf_monitor/Dockerfile](file://shared/perf_monitor/Dockerfile)
 - [monitor_hpe/Dockerfile.perf](file://monitor_hpe/Dockerfile.perf)
 - [ffmpeg_hpe/run_experiment.sh](file://ffmpeg_hpe/run_experiment.sh)
+- [ffmpeg_hpe/run_experiment_bcc.sh](file://ffmpeg_hpe/run_experiment_bcc.sh)
 - [ffmpeg_hpe/validate_run.py](file://ffmpeg_hpe/validate_run.py)
+- [ffmpeg_hpe_backup_20260618/ffmpeg_hpe/validate_run.py](file://ffmpeg_hpe_backup_20260618/ffmpeg_hpe/validate_run.py)
+- [ffmpeg_hpe_cpu/validate_run.py](file://ffmpeg_hpe_cpu/validate_run.py)
+- [AGENTS.md](file://AGENTS.md)
+- [docs/bcc-bpf-tracing.md](file://docs/bcc-bpf-tracing.md)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Enhanced host-PID monitoring system documentation with improved bpftrace-based process tracking
-- Added comprehensive experiment validation capabilities with automated quality assurance
-- Refined error handling for PID detection failures with timeout mechanisms
-- Updated network monitoring section to reflect bpftrace improvements with 10ms vs 500ms cadence options
-- Enhanced troubleshooting guidance for PID detection issues and monitoring container coordination
-- Added detailed experiment orchestration and validation workflows
+- Enhanced validation pipeline documentation with improved BCC port detection regex supporting both legacy and newer log formats
+- Updated healthcheck configurations and resource management documentation for more reliable service monitoring
+- Added comprehensive coverage of validation workflow improvements and port detection format compatibility
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -47,14 +49,14 @@
 11. [Appendices](#appendices)
 
 ## Introduction
-This document describes the performance monitoring capabilities in the HPE framework. It explains how CPU utilization, GPU performance metrics, memory consumption, and network throughput are tracked in real time, how Prometheus scrapes metrics, how Grafana dashboards can visualize KPIs, and how custom monitoring scripts integrate with the system. The framework now features an enhanced host-PID monitoring system with improved bpftrace-based process tracking, comprehensive experiment validation capabilities, accurate HPE process measurement using docker inspect for host PID detection, and refined error handling for PID detection failures. It also covers setting up dashboards, configuring alerting, interpreting metrics, identifying optimization opportunities, and establishing baseline performance targets. Finally, it provides troubleshooting workflows and best practices for maintaining optimal performance.
+This document describes the performance monitoring capabilities in the HPE framework. It explains how CPU utilization, GPU performance metrics, memory consumption, and network throughput are tracked in real time, how Prometheus scrapes metrics, how Grafana dashboards can visualize KPIs, and how custom monitoring scripts integrate with the system. The framework now features an enhanced host-PID monitoring system with improved bpftrace-based process tracking, comprehensive experiment validation capabilities with enhanced port detection compatibility, accurate HPE process measurement using docker inspect for host PID detection, and refined error handling for PID detection failures. It also covers setting up dashboards, configuring alerting, interpreting metrics, identifying optimization opportunities, and establishing baseline performance targets. Finally, it provides troubleshooting workflows and best practices for maintaining optimal performance.
 
 ## Project Structure
 The performance monitoring stack spans several Docker Compose configurations and monitoring scripts, now featuring enhanced host-PID monitoring capabilities and comprehensive experiment validation:
 - Real-time process metrics are collected via enhanced bpftrace-based monitoring with improved PID detection using host PID namespace and SYS_ADMIN privileges.
 - Host PID monitoring operates in host PID namespace with SYS_ADMIN privileges for accurate process tracking.
 - Network traffic is monitored using both bpftrace tracepoints and BCC-based packet filtering for precise HPE process measurement.
-- Comprehensive experiment validation provides automated quality assurance with automated checks for exit codes, frame processing, JSON output, and metric consistency.
+- Comprehensive experiment validation provides automated quality assurance with automated checks for exit codes, frame processing, JSON output, and metric consistency, now supporting both legacy and modern port detection log formats.
 - Prometheus is configured to scrape exporters and agents.
 - Grafana dashboards consume Prometheus data to visualize KPIs and trends.
 - Scripts generate plots for offline analysis and capacity planning.
@@ -68,7 +70,7 @@ GPU["GPU Metrics Collector<br/>Container"]
 HostMonitor["Enhanced Host PID Monitor<br/>Container"]
 BPFTracer["bpftrace Network Tracer<br/>Container"]
 BCCTracer["BCC Packet Filter<br/>Container"]
-Validator["Experiment Validator<br/>Container"]
+Validator["Enhanced Experiment Validator<br/>Container"]
 EndToEnd["End-to-End Experiment<br/>Orchestrator"]
 end
 subgraph "Monitoring"
@@ -82,6 +84,7 @@ subgraph "Quality Assurance"
 Validation["Automated Validation<br/>Exit Codes & Metrics"]
 Checks["Multi-stage Checks<br/>Logs, CSVs, Ports"]
 Reports["Validation Reports<br/>JSON & TXT Output"]
+PortDetection["Enhanced Port Detection<br/>Legacy & Modern Formats"]
 end
 subgraph "Metrics"
 Prom["Prometheus Scrape Configs"]
@@ -98,6 +101,7 @@ BPFTracer --> BCCFilter
 BPFTracer --> Prom
 BCCTracer --> Prom
 Validator --> Checks
+Validator --> PortDetection
 EndToEnd --> Validator
 Prom --> Graf
 Exp --> Graf
@@ -137,6 +141,7 @@ Exp --> Graf
   - Automated quality assurance with multi-stage validation checks.
   - Validates HPE container exit codes, processed frame counts, and JSON output consistency.
   - Cross-validates BCC RX metrics against FFmpeg bytes-read for accuracy verification.
+  - Enhanced port detection regex now supports both legacy "Monitoring HPE traffic on port X" and newer "BCC detected HPE video port: X" formats.
   - Generates structured validation reports in JSON and TXT formats.
 - GPU metrics logging:
   - nvidia-smi-based periodic logging of GPU utilization, memory utilization, temperature, and power.
@@ -154,7 +159,7 @@ Key metrics produced:
 - Video-specific traffic metrics from BCC packet filtering.
 - Experiment validation metrics including processed frames, exit codes, and performance thresholds.
 
-**Updated** Enhanced with comprehensive experiment validation capabilities and refined host-PID monitoring system improvements.
+**Updated** Enhanced with comprehensive experiment validation capabilities and refined host-PID monitoring system improvements, including enhanced port detection format compatibility.
 
 **Section sources**
 - [monitor_hpe/monitor_pid.sh:1-216](file://monitor_hpe/monitor_pid.sh#L1-L216)
@@ -166,7 +171,7 @@ Key metrics produced:
 - [ffmpeg_hpe/validate_run.py:467-521](file://ffmpeg_hpe/validate_run.py#L467-521)
 
 ## Architecture Overview
-The enhanced monitoring architecture integrates containerized workloads with host-level PID monitoring, sophisticated network traffic analysis, and comprehensive experiment validation.
+The enhanced monitoring architecture integrates containerized workloads with host-level PID monitoring, sophisticated network traffic analysis, and comprehensive experiment validation with improved port detection compatibility.
 
 ```mermaid
 sequenceDiagram
@@ -176,7 +181,8 @@ participant HostMon as "Host PID Monitor"
 participant DockerIns as "docker inspect"
 participant BPFTrace as "bpftrace"
 participant BCC as "BCC Packet Filter"
-participant Validator as "Experiment Validator"
+participant Validator as "Enhanced Experiment Validator"
+participant PortRegex as "Enhanced Port Detection Regex"
 participant Prom as "Prometheus"
 participant Graf as "Grafana"
 EndToEnd->>HPE : Start HPE with health checks
@@ -186,11 +192,14 @@ DockerIns-->>HostMon : Return host PID with validation
 HostMon->>BPFTrace : Start monitoring with refined PID filter
 BPFTrace-->>HostMon : TX/RX byte counts via FIFO
 HostMon->>BCC : Start packet filtering for video traffic
+BCC->>PortRegex : Detect port with enhanced regex support
+PortRegex-->>BCC : Support both legacy and modern formats
 BCC-->>HostMon : Video-specific RX byte counts
 HostMon-->>Prom : Export consolidated metrics CSV
 EndToEnd->>Validator : Trigger validation after experiment
 Validator->>HPE : Parse logs and extract metrics
 Validator->>BCC : Validate RX metrics against FFmpeg
+Validator->>PortRegex : Check port detection format compatibility
 Validator->>Prom : Generate validation report
 Prom-->>Graf : Scrape and visualize dashboards
 ```
@@ -445,6 +454,36 @@ Plot --> Save["Save PNG"]
 **Section sources**
 - [ffmpeg_hpe/plot_smi_output.py:1-21](file://ffmpeg_hpe/plot_smi_output.py#L1-L21)
 
+### Enhanced Validation Pipeline with Improved Port Detection
+The validation pipeline now features enhanced port detection compatibility supporting both legacy and modern log formats for improved reliability.
+
+```mermaid
+flowchart TD
+Start(["Start Enhanced Validation"]) --> ParseArgs["Parse validation arguments<br/>tolerance thresholds, directories"]
+ParseArgs --> FindLatest["Find latest results directory<br/>or use specified path"]
+FindLatest --> InitChecks["Initialize validation checks<br/>and metrics storage"]
+InitChecks --> ValidateExit["Validate HPE exit code<br/>must be 0 for success"]
+ValidateExit --> ParseLogs["Parse HPE logs<br/>extract processed frames<br/>and FFmpeg bytes-read"]
+ParseLogs --> ValidateJSON["Validate JSON output<br/>presence, parsing, and sequence"]
+ValidateJSON --> ValidateTX["Validate Tx output<br/>payload bytes and structure"]
+ValidateTX --> ValidateBCC["Validate BCC RX metrics<br/>against FFmpeg bytes-read"]
+ValidateBCC --> ValidatePort["Enhanced Port Detection<br/>Support Legacy & Modern Formats"]
+ValidatePort --> ValidatePerf["Validate performance metrics<br/>CPU, memory, active PIDs"]
+ValidatePerf --> ValidateGPU["Validate GPU metrics<br/>utilization, temperature, power"]
+ValidateGPU --> GenerateReport["Generate validation report<br/>JSON and TXT output"]
+GenerateReport --> Status["Set overall PASS/FAIL status<br/>based on all checks"]
+Status --> End(["Validation Complete"])
+```
+
+**Diagram sources**
+- [ffmpeg_hpe/validate_run.py:467-521](file://ffmpeg_hpe/validate_run.py#L467-521)
+- [ffmpeg_hpe/validate_run.py:22-27](file://ffmpeg_hpe/validate_run.py#L22-27)
+- [ffmpeg_hpe/validate_run.py:73-90](file://ffmpeg_hpe/validate_run.py#L73-90)
+- [ffmpeg_hpe/validate_run.py:282-395](file://ffmpeg_hpe/validate_run.py#L282-395)
+
+**Section sources**
+- [ffmpeg_hpe/validate_run.py:1-521](file://ffmpeg_hpe/validate_run.py#L1-L521)
+
 ## Dependency Analysis
 - Container orchestration:
   - ffmpeg_hpe/docker-compose.yaml defines HPE, streaming server, GPU metrics collector, enhanced host PID monitor, and BCC tracer using host PID namespace and SYS_ADMIN privileges.
@@ -455,7 +494,8 @@ Plot --> Save["Save PNG"]
   - ffmpeg_hpe/bpftrace-tracer provides BCC-based packet filtering with dynamic port detection.
 - Comprehensive experiment validation:
   - ffmpeg_hpe/run_experiment.sh orchestrates complete experiment lifecycle with container management and data collection.
-  - ffmpeg_hpe/validate_run.py provides automated quality assurance with multi-stage validation checks.
+  - ffmpeg_hpe/validate_run.py provides automated quality assurance with multi-stage validation checks and enhanced port detection regex supporting both legacy and modern formats.
+  - ffmpeg_hpe/run_experiment_bcc.sh includes enhanced healthcheck configurations and resource management for more reliable service monitoring.
 - Metrics producers:
   - Enhanced /proc-based scripts produce CSV metrics consumed by Prometheus.
   - bpftrace and BCC programs produce network statistics with atomic file operations.
@@ -473,6 +513,7 @@ BPF --> BCC["bcc_rx_bytes.py"]
 MH["monitor_hpe/"] --> MON2["monitor_pid.sh"]
 SH["shared/perf_monitor/"] --> MON3["monitor_pid_perf.sh"]
 RE["run_experiment.sh"] --> VALID["validate_run.py"]
+REBCC["run_experiment_bcc.sh"] --> VALID
 DC["ffmpeg_hpe/docker-compose.yaml"] --> HPE["HPE"]
 DC --> STR["Streaming Server"]
 DC --> GPU["GPU Metrics"]
@@ -523,16 +564,18 @@ OUT --> GRAF["Grafana Dashboards"]
   - Multi-stage validation ensures experiment quality and reliability.
   - Automated checks validate exit codes, processed frames, JSON output, and metric consistency.
   - Cross-validation between BCC RX metrics and FFmpeg bytes-read ensures measurement accuracy.
+  - Enhanced port detection regex now supports both legacy "Monitoring HPE traffic on port X" and newer "BCC detected HPE video port: X" formats, eliminating spurious validation failures.
   - Structured validation reports provide detailed insights for performance analysis.
 - Resource efficiency:
   - Enhanced monitoring containers operate with reduced CPU and memory limits to minimize measurement interference.
   - Optimized sampling intervals balance accuracy with system overhead.
   - Experiment orchestration minimizes resource contention during validation.
+  - Enhanced healthcheck configurations with appropriate intervals and timeouts improve service reliability.
 - Network throughput:
   - TX/RX rates are computed per interval with proper rate calculation; ensure intervals align with Prometheus scrape frequency.
   - BCC-based filtering provides more accurate video traffic metrics compared to generic network monitoring.
 
-**Updated** Enhanced with considerations for comprehensive experiment validation and improved host-PID monitoring system optimizations.
+**Updated** Enhanced with considerations for comprehensive experiment validation, improved host-PID monitoring system optimizations, and enhanced port detection format compatibility.
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -570,6 +613,11 @@ Common issues and resolutions:
   - Verify that validation thresholds (CPU, memory, RX tolerance) are appropriate for workload.
   - Monitor validation report output for detailed failure analysis.
   - Ensure experiment orchestrator completes successfully before validation.
+- Enhanced port detection compatibility issues:
+  - Verify that port detection logs contain either "Monitoring HPE traffic on port X" or "BCC detected HPE video port: X" format.
+  - Check that the validation regex pattern correctly matches both legacy and modern port detection formats.
+  - Monitor port_info.txt file for proper port detection output format.
+  - Validate that the enhanced regex pattern "(?:Monitoring HPE traffic on port\s+|BCC detected HPE video port:\s*)([0-9]+)" is functioning correctly.
 
 Operational checks:
 - Validate container health and logs after startup, especially for docker inspect and bpftrace components.
@@ -579,8 +627,9 @@ Operational checks:
 - Test PID detection independently using docker inspect commands outside of monitoring context.
 - Verify experiment orchestration completes successfully before running validation.
 - Check validation report for PASS/FAIL status and detailed metrics analysis.
+- Verify enhanced port detection compatibility with both legacy and modern log formats.
 
-**Updated** Enhanced troubleshooting guidance for comprehensive experiment validation and improved host-PID monitoring system.
+**Updated** Enhanced troubleshooting guidance for comprehensive experiment validation, improved host-PID monitoring system, and enhanced port detection format compatibility.
 
 **Section sources**
 - [monitor_hpe/monitor_pid.sh:100-120](file://monitor_hpe/monitor_pid.sh#L100-L120)
@@ -592,11 +641,11 @@ Operational checks:
 - [ffmpeg_hpe/validate_run.py:467-521](file://ffmpeg_hpe/validate_run.py#L467-521)
 
 ## Comprehensive Experiment Validation
-The enhanced system now includes comprehensive experiment validation capabilities that provide automated quality assurance and detailed performance analysis.
+The enhanced system now includes comprehensive experiment validation capabilities that provide automated quality assurance and detailed performance analysis with improved port detection format compatibility.
 
 ```mermaid
 flowchart TD
-Start(["Start Experiment Validation"]) --> ParseArgs["Parse validation arguments<br/>tolerance thresholds, directories"]
+Start(["Start Enhanced Experiment Validation"]) --> ParseArgs["Parse validation arguments<br/>tolerance thresholds, directories"]
 ParseArgs --> FindLatest["Find latest results directory<br/>or use specified path"]
 FindLatest --> InitChecks["Initialize validation checks<br/>and metrics storage"]
 InitChecks --> ValidateExit["Validate HPE exit code<br/>must be 0 for success"]
@@ -604,11 +653,12 @@ ValidateExit --> ParseLogs["Parse HPE logs<br/>extract processed frames<br/>and 
 ParseLogs --> ValidateJSON["Validate JSON output<br/>presence, parsing, and sequence"]
 ValidateJSON --> ValidateTX["Validate Tx output<br/>payload bytes and structure"]
 ValidateTX --> ValidateBCC["Validate BCC RX metrics<br/>against FFmpeg bytes-read"]
-ValidateBCC --> ValidatePerf["Validate performance metrics<br/>CPU, memory, active PIDs"]
+ValidateBCC --> ValidatePort["Enhanced Port Detection<br/>Support Both Legacy & Modern Formats"]
+ValidatePort --> ValidatePerf["Validate performance metrics<br/>CPU, memory, active PIDs"]
 ValidatePerf --> ValidateGPU["Validate GPU metrics<br/>utilization, temperature, power"]
 ValidateGPU --> GenerateReport["Generate validation report<br/>JSON and TXT output"]
 GenerateReport --> Status["Set overall PASS/FAIL status<br/>based on all checks"]
-Status --> End(["Validation Complete"])
+Status --> End(["Enhanced Validation Complete"])
 ```
 
 **Diagram sources**
@@ -618,7 +668,7 @@ Status --> End(["Validation Complete"])
 - [ffmpeg_hpe/validate_run.py:282-395](file://ffmpeg_hpe/validate_run.py#L282-395)
 
 ### Validation Workflow Components
-The validation system performs multi-stage checks across different aspects of the experiment:
+The validation system performs multi-stage checks across different aspects of the experiment with enhanced port detection compatibility:
 
 **Stage 1: Container Health and Exit Status**
 - Validates HPE container exit code equals 0 for successful completion
@@ -638,6 +688,7 @@ The validation system performs multi-stage checks across different aspects of th
 **Stage 4: Network Accuracy Verification**
 - Cross-validates BCC RX metrics against FFmpeg bytes-read
 - Validates port detection accuracy for video traffic filtering
+- Enhanced port detection now supports both legacy "Monitoring HPE traffic on port X" and newer "BCC detected HPE video port: X" formats
 - Ensures RX/TX byte consistency across monitoring approaches
 
 **Stage 5: Performance Metrics Analysis**
@@ -650,13 +701,19 @@ The validation system performs multi-stage checks across different aspects of th
 - Checks power consumption metrics for safety thresholds
 - Ensures GPU metrics consistency across monitoring periods
 
+**Enhanced Port Detection Compatibility**
+- The validation system now uses an enhanced regex pattern that supports both legacy and modern port detection log formats
+- Legacy format: "Monitoring HPE traffic on port X"
+- Modern format: "BCC detected HPE video port: X"
+- This eliminates spurious validation failures that previously occurred when using the newer log format
+
 **Section sources**
 - [ffmpeg_hpe/validate_run.py:1-521](file://ffmpeg_hpe/validate_run.py#L1-L521)
 
 ## Conclusion
-The HPE framework's performance monitoring stack now features an enhanced host-PID monitoring system with improved bpftrace-based process tracking, comprehensive experiment validation capabilities, accurate HPE process measurement using docker inspect for host PID detection, and refined error handling for PID detection failures. The new architecture provides reliable process identification through host PID namespace operation with SYS_ADMIN privileges, while the enhanced bpftrace monitoring offers optimized cadence control and improved PID filtering. Combined with BCC-based packet filtering for precise video traffic analysis, per-process metrics (CPU, memory, network), GPU telemetry, comprehensive experiment validation, and Prometheus-based ingestion, this enables Grafana-driven KPIs, trend analysis, and capacity planning. The addition of automated quality assurance ensures experiment reliability and measurement accuracy through multi-stage validation checks. By tuning sampling intervals, implementing robust error handling, validating exporter connectivity, and leveraging comprehensive experiment validation, teams can maintain comprehensive visibility into system performance and quickly identify bottlenecks and degradation across containerized HPE workloads.
+The HPE framework's performance monitoring stack now features an enhanced host-PID monitoring system with improved bpftrace-based process tracking, comprehensive experiment validation capabilities with enhanced port detection format compatibility, accurate HPE process measurement using docker inspect for host PID detection, and refined error handling for PID detection failures. The new architecture provides reliable process identification through host PID namespace operation with SYS_ADMIN privileges, while the enhanced bpftrace monitoring offers optimized cadence control and improved PID filtering. Combined with BCC-based packet filtering for precise video traffic analysis, per-process metrics (CPU, memory, network), GPU telemetry, comprehensive experiment validation with enhanced port detection compatibility, and Prometheus-based ingestion, this enables Grafana-driven KPIs, trend analysis, and capacity planning. The addition of automated quality assurance ensures experiment reliability and measurement accuracy through multi-stage validation checks, with enhanced port detection support for both legacy and modern log formats. By tuning sampling intervals, implementing robust error handling, validating exporter connectivity, leveraging comprehensive experiment validation, and ensuring proper healthcheck configurations and resource management, teams can maintain comprehensive visibility into system performance and quickly identify bottlenecks and degradation across containerized HPE workloads.
 
-**Updated** Enhanced conclusion to reflect the benefits of comprehensive experiment validation and improved host-PID monitoring system.
+**Updated** Enhanced conclusion to reflect the benefits of comprehensive experiment validation, improved host-PID monitoring system, and enhanced port detection format compatibility.
 
 ## Appendices
 
@@ -672,8 +729,11 @@ The HPE framework's performance monitoring stack now features an enhanced host-P
 - Configure experiment validation thresholds appropriate for workload characteristics.
 - Test comprehensive validation workflow with sample experiment data.
 - Verify automated validation report generation and interpretation.
+- Ensure enhanced port detection compatibility with both legacy and modern log formats.
+- Configure appropriate healthcheck settings with suitable intervals and timeouts for reliable service monitoring.
+- Implement proper resource management with optimized CPU and memory limits for monitoring containers.
 
-**Updated** Enhanced setup guidance for comprehensive experiment validation and improved host-PID monitoring system.
+**Updated** Enhanced setup guidance for comprehensive experiment validation, improved host-PID monitoring system, enhanced port detection format compatibility, and reliable healthcheck configurations.
 
 **Section sources**
 - [prometheus.yml:1-8](file://prometheus.yml#L1-L8)
@@ -683,3 +743,5 @@ The HPE framework's performance monitoring stack now features an enhanced host-P
 - [ffmpeg_hpe/bpftrace-tracer/entrypoint.sh:18-23](file://ffmpeg_hpe/bpftrace-tracer/entrypoint.sh#L18-L23)
 - [ffmpeg_hpe/run_experiment.sh:1-279](file://ffmpeg_hpe/run_experiment.sh#L1-L279)
 - [ffmpeg_hpe/validate_run.py:1-521](file://ffmpeg_hpe/validate_run.py#L1-L521)
+- [AGENTS.md:192-193](file://AGENTS.md#L192-L193)
+- [docs/bcc-bpf-tracing.md:143-176](file://docs/bcc-bpf-tracing.md#L143-L176)

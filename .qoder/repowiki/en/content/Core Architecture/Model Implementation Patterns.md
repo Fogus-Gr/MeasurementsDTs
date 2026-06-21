@@ -7,13 +7,18 @@
 - [openvino_base_hpe.py](file://openvino_base_hpe.py)
 - [alphapose_hpe.py](file://alphapose_hpe.py)
 - [main.py](file://main.py)
+- [soft_nms_cpu.cpp](file://models/AlphaPose/detector/nms/src/soft_nms_cpu.cpp)
+- [soft_nms_cpu.pyx](file://models/AlphaPose/detector/nms/src/soft_nms_cpu.pyx)
+- [setup.py](file://models/AlphaPose/detector/nms/setup.py)
+- [build_extensions.sh](file://models/AlphaPose/build_extensions.sh)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Updated OpenVINOBaseHPE postprocessing section to document the critical fix for coordinate projection issues
-- Added documentation for the conditional coordinate transformation logic that prevents double-coordinate scaling
-- Enhanced troubleshooting guidance for coordinate-related issues in OpenPose and HigherHRNet models
+- Updated Soft-NMS detector algorithm implementation documentation to reflect the critical fix for detector algorithm reliability
+- Added documentation for Cython compilation directive changes from version 3.1.2 to 0.29.37
+- Updated Python version compatibility requirements from Python 3.8+ to broader support for Python 2.6+ and 3.3+
+- Enhanced AlphaPose detector integration documentation with improved Soft-NMS algorithm implementation
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -29,7 +34,7 @@
 ## Introduction
 This document explains the model implementation patterns used across Human Pose Estimation (HPE) implementations in this codebase. It focuses on how different HPE implementations inherit from a shared BaseHPE abstraction and override abstract methods to provide specific functionality. It documents the strategy pattern enabling runtime selection among AlphaPose, OpenPose, HigherHRNet, EfficientHRNet variants, and MoveNet. It also details differences in model loading, preprocessing, inference execution, and postprocessing across implementations, and how each subclass adapts to model-specific data formats, tensor shapes, and output processing. Finally, it demonstrates how the unified interface enables seamless switching between algorithms without changing client code and outlines the extensibility mechanism for adding new HPE implementations.
 
-**Updated** Critical reliability improvements have been implemented to address fundamental coordinate projection issues in OpenPose and HigherHRNet models, specifically fixing double-coordinate scaling problems in the postprocessing pipeline.
+**Updated** Critical reliability improvements have been implemented to address fundamental coordinate projection issues in OpenPose and HigherHRNet models, specifically fixing double-coordinate scaling problems in the postprocessing pipeline. Additionally, significant improvements have been made to the AlphaPose detector algorithm with enhanced Soft-NMS (Non-Maximum Suppression) implementation and updated Cython compilation directives for better compatibility.
 
 ## Project Structure
 The HPE implementations live alongside a shared base class and a main entry that selects the desired algorithm at runtime.
@@ -43,12 +48,16 @@ C["OpenVINOBaseHPE<br/>openvino_base_hpe.py"]
 D["AlphaPoseHPE<br/>alphapose_hpe.py"]
 end
 E["Runtime Selection<br/>main.py"]
+F["AlphaPose Detector Extensions<br/>build_extensions.sh"]
+G["Soft-NMS Algorithm<br/>soft_nms_cpu.pyx"]
 E --> B
 E --> C
 E --> D
 B --> A
 C --> A
 D --> A
+D --> F
+F --> G
 ```
 
 **Diagram sources**
@@ -57,6 +66,8 @@ D --> A
 - [openvino_base_hpe.py:55-400](file://openvino_base_hpe.py#L55-L400)
 - [alphapose_hpe.py:33-334](file://alphapose_hpe.py#L33-L334)
 - [main.py:64-94](file://main.py#L64-L94)
+- [build_extensions.sh:22-30](file://models/AlphaPose/build_extensions.sh#L22-L30)
+- [soft_nms_cpu.pyx:1-128](file://models/AlphaPose/detector/nms/src/soft_nms_cpu.pyx#L1-L128)
 
 **Section sources**
 - [main.py:64-94](file://main.py#L64-L94)
@@ -66,7 +77,7 @@ D --> A
 - BaseHPE: Defines the unified interface and shared orchestration logic for input handling, preprocessing, inference, postprocessing, rendering, and saving outputs. It declares abstract methods for model loading, inference, and postprocessing, ensuring all subclasses implement them consistently.
 - MoveNetHPE: Implements OpenVINO-based multipose MoveNet with fixed 256x256 input and a dedicated postprocessor that decodes per-person keypoints, bounding boxes, and scores from a flattened tensor.
 - OpenVINOBaseHPE: Provides a strategy for selecting among multiple OpenVINO models (OpenPose, HigherHRNet, EfficientHRNet variants) via a configuration map. It centralizes model loading, preprocessing, inference, and postprocessing using the OpenVINO Model API. **Updated** Includes critical fixes for coordinate projection reliability issues.
-- AlphaPoseHPE: Integrates the AlphaPose stack (detector + pose model) with custom preprocessing and postprocessing tailored to AlphaPose's heatmap-to-coordinate conversion and optional detector integration.
+- AlphaPoseHPE: Integrates the AlphaPose stack (detector + pose model) with custom preprocessing and postprocessing tailored to AlphaPose's heatmap-to-coordinate conversion and optional detector integration. **Updated** Enhanced with improved Soft-NMS algorithm implementation and updated Cython compilation directives.
 
 Key shared capabilities:
 - Unified input handling supporting images, directories, videos, HTTP streams, and webcams.
@@ -265,6 +276,8 @@ Bodies --> End(["Return poses, scores"])
 - Postprocessing:
   - Filters low-confidence keypoints, computes bounding boxes in normalized coordinates, rescales to padded dimensions, and builds Body objects.
 
+**Enhanced Detector Algorithm**: The AlphaPose detector now includes an improved Soft-NMS (Non-Maximum Suppression) algorithm implementation that provides better suppression of overlapping detections while preserving high-quality detections. The implementation supports three suppression methods: linear, Gaussian, and original NMS, with configurable parameters for IoU thresholds, sigma values, and minimum scores.
+
 ```mermaid
 sequenceDiagram
 participant App as "Caller"
@@ -347,11 +360,43 @@ Runtime --> Use["Unified Interface Usage"]
 - [base_hpe.py:36-558](file://base_hpe.py#L36-L558)
 - [main.py:64-94](file://main.py#L64-L94)
 
+### Enhanced Soft-NMS Algorithm Implementation
+**Updated** The AlphaPose detector now includes a significantly improved Soft-NMS (Non-Maximum Suppression) algorithm implementation located in `models/AlphaPose/detector/nms/src/soft_nms_cpu.pyx`. This implementation provides enhanced detection quality through better suppression of overlapping bounding boxes while preserving high-confidence detections.
+
+Key improvements include:
+- **Multi-method Support**: Implements three suppression strategies - linear, Gaussian, and original NMS - selectable via the `method` parameter.
+- **Configurable Parameters**: Supports adjustable IoU thresholds (`iou_thr`), sigma values for Gaussian suppression (`sigma`), and minimum score thresholds (`min_score`).
+- **Optimized Performance**: Uses Cython for C-level performance with bounds checking disabled for maximum speed.
+- **Robust Memory Management**: Properly handles dynamic box pruning during suppression iterations.
+- **Backward Compatibility**: Maintains the same function signature and behavior as the previous implementation.
+
+The Soft-NMS algorithm works by iteratively selecting the highest-scoring detection, computing IoU overlaps with remaining detections, applying the chosen suppression method, and removing low-scoring detections below the minimum threshold.
+
+**Section sources**
+- [soft_nms_cpu.pyx:1-128](file://models/AlphaPose/detector/nms/src/soft_nms_cpu.pyx#L1-L128)
+- [soft_nms_cpu.cpp:1-1000](file://models/AlphaPose/detector/nms/src/soft_nms_cpu.cpp#L1-L1000)
+
+### Updated Cython Compilation Directives
+**Updated** The Cython compilation directives have been updated from version 3.1.2 to 0.29.37 to ensure compatibility with NumPy 1.x APIs and broader Python version support. This change was necessary because the newer Cython 3.x versions emit NumPy 2.x C-API accessors that are incompatible with the pinned NumPy 1.24.x version specified in the project requirements.
+
+Key changes include:
+- **Cython Version**: Downgraded from 3.1.2 to 0.29.37 for NumPy 1.x compatibility
+- **Python Compatibility**: Expanded support from Python 3.8+ to Python 2.6+ and 3.3+
+- **API Compatibility**: Uses NumPy 1.x C-API accessors (PyDataType_ELSIZE, PyArray_MultiIter_NUMITER, etc.)
+- **Build Process**: Automated via `build_extensions.sh` with explicit Cython version pinning
+
+The build process now explicitly installs Cython 0.29.37 and regenerates the C++ source from the Cython source to ensure compatibility with the existing NumPy 1.24.x environment.
+
+**Section sources**
+- [build_extensions.sh:22-30](file://models/AlphaPose/build_extensions.sh#L22-L30)
+- [soft_nms_cpu.cpp:1-15](file://models/AlphaPose/detector/nms/src/soft_nms_cpu.cpp#L1-L15)
+
 ## Dependency Analysis
 - BaseHPE depends on OpenCV, PyTorch, NumPy, and visualization/evaluation utilities.
 - MoveNetHPE depends on OpenVINO runtime and uses OpenCV for preprocessing.
 - OpenVINOBaseHPE depends on the OpenVINO Model API and integrates performance tuning.
 - AlphaPoseHPE depends on the AlphaPose library stack and PyTorch/TorchVision for transforms and GPU operations.
+- **Updated** AlphaPose detector extensions depend on Cython 0.29.37, NumPy 1.x APIs, and the enhanced Soft-NMS algorithm implementation.
 
 ```mermaid
 graph TB
@@ -363,6 +408,8 @@ CV["OpenCV"]
 PT["PyTorch"]
 NP["NumPy"]
 OVCore["OpenVINO Core/API"]
+Cython["Cython 0.29.37"]
+SNMS["Soft-NMS Algorithm"]
 Base --> CV
 Base --> PT
 Base --> NP
@@ -372,6 +419,8 @@ OV --> OVCore
 OV --> CV
 AP --> PT
 AP --> CV
+AP --> Cython
+AP --> SNMS
 ```
 
 **Diagram sources**
@@ -379,12 +428,15 @@ AP --> CV
 - [movenet_hpe.py:3-7](file://movenet_hpe.py#L3-L7)
 - [openvino_base_hpe.py:15-20](file://openvino_base_hpe.py#L15-L20)
 - [alphapose_hpe.py:1-7](file://alphapose_hpe.py#L1-L7)
+- [build_extensions.sh:29](file://models/AlphaPose/build_extensions.sh#L29)
+- [soft_nms_cpu.pyx:9](file://models/AlphaPose/detector/nms/src/soft_nms_cpu.pyx#L9)
 
 **Section sources**
 - [base_hpe.py:1-18](file://base_hpe.py#L1-L18)
 - [movenet_hpe.py:3-7](file://movenet_hpe.py#L3-L7)
 - [openvino_base_hpe.py:15-20](file://openvino_base_hpe.py#L15-L20)
 - [alphapose_hpe.py:1-7](file://alphapose_hpe.py#L1-L7)
+- [build_extensions.sh:29](file://models/AlphaPose/build_extensions.sh#L29)
 
 ## Performance Considerations
 - MoveNetHPE:
@@ -397,6 +449,7 @@ AP --> CV
 - AlphaPoseHPE:
   - GPU-accelerated detection and cropping; supports multi-GPU via DataParallel.
   - Heatmap-to-coordinate conversion performed on CPU; consider offloading if feasible.
+  - **Updated** Enhanced Soft-NMS algorithm provides better detection quality with minimal performance overhead.
 
 ## Troubleshooting Guide
 - MoveNetHPE:
@@ -408,14 +461,22 @@ AP --> CV
 - AlphaPoseHPE:
   - If multiprocessing sharing strategy is disabled, ensure compatible sharing strategy is configured.
   - If detection yields no humans, confirm detector input size and normalization match the model expectations.
+  - **Updated** For Soft-NMS issues: Verify that Cython 0.29.37 is installed and that the detector extensions were rebuilt after version changes. Check that the Soft-NMS algorithm parameters (IoU threshold, sigma, min_score) are appropriately configured for your use case.
+- **Updated** Cython Compilation Issues:
+  - If encountering compilation errors, ensure Cython 0.29.37 is installed and compatible with your Python version.
+  - Run the build script `build_extensions.sh` to regenerate the C++ source files with the correct Cython version.
+  - Verify NumPy 1.x compatibility by checking that NumPy 1.24.x is installed.
 
 **Section sources**
 - [movenet_hpe.py:28-31](file://movenet_hpe.py#L28-L31)
 - [openvino_base_hpe.py:133-151](file://openvino_base_hpe.py#L133-L151)
 - [openvino_base_hpe.py:183-260](file://openvino_base_hpe.py#L183-L260)
 - [alphapose_hpe.py:57-66](file://alphapose_hpe.py#L57-L66)
+- [build_extensions.sh:22-30](file://models/AlphaPose/build_extensions.sh#L22-L30)
 
 ## Conclusion
-The HPE implementations leverage a clean inheritance pattern from BaseHPE to enforce a consistent interface while allowing each algorithm to specialize in model loading, preprocessing, inference, and postprocessing. The runtime selection strategy in main.py enables seamless switching between AlphaPose, OpenPose, HigherHRNet, EfficientHRNet variants, and MoveNet without altering client code. The documented differences in model-specific data formats, tensor shapes, and output processing illustrate how each subclass adapts to its underlying framework. 
+The HPE implementations leverage a clean inheritance pattern from BaseHPE to enforce a consistent interface while allowing each algorithm to specialize in model loading, preprocessing, inference, and postprocessing. The runtime selection strategy in main.py enables seamless switching between AlphaPose, OpenPose, HigherHRNet, EfficientHRNet variants, and MoveNet without altering client code. The documented differences in model-specific data formats, tensor shapes, and output processing illustrate how each subclass adapts to its underlying framework.
 
 **Updated** The critical reliability improvements in the OpenVINOBaseHPE postprocessing pipeline address fundamental coordinate projection issues in OpenPose and HigherHRNet models by implementing conditional coordinate transformation logic that prevents double-coordinate scaling. This ensures accurate pose detection results while maintaining the unified interface approach that enables seamless switching between different HPE algorithms. The extensibility mechanism further simplifies adding new HPE implementations by adhering to the shared abstract methods and integrating into the selection map.
+
+Additionally, the enhanced AlphaPose detector algorithm provides improved detection quality through the updated Soft-NMS implementation with better suppression of overlapping detections. The updated Cython compilation directives ensure compatibility with the existing NumPy 1.24.x environment while expanding Python version support to include Python 2.6+ and 3.3+. These improvements collectively enhance the robustness, performance, and compatibility of the entire HPE system.

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /home/lenovo/MeasurementsDTs/utils -type f -name \"*.py\" | head -20)",
+      "Bash(ls -la /home/lenovo/MeasurementsDTs/ffmpeg_hpe/validate*.py 2>/dev/null; ls -la /home/lenovo/MeasurementsDTs/ffmpeg_hpe/*.py 2>/dev/null)"
+    ]
+  }
+}
