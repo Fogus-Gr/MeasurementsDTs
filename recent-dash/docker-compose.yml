@@ -82,24 +82,39 @@ services:
           cpus: '${HTTP_CLIENT_CPU_LIMIT:-0.5}'
           memory: ${HTTP_CLIENT_MEMORY_LIMIT:-512M}
 
-  mpv:
+  # mpv:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile_mpv
+  #   image: dash-caching:mpv
+  #   depends_on:
+  #     - http_client
+  #   restart: unless-stopped
+  #   environment:
+  #     - DASH_PLAYER_URL=http://http_client/manifest.mpd
+  #     - DASH_PLAYER_WARMUP_SECONDS=${DASH_PLAYER_WARMUP_SECONDS:-30}
+  #     - DASH_PLAYER_RETRY_DELAY_SECONDS=${DASH_PLAYER_RETRY_DELAY_SECONDS:-1}
+  #     - DASH_PLAYER_START_DELAY_SECONDS=${DASH_PLAYER_START_DELAY_SECONDS:-5}
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '${MPV_CPU_LIMIT:-0.5}'
+  #         memory: ${MPV_MEMORY_LIMIT:-512M}
+
+  cvlc:
     build:
       context: .
-      dockerfile: Dockerfile_mpv
-    image: dash-caching:mpv
+      dockerfile: Dockerfile
+    image: cvlc-dash-player
     depends_on:
       - http_client
     restart: unless-stopped
-    environment:
-      - DASH_PLAYER_URL=http://http_client/manifest.mpd
-      - DASH_PLAYER_WARMUP_SECONDS=${DASH_PLAYER_WARMUP_SECONDS:-30}
-      - DASH_PLAYER_RETRY_DELAY_SECONDS=${DASH_PLAYER_RETRY_DELAY_SECONDS:-1}
-      - DASH_PLAYER_START_DELAY_SECONDS=${DASH_PLAYER_START_DELAY_SECONDS:-5}
+    command: [ "http://http_client/manifest.mpd", "--vout=dummy", "--aout=dummy" ]
     deploy:
       resources:
         limits:
-          cpus: '${MPV_CPU_LIMIT:-0.5}'
-          memory: ${MPV_MEMORY_LIMIT:-512M}
+          cpus: '${CVLC_CPU_LIMIT:-0.5}'
+          memory: ${CVLC_MEMORY_LIMIT:-512M}
 
   perf_monitor:
     build:
@@ -117,9 +132,9 @@ services:
       - SYS_ADMIN
       - SYS_NICE
       - IPC_LOCK
-      - SYS_PTRACE  # Add this for process monitoring
+      - SYS_PTRACE # Add this for process monitoring
     privileged: true
-    user: root  # Ensure running as root
+    user: root # Ensure running as root
     deploy:
       resources:
         limits:
@@ -143,33 +158,27 @@ services:
       - apparmor:unconfined
       - seccomp:unconfined
     environment:
-      - NETIF=${DASH_TRACE_INTERFACE:-any}  # Capture Docker bridge traffic by default
+      - NETIF=${DASH_TRACE_INTERFACE:-any} # Capture Docker bridge traffic by default
       - DASH_SERVER_IP=${DASH_SERVER_IP:-}
       - DASH_PROXY_IP=${DASH_PROXY_IP:-}
       - DASH_CLIENT_IP=${DASH_CLIENT_IP:-}
       - DASH_PLAYER_IP=${DASH_PLAYER_IP:-}
       - TRACE_INTERVAL_MS=${TRACE_INTERVAL_MS:-10}
     volumes:
-      - /sys/kernel/debug:/sys/kernel/debug  # Required for bpftrace
-      - /lib/modules:/lib/modules:ro  # Required for bpftrace
-      - ./bpftrace-tracer:/opt/tracer  # Ensure ./bpftrace-tracer exists
-      - ./traces:/opt/tracer/output  # Ensure ./traces is cleaned up before starting
+      - /sys/kernel/debug:/sys/kernel/debug # Required for bpftrace
+      - /lib/modules:/lib/modules:ro # Required for bpftrace
+      - ./bpftrace-tracer:/opt/tracer # Ensure ./bpftrace-tracer exists
+      - ./traces:/opt/tracer/output # Ensure ./traces is cleaned up before starting
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
       - /sys:/sys:ro
     working_dir: /opt/tracer
-    entrypoint: ["/bin/bash", "-c"]
+    entrypoint: [ "/bin/bash", "-c" ]
     command: ./trace_container_net.sh
     deploy:
       resources:
         limits:
           cpus: '${TRACE_CONTAINER_CPU_LIMIT:-0.5}'
           memory: ${TRACE_CONTAINER_MEMORY_LIMIT:-256M}
-
-  # mpv:
-  # build: ./mpv
-  # entrypoint: >
-  #   mpv --vo=null --ao=pcm --no-terminal
-  #   http://http_client/manifest.mpd
 
 networks:
   default:
