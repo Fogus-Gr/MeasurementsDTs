@@ -174,11 +174,11 @@ Per person (up to 6):
 ```
 models/OpenVINO/pretrained_models/
 ├── intel/
-│   ├── human-pose-estimation-0001/human-pose-estimation-0001.xml  (openpose)
-│   ├── human-pose-estimation-0006/FP32/human-pose-estimation-0006.xml  (ae2)
-│   └── human-pose-estimation-0007/FP32/human-pose-estimation-0007.xml  (ae3)
+│   └── human-pose-estimation-0001/human-pose-estimation-0001.xml  (openpose)
 └── public/
     ├── human-pose-estimation-0005/FP32/human-pose-estimation-0005.xml  (ae1)
+    ├── human-pose-estimation-0006/FP32/human-pose-estimation-0006.xml  (ae2)
+    ├── human-pose-estimation-0007/FP32/human-pose-estimation-0007.xml  (ae3)
     └── FP32/higher-hrnet-w32-human-pose-estimation.xml  (hrnet)
 ```
 

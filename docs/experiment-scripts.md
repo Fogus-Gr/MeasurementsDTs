@@ -277,7 +277,7 @@ utilization.gpu,utilization.memory,memory.total,memory.free,memory.used \
 
 ---
 
-### Measure_plot_cpu_perf/run_perf_plot.sh (25 lines)
+### Measure_plot_cpu_perf/run_perf_plot.sh (25 lines) (see [README](file:///home/lenovo/MeasurementsDTs/Measure_plot_cpu_perf/README.md))
 
 #### Purpose
 
@@ -314,7 +314,7 @@ Run the Linux `perf stat` tool against target processes and generate performance
 | Local process monitoring (no streaming) | `run_experiment.sh` | `monitor_hpe/` |
 | Run with a specific video file | `run_with_video.sh` | `monitor_hpe/` |
 | Standalone GPU metrics (sidecar) | `run_nvidia_dcgm.sh` | `Measure_gpu_dcgm/` |
-| CPU perf stat + plot | `run_perf_plot.sh` | `Measure_plot_cpu_perf/` |
+| CPU perf stat + plot | `run_perf_plot.sh` | `Measure_plot_cpu_perf/` (see [README](file:///home/lenovo/MeasurementsDTs/Measure_plot_cpu_perf/README.md)) |
 
 ---
 
