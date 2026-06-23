@@ -232,7 +232,6 @@ class OpenVINOBaseHPE(BaseHPE):
                 'target_size': None,
                 'aspect_ratio': aspect_ratio,
                 'confidence_threshold': self.score_thresh,
-                'use_pooled_heatmaps': False,
                 'upsample_ratio': 4,
             }
         else:

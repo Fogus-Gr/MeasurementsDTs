@@ -47,8 +47,8 @@ sudo apt install -y \
     autoconf \
     automake \
     make \
-    gcc-9 \
-    g++-9 \
+    gcc \
+    g++ \
     ccache \
     zlib1g-dev \
     libssl-dev \
@@ -113,9 +113,9 @@ if ! command -v nvcc &> /dev/null; then
 fi
 
 # Set compiler environment
-export CC="ccache gcc-9"
-export CXX="ccache g++-9"
-export CUDAHOSTCXX="ccache g++-9"
+export CC="ccache gcc"
+export CXX="ccache g++"
+export CUDAHOSTCXX="ccache g++"
 
 # Test nvcc
 echo -e "${GREEN}🧪 Testing nvcc...${NC}"
@@ -157,7 +157,7 @@ cd ffmpeg
 # Configure FFmpeg with CUDA support (matching your Docker configuration)
 echo -e "${GREEN}⚙️  Configuring FFmpeg with CUDA support...${NC}"
 PKG_CONFIG_PATH="${INSTALL_PREFIX}/lib/pkgconfig:${CUDA_HOME}/lib64/pkgconfig" \
-CC=/usr/bin/gcc-9 CXX=/usr/bin/g++-9 \
+CC=gcc CXX=g++ \
 ./configure \
     --enable-nonfree \
     --enable-gpl \

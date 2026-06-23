@@ -264,14 +264,58 @@ Each experiment rig lives in its own folder with an entry script (`run_experimen
 7. Tear everything down
 
 ```mermaid
-graph TD
-    A[run_experiment.sh / run_experiment_bcc.sh] --> B[docker-compose.yaml]
-    B --> C[hpe\nruns main.py against a live stream]
-    B --> D[h264-streaming-server\nserves video over HTTP/H.264]
-    B --> E[perf_monitor\nsamples CPU/memory/network]
-    B --> F[gpu-metrics\npolls nvidia-smi]
-    B --> G[bcc-tracer / bpftrace\neBPF network tracing - optional]
-    D --> C
+%%{init: {"flowchart": {"nodeSpacing": 25, "rankSpacing": 30, "curve": "linear"}} }%%
+flowchart TB
+    %% Orchestration
+    Orch["run_experiment.sh<br/>(Orchestrator)"]
+    Stack["HPE Engine + Video Streamer<br/>(Docker Compose)"]
+
+    %% Runtime
+    Streamer["stream_video_server<br/>(Flask / RTSP)"]
+    HPE["HPE Engine<br/>(main.py)"]
+    OutKeypoints["out/<br/>COCO JSON / CSV keypoints"]
+
+    %% Sidecars
+    PerfMon["perf_monitor<br/>pidstat + bpftrace"]
+    BCCTrace["bcc-tracer<br/>eBPF RX tracing"]
+    GPUMetrics["gpu-metrics<br/>nvidia-smi"]
+
+    %% CSV outputs
+    CSV1["out/perf/pid_metrics.csv"]
+    CSV2["out/perf/hpe_video_rx.csv"]
+    CSV3["out/perf/gpu_metrics.csv"]
+
+    %% Main flow
+    Orch -->|"launches"| Stack
+    Stack --> Streamer
+    Stack --> HPE
+
+    Streamer -->|"video frames"| HPE
+    HPE -->|"predictions"| OutKeypoints
+
+    %% Monitoring flow
+    HPE -.->|"CPU, RAM, TX"| PerfMon
+    HPE -.->|"video RX bytes"| BCCTrace
+    HPE -.->|"GPU util, temp, power"| GPUMetrics
+
+    PerfMon -->|"writes"| CSV1
+    BCCTrace -->|"writes"| CSV2
+    GPUMetrics -->|"writes"| CSV3
+
+    %% Styling
+    classDef orch fill:#1f2937,stroke:#374151,stroke-width:2px,color:#fff
+    classDef stack fill:#1e3a8a,stroke:#3b82f6,stroke-width:2px,color:#fff
+    classDef hpe fill:#0f766e,stroke:#14b8a6,stroke-width:2px,color:#fff
+    classDef streamer fill:#b45309,stroke:#f59e0b,stroke-width:2px,color:#fff
+    classDef sidecar fill:#eef2ff,stroke:#a78bfa,stroke-width:2px,color:#111827
+    classDef output fill:#eef2ff,stroke:#a78bfa,stroke-width:2px,color:#111827
+
+    class Orch orch
+    class Stack stack
+    class HPE hpe
+    class Streamer streamer
+    class PerfMon,BCCTrace,GPUMetrics sidecar
+    class OutKeypoints,CSV1,CSV2,CSV3 output
 ```
 
 ### Experiment Rigs at a Glance
@@ -284,7 +328,7 @@ graph TD
 | `rtsp-ipcam/` | `start_server.sh` | — (is the server) | ❌ | — | Shared H.264 streaming server used by `ffmpeg_hpe/` |
 | `Measure_Flops/` | `measure_flops.sh` | Any HPE command | ✅ | GPU FLOPS, TOPS, memory BW | One-shot Nsight Compute profiling |
 | `Measure_gpu_dcgm/` | `run_nvidia_dcgm.sh` | — (sidecar) | ❌ | GPU util, temp, power | Standalone GPU telemetry collector |
-| `Measure_plot_cpu_perf/` | `run_perf_plot.sh` | PID file | ❌ | CPU cycles via `perf stat` | Standalone CPU cycle counter |
+| `Measure_plot_cpu_perf/` | `run_perf_plot.sh` | PID file | ❌ | CPU cycles via `perf stat` | Standalone CPU cycle counter (see [README](file:///home/lenovo/MeasurementsDTs/Measure_plot_cpu_perf/README.md)) |
 
 ### Experiment Rigs
 
@@ -352,21 +396,13 @@ Not an experiment itself — the reusable streaming server consumed by `ffmpeg_h
 |---|---|---|
 | `Measure_Flops/measure_flops.sh` | GPU FLOPS, TOPS, memory bandwidth, warp latency | NVIDIA Nsight Compute (`ncu`) + `nvidia-smi` + `ps` |
 | `Measure_gpu_dcgm/run_nvidia_dcgm.sh` | GPU power, temperature, utilisation, memory | `nvidia-smi` polling loop → CSV; `plot_smi_output.py` generates PNG charts |
-| `Measure_plot_cpu_perf/run_perf_plot.sh` | CPU cycles and clock | Reads PID from `/pids/dash.pid`, runs `perf stat -p`, plots with `plot_perf_metrics.py` |
+| `Measure_plot_cpu_perf/run_perf_plot.sh` | CPU cycles and clock | Reads PID from `/pids/dash.pid`, runs `perf stat -p`, plots with `plot_perf_metrics.py` (see [README](file:///home/lenovo/MeasurementsDTs/Measure_plot_cpu_perf/README.md)) |
 
-### CPU Optimisations (`optimizations/`)
+### CPU Optimisations 
+The original Python-based CPU optimization scripts have been retired because they are incompatible with the current Docker-based streaming architecture. 
 
-OpenVINO thread/stream tuning targeted at 4-vCPU AMD EPYC cloud instances:
-
-- `cpu_performance_optimizer.py` — auto-detects CPU topology and computes optimal OpenVINO thread/stream config
-- `enhanced_openvino_hpe.py` — drop-in replacement for `OpenVINOBaseHPE` with the optimisations applied
-- `optimized_main.py` — CLI wrapper with `--enable-cpu-opt` and `--benchmark` flags
-
-```bash
-python3 optimizations/optimized_main.py --method openpose --input video.mp4 --device CPU --enable-cpu-opt
-```
-
-See `optimizations/README.md` and `OPTIMIZATION_PLAN.md` for configuration details and expected performance gains.
+For the modern approach to tuning OpenVINO thread allocation and performance modes using cgroups and `.env` variables, please read the new guide:
+- **`docs/CPU_TUNING_GUIDE.md`**
 
 ### Root-level Dockerfiles
 
@@ -453,4 +489,4 @@ These are confirmed issues in the codebase. Fixes marked ✅ are already applied
 - Results are written to a timestamped directory (`results_<container_type>_<cpu_model>_<timestamp>/`) so runs never overwrite each other.
 - The eBPF/bpftrace tracer (`bcc-tracer`) requires a kernel with BPF support (`CONFIG_BPF=y`, kernel ≥ 4.4) and debug symbols. It is present in `ffmpeg_hpe/` but commented out in docker-compose by default.
 - `recent-dash/` is a separate research thread (DASH caching) that shares the monitoring infrastructure but is unrelated to HPE inference.
-- Several files at the root (`full_shell_history.txt`, `hist.txt`, `bug.md`, `*.bak`, `original.py`) are development artefacts that have not been cleaned up.
+

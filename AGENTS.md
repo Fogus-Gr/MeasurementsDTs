@@ -47,8 +47,8 @@ recent-dash/                   # Rig 3: DASH/HTTP caching experiment (separate r
 rtsp-ipcam/                    # Shared H.264 streaming server used by ffmpeg_hpe/ and ffmpeg_hpe_cpu/
 Measure_Flops/                 # Standalone: GPU FLOPS via Nsight Compute
 Measure_gpu_dcgm/              # Standalone: GPU power/temp/util via nvidia-smi
-Measure_plot_cpu_perf/         # Standalone: CPU cycles via perf stat
-optimizations/                 # OpenVINO CPU thread/stream tuning for 4-vCPU cloud instances
+Measure_plot_cpu_perf/         # Standalone: CPU cycles via perf stat (see [README](file:///home/lenovo/MeasurementsDTs/Measure_plot_cpu_perf/README.md))
+archive/optimizations/         # Retired OpenVINO CPU tuning scripts (incompatible with Docker)
 Dockerfile_base                # Active HPE container image (used by monitor_hpe/ and ffmpeg_hpe/)
 Dockerfile_cpu                 # CPU-only HPE container image (used by ffmpeg_hpe_cpu/)
 archive/dockerfiles/           # Archived Dockerfile iterations and stale variants
@@ -205,8 +205,7 @@ issues.
   `reset_results()` exists but is never called.
 - `recent-dash/` uses a separate host-networked packet tracer for DASH-only
   proxy RX/TX; do not apply `ffmpeg_hpe` BCC assumptions to that rig.
-- Several root-level files (`full_shell_history.txt`, `hist.txt`, `bug.md`,
-  `*.bak`, `original.py`) are development artefacts that need cleanup.
+
 
 ---
 
@@ -240,14 +239,11 @@ cd recent-dash  && ./run_experiment.sh
 ```bash
 ./Measure_Flops/measure_flops.sh python3 main.py --method movenet --input video.mp4
 ./Measure_gpu_dcgm/run_nvidia_dcgm.sh
-./Measure_plot_cpu_perf/run_perf_plot.sh
+./Measure_plot_cpu_perf/run_perf_plot.sh  # See Measure_plot_cpu_perf/README.md for usage
 ```
 
 ### CPU optimisations
-```bash
-python3 optimizations/optimized_main.py --method openpose --input video.mp4 --device CPU --enable-cpu-opt
-```
-
+See `docs/CPU_TUNING_GUIDE.md` for instructions on how to properly tune OpenVINO threads and performance modes for the containerised rigs via `.env` files.
 ---
 
 ## Environment Setup
@@ -294,15 +290,14 @@ before the VM was lost.
 **Branch comparison (`cuda-dev` vs `perf-tuning-base`):**
 `perf-tuning-base` is a stripped-down, production-focused rewrite of
 `cuda-dev`. Key differences: removed HTTP stream byte-reader, structured
-logging, timeout/max-frames CLI args, `PoseMonitor`, `video_detection.py`.
+logging, `PoseMonitor`, `video_detection.py`.
 Added two new multi-stage Dockerfiles. Changed COCO output field
 `frame_number` → `image_id`. OpenVINO knobs hardcoded instead of env-var
 driven.
 
 **Wiki added to `perf-tuning-base`** (commits `343a114`, `5cbd7d5`,
 `362127e`): auto-generated Qoder repowiki under `.qoder/repowiki/` covering
-all major subsystems. Note: wiki describes BCC IP/port filter as active — this
-was inaccurate at time of generation (filter was disabled).
+all major subsystems. Note: wiki contains stale references to the `cuda-dev` architecture (e.g. `optimizations/` folder, `pose_monitor.py`) and needs to be regenerated in `docs/new_wiki/`.
 
 **Fixes applied** (all on `perf-tuning-base`, all pushed):
 
