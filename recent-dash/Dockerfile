@@ -9,7 +9,11 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 # VLC safely refuses to run as root. Create a non-root system user.
-RUN useradd -m vlcuser
+RUN useradd -m vlcuser && \
+    mkdir -p /tmp/vlc-runtime && \
+    chown vlcuser:vlcuser /tmp/vlc-runtime && \
+    chmod 700 /tmp/vlc-runtime
+ENV XDG_RUNTIME_DIR=/tmp/vlc-runtime
 # Switch to the non-root user
 USER vlcuser
 WORKDIR /home/vlcuser

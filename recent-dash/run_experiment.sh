@@ -11,7 +11,7 @@ if ! command -v bc &> /dev/null; then
   exit 1
 fi
 
-DASH_MANIFEST=${DASH_MANIFEST:-manifest_single.mpd}
+DASH_MANIFEST=${DASH_MANIFEST:-manifest.mpd}
 export DASH_MANIFEST
 if [ ! -f "segments/$DASH_MANIFEST" ]; then
   echo "[ERROR] Missing DASH manifest: recent-dash/segments/$DASH_MANIFEST" >&2
@@ -124,6 +124,18 @@ wait_for_trace_ready() {
   return 1
 }
 
+write_compose_env_file() {
+  cat > "$COMPOSE_ENV_FILE" <<EOF
+DASH_MANIFEST=$DASH_MANIFEST
+PROXY_PARAMS=$PROXY_PARAMS_EFFECTIVE
+DASH_SERVER_IP=$DASH_SERVER_IP
+DASH_PROXY_IP=$DASH_PROXY_IP
+DASH_CLIENT_IP=$DASH_CLIENT_IP
+DASH_PLAYER_IP=${DASH_PLAYER_IP:-172.28.0.6}
+DASH_PLAYER_SERVICE=$DASH_PLAYER_SERVICE
+EOF
+}
+
 timestamp=$(date +%Y%m%d_%H%M%S)
 cpu_model=$(lscpu | grep "Model name" | sed 's/.*: *//g' | tr -s ' ' '_' | tr -d ',()/')
 start_time=$(date +%s)
@@ -133,11 +145,14 @@ experiment_duration_seconds=${EXPERIMENT_DURATION_SECONDS:-500}
 readiness_timeout_seconds=${READINESS_TIMEOUT_SECONDS:-60}
 readiness_poll_seconds=${READINESS_POLL_SECONDS:-2}
 enable_dash_player=${ENABLE_DASH_PLAYER:-1}
+DASH_PLAYER_SERVICE=${DASH_PLAYER_SERVICE:-cvlc}
 DASH_SERVER_IP=${DASH_SERVER_IP:-172.28.0.2}
 DASH_PROXY_IP=${DASH_PROXY_IP:-172.28.0.3}
 DASH_CLIENT_IP=${DASH_CLIENT_IP:-172.28.0.4}
+DASH_PLAYER_IP=${DASH_PLAYER_IP:-172.28.0.6}
 DASH_PLAYER_URL="http://http_client/manifest.mpd"
-export DASH_SERVER_IP DASH_PROXY_IP DASH_CLIENT_IP DASH_PLAYER_URL
+PROXY_PARAMS_EFFECTIVE=${PROXY_PARAMS:--al swg -r1 8.3 -r2 3.6 -l 3000 -dl fixed -c random -s 1 -n 1000}
+export DASH_SERVER_IP DASH_PROXY_IP DASH_CLIENT_IP DASH_PLAYER_IP DASH_PLAYER_URL DASH_PLAYER_SERVICE
 
 results_dir="results_${container_type}_${cpu_model}_${timestamp}"
 mkdir -p "$results_dir/logs" "$results_dir/traces" "$results_dir/perf"
@@ -149,16 +164,18 @@ rm -f ./results/*.csv ./traces/*.csv ./traces/*.log ./traces/*.err 2>/dev/null |
 echo "Preparing results directory: $results_dir"
 
 COMPOSE_FILE="docker-compose.yml"
+COMPOSE_ENV_FILE="$results_dir/compose.env"
+write_compose_env_file
 
 echo "Stopping and removing existing containers..."
-docker compose -f "$COMPOSE_FILE" down --remove-orphans
+docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" down --remove-orphans
 
 touch "$results_dir/container_timing.txt"
 echo "Container Instantiation Timing:" > "$results_dir/container_timing.txt"
 
 main_containers_start=$(date +%s.%N)
 echo "Building and starting fresh DASH containers..."
-docker compose -f "$COMPOSE_FILE" up -d http_server http_proxy http_client
+docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d http_server http_proxy http_client
 
 SERVER_CONTAINER=$(wait_for_container "http_server")
 PROXY_CONTAINER=$(wait_for_container "http_proxy")
@@ -196,6 +213,7 @@ if [ -z "$DASH_SERVER_IP" ] || [ -z "$DASH_PROXY_IP" ] || [ -z "$DASH_CLIENT_IP"
   exit 1
 fi
 export DASH_SERVER_IP DASH_PROXY_IP DASH_CLIENT_IP
+write_compose_env_file
 echo "[DEBUG] DASH trace endpoints: server=$DASH_SERVER_IP proxy=$DASH_PROXY_IP client=$DASH_CLIENT_IP"
 echo "[DEBUG] DASH proxy URL: $PROXY_URL"
 
@@ -204,19 +222,19 @@ echo "$PROXY_PIDS" | grep -v "^1$" | sort -u > ./pids/dash.pid
 echo "[DEBUG] Updated dash.pid contents:"
 cat ./pids/dash.pid
 
-echo "[DEBUG] Building perf_monitor image..."
-docker compose -f "$COMPOSE_FILE" build perf_monitor trace_container mpv
+echo "[DEBUG] Building perf_monitor, trace_container, and DASH player images..."
+docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" build perf_monitor trace_container "$DASH_PLAYER_SERVICE"
 
 perf_monitor_start=$(date +%s.%N)
 echo "[DEBUG] Starting performance monitoring..."
-docker compose -f "$COMPOSE_FILE" up -d perf_monitor
+docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d perf_monitor
 PERF_MONITOR_CONTAINER=$(docker ps -qf "name=dash-caching-perf_monitor")
 echo "[DEBUG] perf_monitor container ID: $PERF_MONITOR_CONTAINER"
 measure_container_startup "perf_monitor" "$perf_monitor_start"
 
 trace_container_start=$(date +%s.%N)
 echo "[DEBUG] Starting trace_container..."
-docker compose -f "$COMPOSE_FILE" up -d trace_container
+docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d trace_container
 TRACE_CONTAINER=$(docker ps -qf "name=dash-caching-trace_container")
 echo "[DEBUG] trace_container container ID: $TRACE_CONTAINER"
 measure_container_startup "trace_container" "$trace_container_start"
@@ -226,20 +244,21 @@ PLAYER_CONTAINER=""
 DASH_PLAYER_IP=""
 if [ "$enable_dash_player" != "0" ]; then
   player_start=$(date +%s.%N)
-  echo "[DEBUG] Starting DASH player container..."
-  docker compose -f "$COMPOSE_FILE" up -d mpv
-  PLAYER_CONTAINER=$(wait_for_container "mpv")
-  echo "[DEBUG] mpv container ID: $PLAYER_CONTAINER"
+  echo "[DEBUG] Starting DASH player container ($DASH_PLAYER_SERVICE)..."
+  docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d "$DASH_PLAYER_SERVICE"
+  PLAYER_CONTAINER=$(wait_for_container "$DASH_PLAYER_SERVICE")
+  echo "[DEBUG] $DASH_PLAYER_SERVICE container ID: $PLAYER_CONTAINER"
   DASH_PLAYER_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$PLAYER_CONTAINER")
   if [ -z "$DASH_PLAYER_IP" ]; then
     echo "[ERROR] Could not resolve DASH player container IP." >&2
     exit 1
   fi
   export DASH_PLAYER_IP
+  write_compose_env_file
   echo "[DEBUG] DASH player IP: $DASH_PLAYER_IP"
   echo "[DEBUG] DASH player URL: $DASH_PLAYER_URL"
   echo "[DEBUG] DASH trace endpoints: server=$DASH_SERVER_IP proxy=$DASH_PROXY_IP client=$DASH_CLIENT_IP player=$DASH_PLAYER_IP"
-  measure_container_startup "mpv" "$player_start"
+  measure_container_startup "$DASH_PLAYER_SERVICE" "$player_start"
 else
   echo "[DEBUG] DASH player container disabled by ENABLE_DASH_PLAYER=0"
 fi
@@ -254,23 +273,16 @@ while [ "$elapsed" -lt "$experiment_duration_seconds" ]; do
   if [ -n "$PLAYER_CONTAINER" ]; then
     player_status=$(docker inspect -f '{{.State.Status}}' "$PLAYER_CONTAINER" 2>/dev/null || echo "unknown")
     player_restarts=$(docker inspect -f '{{.RestartCount}}' "$PLAYER_CONTAINER" 2>/dev/null || echo "?")
-    echo "[HEALTH] ${elapsed}s elapsed | mpv status=$player_status restarts=$player_restarts"
+    echo "[HEALTH] ${elapsed}s elapsed | $DASH_PLAYER_SERVICE status=$player_status restarts=$player_restarts"
   fi
 done
 echo "[DEBUG] Ending the experiment..."
-
-# Collect mpv internal playback log
-if [ -n "$PLAYER_CONTAINER" ]; then
-  echo "[DEBUG] Copying mpv internal log..."
-  docker cp "$PLAYER_CONTAINER:/tmp/mpv.log" "$results_dir/logs/mpv_internal.log" 2>/dev/null || \
-    echo "[WARNING] Could not copy mpv internal log" >&2
-fi
 
 echo "[DEBUG] Collecting performance data after experiment completion..."
 if [ -n "$PERF_MONITOR_CONTAINER" ]; then
   if docker exec "$PERF_MONITOR_CONTAINER" ls -la /output/perf_metrics.csv 2>/dev/null; then
     docker cp "$PERF_MONITOR_CONTAINER:/output/perf_metrics.csv" "$results_dir/perf/perf_metrics.csv"
-    chmod -R u+rw "$results_dir"
+    chmod -R u+rw "$results_dir" 2>/dev/null || true
     echo "Copied perf_monitor output to $results_dir/perf/perf_metrics.csv"
   else
     echo "[WARNING] Could not find perf_metrics.csv in perf_monitor container."
@@ -291,7 +303,7 @@ fi
 echo "[DEBUG] Collecting container logs..."
 containers=("http_server" "http_proxy" "http_client" "perf_monitor" "trace_container")
 if [ -n "$PLAYER_CONTAINER" ]; then
-  containers+=("mpv")
+  containers+=("$DASH_PLAYER_SERVICE")
 fi
 for container in "${containers[@]}"; do
   container_id=$(docker ps -aqf "name=dash-caching-$container")
@@ -304,7 +316,7 @@ for container in "${containers[@]}"; do
 done
 
 echo "[DEBUG] Stopping and cleaning up containers..."
-docker compose -f "$COMPOSE_FILE" down --remove-orphans
+docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" down --remove-orphans
 
 end_time=$(date +%s)
 duration=$((end_time - start_time))
@@ -317,7 +329,11 @@ DOCKER_COMPOSE_FILE="docker-compose.yml"
 
 RESOLUTIONS="Not found"
 if [ -f "$SEGMENTS_LOG" ]; then
-  RESOLUTIONS=$(cut -d',' -f2 "$SEGMENTS_LOG" 2>/dev/null | sed -n 's/^video_\([0-9]\+\).*/\1/p' | sort -u | tr '\n' ' ')
+  if head -n 1 "$SEGMENTS_LOG" | grep -q "^timestamp_ms,resolution,segment$"; then
+    RESOLUTIONS=$(awk -F',' 'NR > 1 && $2 ~ /^[0-9]+$/ {print $2}' "$SEGMENTS_LOG" 2>/dev/null | sort -n -u | tr '\n' ' ')
+  else
+    RESOLUTIONS=$(cut -d',' -f2 "$SEGMENTS_LOG" 2>/dev/null | sed -n 's/^video_\([0-9]\+\).*/\1/p' | sort -n -u | tr '\n' ' ')
+  fi
   if [ -z "$RESOLUTIONS" ]; then
     RESOLUTIONS="Not found"
   fi
@@ -325,13 +341,17 @@ fi
 
 SEGMENTS_OBSERVED="Not found"
 if [ -f "$SEGMENTS_LOG" ]; then
-  SEGMENTS_OBSERVED=$(cut -d',' -f2 "$SEGMENTS_LOG" 2>/dev/null | sort -u | tr '\n' ' ')
+  if head -n 1 "$SEGMENTS_LOG" | grep -q "^timestamp_ms,resolution,segment$"; then
+    SEGMENTS_OBSERVED=$(awk -F',' 'NR > 1 && $3 != "" {print $3}' "$SEGMENTS_LOG" 2>/dev/null | sort -u | tr '\n' ' ')
+  else
+    SEGMENTS_OBSERVED=$(cut -d',' -f2 "$SEGMENTS_LOG" 2>/dev/null | sort -u | tr '\n' ' ')
+  fi
   if [ -z "$SEGMENTS_OBSERVED" ]; then
     SEGMENTS_OBSERVED="Not found"
   fi
 fi
 
-PROXY_PARAMS_DISPLAY=${PROXY_PARAMS:--al swg -r1 8.3 -r2 3.6 -l 3000 -dl fixed -c random -s 600 -n 65}
+PROXY_PARAMS_DISPLAY=$PROXY_PARAMS_EFFECTIVE
 if [ -z "$PROXY_PARAMS_DISPLAY" ]; then
   PROXY_PARAMS_DISPLAY="Not found"
 fi
@@ -347,7 +367,7 @@ MEM_TOTAL=$(free -h | awk '/^Mem:/ {print $2}')
   echo "DASH proxy URL: $PROXY_URL"
   echo "DASH player URL: $DASH_PLAYER_URL"
   if [ -n "$PLAYER_CONTAINER" ]; then
-    echo "DASH player container: mpv"
+    echo "DASH player container: $DASH_PLAYER_SERVICE"
   else
     echo "DASH player container: disabled"
   fi
@@ -369,10 +389,10 @@ MEM_TOTAL=$(free -h | awk '/^Mem:/ {print $2}')
     echo "No container timing information available"
   fi
   echo ""
-  echo "==== DASH Resolutions Seen In Request Log ===="
+  echo "==== DASH Video Resolutions Requested By Player ===="
   echo "$RESOLUTIONS"
   echo ""
-  echo "==== DASH Segments Seen In Request Log ===="
+  echo "==== DASH Segments Requested By Player ===="
   echo "$SEGMENTS_OBSERVED"
 } > "$RESULTS_TXT"
 
