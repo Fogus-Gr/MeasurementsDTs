@@ -85,6 +85,7 @@ For detailed technical reference, see these companion documents in the `docs/` f
 | [BCC/BPF Network Tracing](docs/bcc-bpf-tracing.md) | Kernel-level network tracing architecture, BCC program internals, port detection, kernel requirements, and troubleshooting |
 | [Plotting & Data Analysis](docs/plotting-analysis.md) | All plotting scripts, input/output CSV formats, matplotlib configuration, and quick analysis commands |
 | [HPE Methods](docs/hpe-methods.md) | Class hierarchy, model architectures, model files, inference pipelines, output formats, and CLI reference |
+| [CPU Tuning Guide](docs/CPU_TUNING_GUIDE.md) | OpenVINO thread/stream tuning, cgroup-aware CPU detection, and `.env` configuration |
 
 ---
 
@@ -586,7 +587,7 @@ cd ffmpeg_hpe/
 docker compose build
 ```
 
-### Run a Benchmark
+### Run a Benchmark (GPU)
 
 ```bash
 cd ffmpeg_hpe/
@@ -610,6 +611,26 @@ HPE_DEVICE=CPU ./run_experiment_bcc.sh hrnet
 HPE_DEVICE=CPU ./run_experiment_bcc.sh ae1
 HPE_DEVICE=CPU ./run_experiment_bcc.sh ae2
 HPE_DEVICE=CPU ./run_experiment_bcc.sh ae3
+```
+
+### Run a Benchmark (CPU-only)
+
+If you don't have an NVIDIA GPU, use the `ffmpeg_hpe_cpu/` rig instead. It uses `Dockerfile_cpu` (no PyNvCodec, OpenCV fallback for video decoding):
+
+```bash
+cd ffmpeg_hpe_cpu/
+
+# Build images (one-time)
+docker compose build
+
+# MoveNet on CPU
+./run_experiment_cpu.sh movenet
+
+# AlphaPose on CPU
+./run_experiment_cpu.sh alphapose
+
+# OpenPose on CPU
+./run_experiment_cpu.sh openpose
 ```
 
 ### Configuring the Video Source
@@ -868,6 +889,17 @@ docker logs hpe
 # 4. Python import error — check conda environment
 ```
 
+### Validating a Completed Run
+
+After an experiment finishes, you can validate the collected outputs with the built-in validation script:
+
+```bash
+cd ffmpeg_hpe/
+python3 validate_run.py results_*/
+```
+
+The script checks for: expected CSV files, non-empty GPU/perf/RX data, correct BCC port detection, and HPE exit code. Returns `PASS` or `FAIL` with details.
+
 ### Stuck or Zombie Containers
 
 ```bash
@@ -916,8 +948,8 @@ bash models/AlphaPose/build_extensions.sh
 ### Python Style
 
 - Python **3.9** syntax only.
-- **4-space indentation**, Black-style formatting.
-- **Type hints** where feasible on function signatures.
+- **4-space indentation**. Match the surrounding file's style exactly.
+- **No type annotations currently in use** — do not add them unless the whole file is being refactored.
 - **Explicit imports** — no wildcard `from module import *`.
 - **Naming:** `snake_case` for files/functions/variables; `CapWords` for classes.
 - Keep CLI flags consistent: `--long-option` with hyphen-separated names.
@@ -930,18 +962,21 @@ bash models/AlphaPose/build_extensions.sh
 4. Add a test using a sample image/video in `unit_tests/`.
 5. Update `requirements.txt` with any new dependencies.
 
-### Testing
+### Verification
+
+This repo has no formal test framework — use smoke tests instead:
 
 ```bash
-# Smoke test — MoveNet on a sample image (fast, CPU)
+# HPE inference smoke test
 python3 main.py --method movenet --input unit_tests/images/testImage.jpg --save_image --device CPU
-
-# Smoke test — AlphaPose on sample images
 python3 main.py --method alphapose --input unit_tests/images/ --json --device CPU
+python3 main.py --method ae1 --input unit_tests/video/giphy.gif --save_video
 
-# Run unit tests (if any exist)
-python3 -m pytest unit_tests/
+# Experiment rig (requires Docker)
+cd ffmpeg_hpe && ./run_experiment_bcc.sh movenet
 ```
+
+No linter or type checker is configured. Mimic the style of files you modify.
 
 ### Commit Messages
 
@@ -977,7 +1012,7 @@ Refs #45
 | `evaluation` | Evaluation framework work |
 | `feat/rtsp-mediamtx-migration` | RTSP streaming migration to MediaMTX |
 | `final-merge-validation` | Merge validation and documentation updates |
-| `fix/open-issues-12-15-todos-a-e` | Fixes for known issues #12–#15 and HPE TODOs |
+| `fix/open-issues-12-15-todos-a-e` | Historical branch — issues now resolved (see AGENTS.md known issues table) |
 | `hpe-benchmark` | Dedicated HPE benchmark Docker Compose setup |
 | `refactor/video-detection-consolidation` | Video detection logic consolidation refactor |
 
