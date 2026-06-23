@@ -70,3 +70,23 @@ kretprobe:__netif_receive_skb
         + Add bitrate calculation
         + Track frame sizes
         + Monitor timing
+
+---
+
+## Interpreting CPU Utilization
+
+Docker reports CPU usage as a percentage of a single host core:
+- **100%** = 1 full host core
+- A container with `cpus: "1.75"` can use up to **175%**
+- A container with `cpus: "3.0"` can use up to **300%**
+
+The `perf_monitor` CSV column `total_cpu_percent` always represents
+percentage of **1 host core**. To calculate saturation of the container's
+CPU budget:
+
+```
+saturation_pct = reported_cpu / (container_cpu_limit × 100) × 100
+```
+
+**Example:** `perf_monitor` reports `165%` for a 3.0-CPU HPE container.
+The container is using 1.65 cores out of 3.0 (55% saturation, 45% headroom).

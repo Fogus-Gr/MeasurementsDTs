@@ -164,6 +164,24 @@ The trace output also includes `served_segments.log`, a request log with the
 segment names observed during the run. `results.txt` derives the unique
 resolution IDs from that same log.
 
+### Interpreting CPU Utilization
+
+Docker reports CPU usage as a percentage of a single host core:
+- **100%** = 1 full host core
+- A container with `cpus: "0.5"` can use up to **50%**
+- A container with `cpus: "1.0"` can use up to **100%**
+
+The `perf_monitor` CSV column `total_cpu_percent` always represents
+percentage of **1 host core**. To calculate saturation of the container's
+CPU budget:
+
+```
+saturation_pct = reported_cpu / (container_cpu_limit × 100) × 100
+```
+
+**Example:** `perf_monitor` reports `40%` for a 0.5-CPU container.
+The container is using 0.4 cores (80% of its 0.5 budget, 20% headroom).
+
 ## Result Files
 
 Each run creates:
