@@ -754,6 +754,27 @@ wc -l hpe_output/*.csv
 head -2 traces/bcc/video_rx.csv && echo "..." && tail -1 traces/bcc/video_rx.csv
 ```
 
+### Interpreting CPU Utilization
+
+Docker reports CPU usage as a percentage of a single host core:
+
+- **100%** = 1 full host core
+- A container with `cpus: "1.75"` can use up to **175%**
+- A container with `cpus: "4.0"` can use up to **400%**
+
+The `perf_monitor` CSV's `total_cpu_percent` column always represents
+percentage of **1 host core**, regardless of the container's CPU limit.
+
+**Example:** `perf_monitor` reports `110%` for a container with a `1.75` CPU limit.
+
+| What | Calculation | Result |
+|---|---|---|
+| Actual host cores used | `110 / 100` | 1.1 cores |
+| Saturation of allocated budget | `110 / 175 × 100` | 62.8% |
+| Free headroom | `(175 - 110) / 175 × 100` | 37.2% |
+
+The container is using 63% of its allowed CPU budget with 37% headroom.
+
 ---
 
 ## 11. Plotting & Visualization

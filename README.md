@@ -390,6 +390,24 @@ cd recent-dash && ./run_experiment.sh
 
 Not an experiment itself — the reusable streaming server consumed by `ffmpeg_hpe/`. A Python script (`direct_stream_server.py`) uses FFmpeg to transcode a video file and serve it over HTTP as a raw H.264 stream. Includes a `Makefile` and Windows PowerShell scripts (`build.ps1`, `validate.ps1`) for cross-platform use.
 
+### Interpreting CPU Utilization
+
+Docker reports CPU usage as a percentage of a single host core:
+- **100%** = 1 full host core
+- A container with `cpus: "1.75"` can use up to **175%**
+- A container with `cpus: "4.0"` can use up to **400%**
+
+The `perf_monitor` CSV column `total_cpu_percent` always represents
+percentage of **1 host core**. To calculate saturation of the container's
+CPU budget:
+
+```
+saturation_pct = reported_cpu / (container_cpu_limit × 100) × 100
+```
+
+**Example:** `perf_monitor` reports `110%` for a 1.75-CPU container.
+The container is using 1.1 cores (63% of its 1.75 budget, 37% headroom).
+
 ### Standalone Measurement Tools
 
 | Script | What it measures | Method |

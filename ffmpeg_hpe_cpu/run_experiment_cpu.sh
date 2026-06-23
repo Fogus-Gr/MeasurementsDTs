@@ -286,7 +286,7 @@ if [ -n "$TRACE_CONTAINER" ]; then
   echo "[DEBUG] Copied BCC trace data (or skipped if not present)"
   docker cp "$TRACE_CONTAINER:/opt/tracer/output/logs" "$results_dir/traces/bcc/" 2>/dev/null || true
   echo "[DEBUG] Copied BCC logs (or skipped)"
-  docker logs "$TRACE_CONTAINER" 2>&1 | grep "Detected HPE video port" > "$results_dir/traces/bcc/port_info.txt" 2>/dev/null || true
+  docker logs "$TRACE_CONTAINER" 2>&1 | grep "Monitoring HPE traffic on port" > "$results_dir/traces/bcc/port_info.txt" 2>/dev/null || true
   echo "[DEBUG] Extracted port info (or skipped)"
 fi
 
