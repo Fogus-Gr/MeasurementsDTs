@@ -119,7 +119,7 @@ The top-level folders fall into three categories:
 | `Measure_Flops/` | GPU FLOPS measurement via Nsight Compute |
 | `Measure_gpu_dcgm/` | GPU power/temp/util via nvidia-smi (standalone, no compose) |
 | `Measure_plot_cpu_perf/` | CPU cycles via `perf stat` (see [README](file:///home/lenovo/MeasurementsDTs/Measure_plot_cpu_perf/README.md)) |
-| `optimizations/` | OpenVINO CPU thread/stream tuning scripts |
+| `archive/optimizations/` | Retired OpenVINO CPU tuning scripts (incompatible with Docker) |
 | `dev_tools/` | Local MJPEG stream server for manual testing |
 
 ```
@@ -131,6 +131,8 @@ MeasurementsDTs/
 ├── base_hpe.py                    # Abstract base class for all HPE method implementations
 ├── setup.py                       # Cython/CUDA extension build for AlphaPose
 ├── requirements.txt               # Full Python dependency list (pinned versions)
+├── generate_wiki.py               # Generate multi-page HTML wiki from repowiki content
+├── generate_single_wiki.py        # Generate single-page HTML wiki from repowiki content
 │
 ├── utils/
 │   ├── visualizer.py              # Keypoint drawing and annotation
@@ -186,10 +188,12 @@ MeasurementsDTs/
 │   ├── images/                    # Sample test images (testImage.jpg, etc.)
 │   └── video/                     # Sample test video (giphy.gif)
 │
-├── optimizations/                 # Performance optimization experiments
-│   ├── cpu_performance_optimizer.py
-│   ├── enhanced_openvino_hpe.py
-│   └── optimized_main.py
+├── archive/                       # Retired/archived scripts
+│   ├── dockerfiles/               # Archived Dockerfile iterations
+│   └── optimizations/             # Retired OpenVINO CPU tuning scripts (incompatible with Docker)
+│       ├── cpu_performance_optimizer.py
+│       ├── enhanced_openvino_hpe.py
+│       └── optimized_main.py
 │
 ├── rtsp-ipcam/                    # NGINX RTSP proxy / H.264 HTTP streaming server
 │   ├── Dockerfile

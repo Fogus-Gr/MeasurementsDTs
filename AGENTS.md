@@ -20,39 +20,64 @@ network bandwidth — under realistic streaming conditions.
 
 ## Repository Layout
 
-```
-main.py                        # HPE CLI entry point
-base_hpe.py                    # Abstract base class (BaseHPE) + Body/Padding types
-openvino_base_hpe.py           # OpenVINO backend (OpenPose, HigherHRNet, EfficientHRNet)
-movenet_hpe.py                 # MoveNet backend (OpenVINO runtime, CPU only)
-alphapose_hpe.py               # AlphaPose backend (PyTorch + YOLO detector)
-utils/
-  export_pose_results.py       # COCO JSON/CSV serialisation + Tx bandwidth measurement
-  visualizer.py                # OpenCV skeleton/keypoint rendering
-models/
-  AlphaPose/                   # AlphaPose source + Cython extensions (built via setup.py)
-  MoveNet/                     # OpenVINO IR model files (not committed — see README)
-  OpenVINO/                    # OpenVINO model_api + IR model files (not committed)
-dev_tools/
-  stream_video_server.py       # Flask MJPEG server for local IP-stream testing
-unit_tests/
-  images/                      # Sample images for manual smoke tests
-  video/                       # Sample GIF for video/stream tests
-
-# Benchmarking platform (this branch)
-monitor_hpe/                   # Rig 1: baseline CPU monitoring (no streaming server)
-ffmpeg_hpe/                    # Rig 2: H.264 stream + full monitoring stack (GPU)
-ffmpeg_hpe_cpu/                # Rig 2b: CPU-only H.264 stream + monitoring (no GPU required)
-recent-dash/                   # Rig 3: DASH/HTTP caching experiment (separate research thread)
-rtsp-ipcam/                    # Shared H.264 streaming server used by ffmpeg_hpe/ and ffmpeg_hpe_cpu/
-Measure_Flops/                 # Standalone: GPU FLOPS via Nsight Compute
-Measure_gpu_dcgm/              # Standalone: GPU power/temp/util via nvidia-smi
-Measure_plot_cpu_perf/         # Standalone: CPU cycles via perf stat (see [README](file:///home/lenovo/MeasurementsDTs/Measure_plot_cpu_perf/README.md))
-archive/optimizations/         # Retired OpenVINO CPU tuning scripts (incompatible with Docker)
-Dockerfile_base                # Active HPE container image (used by monitor_hpe/ and ffmpeg_hpe/)
-Dockerfile_cpu                 # CPU-only HPE container image (used by ffmpeg_hpe_cpu/)
-archive/dockerfiles/           # Archived Dockerfile iterations and stale variants
-docker-compose.yml             # GPU observability stack (DCGM + Prometheus + Grafana)
+```                                                                            
+MeasurementsDTs/
+├── main.py                     # HPE CLI entry point
+├── base_hpe.py                 # Abstract base class + Body/Padding types
+├── openvino_base_hpe.py        # OpenVINO backend (OpenPose, HigherHRNet, EfficientHRNet)
+├── movenet_hpe.py              # MoveNet backend
+├── alphapose_hpe.py            # AlphaPose backend (PyTorch + YOLO detector)
+├── build_ffmpeg_cuda.sh        # Build FFmpeg with NVIDIA CUDA support
+├── requirements.txt            # Pinned Python dependencies
+├── AGENTS.md                   # This file — agent guidance
+├── generate_wiki.py            # Multi-page HTML wiki generator
+├── generate_single_wiki.py     # Single-page HTML wiki generator
+│
+├── utils/
+│   ├── export_pose_results.py  # COCO JSON/CSV serialisation + Tx measurement
+│   └── visualizer.py           # OpenCV skeleton/keypoint rendering
+├── models/
+│   ├── AlphaPose/              # AlphaPose source + Cython extensions
+│   ├── MoveNet/                # OpenVINO IR model files (not committed)
+│   └── OpenVINO/               # OpenVINO model_api + IR models (not committed)
+├── docs/                       # Deep-dive documentation
+│   ├── ONBOARDING.md           # Newcomer onboarding guide
+│   ├── CPU_TUNING_GUIDE.md     # OpenVINO thread/stream tuning
+│   ├── docker-services.md      # Dockerfile & compose reference
+│   ├── experiment-scripts.md   # Experiment script flow
+│   ├── bcc-bpf-tracing.md      # BPF network tracing internals
+│   ├── plotting-analysis.md    # Plotting scripts & CSV formats
+│   └── hpe-methods.md          # HPE class hierarchy & models
+├── dev_tools/
+│   └── stream_video_server.py  # Flask MJPEG server for IP-stream testing
+├── unit_tests/
+│   ├── images/                 # Sample images for smoke tests
+│   └── video/                  # Sample GIF for video/stream tests
+│
+├── # Experiment rigs
+├── monitor_hpe/                # Rig 1: baseline CPU monitoring
+├── ffmpeg_hpe/                 # Rig 2: H.264 stream + GPU monitoring stack
+├── ffmpeg_hpe_cpu/             # Rig 2b: CPU-only H.264 stream + monitoring
+├── recent-dash/                # Rig 3: DASH/HTTP caching experiment
+│
+├── # Service implementations
+├── rtsp-ipcam/                 # H.264 streaming server (used by ffmpeg_hpe/)
+├── shared/perf_monitor/        # perf_monitor sidecar container
+├── ffmpeg_hpe/bpftrace-tracer/ # BCC eBPF network tracer
+├── ffmpeg_hpe/Dockerfile.gpu_metrics  # GPU metrics sidecar image
+│
+├── # Standalone tools
+├── Measure_Flops/              # GPU FLOPS via Nsight Compute
+├── Measure_gpu_dcgm/           # GPU power/temp/util via nvidia-smi
+├── Measure_plot_cpu_perf/      # CPU cycles via perf stat
+│
+├── archive/
+│   ├── optimizations/          # Retired OpenVINO CPU tuning scripts
+│   └── dockerfiles/            # Archived Dockerfile iterations
+│
+├── Dockerfile_base             # Active HPE container image (GPU)
+├── Dockerfile_cpu              # CPU-only HPE container image
+└── docker-compose.yml          # GPU observability stack (DCGM + Prometheus + Grafana)
 ```
 
 ---
@@ -118,6 +143,31 @@ Results directories are always timestamped so runs never overwrite each other.
    start sidecars -> wait -> collect -> teardown).
 3. Write results to a timestamped subdirectory.
 4. Document the rig in `README.md` under "Experiment Rigs".
+
+### Deep-Dive Docs
+Refer to `docs/` for detailed subsystem reference:
+- `ONBOARDING.md` — full project walkthrough
+- `docker-services.md` — Dockerfile & compose reference
+- `experiment-scripts.md` — experiment script flow
+- `bcc-bpf-tracing.md` — BPF tracing internals
+- `plotting-analysis.md` — plot scripts & CSV formats
+- `hpe-methods.md` — HPE class hierarchy & models
+- `CPU_TUNING_GUIDE.md` — OpenVINO thread/stream tuning
+
+### Verification
+After making changes, run the relevant checks. This repo has no formal test
+framework — use smoke tests instead:
+```bash
+# HPE inference smoke test
+python3 main.py --method movenet --input unit_tests/images/testImage.jpg --save_image --device CPU
+python3 main.py --method alphapose --input unit_tests/images/ --json --device CPU
+python3 main.py --method ae1 --input unit_tests/video/giphy.gif --save_video
+
+# Experiment rig (requires Docker)
+cd ffmpeg_hpe && ./run_experiment_bcc.sh movenet
+```
+
+No linter or type checker is configured. Mimic the style of files you modify.
 
 ### Model Files
 Model weights are **not committed**. Listed in `.gitignore`. Never commit
@@ -188,7 +238,7 @@ issues.
 | 12 | Both `monitor_pid.sh` files | `netif_receive_skb` bpftrace PID filter fires in softirq context — RX bytes always ~0 | ⚠️ Open — use `bcc-tracer` for accurate RX |
 | 13 | `monitor_hpe/plot_graph.py` | Calls `plt.show()` — blocks in headless containers | ⚠️ Open |
 | 14 | `ffmpeg_hpe/plot_graph.py` | Headless-safe CPU/memory plot helper for `perf_metrics.csv` and legacy `pid_metrics.csv` | ✅ Implemented |
-| 15 | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | ⚠️ Open |
+| 15 | `rtsp-ipcam/docker-compose.yml` | Volume mount hardcoded to `/home/user/MeasurementsDTs/videos/...` | ✅ Fixed (`09d4d71`) — changed to relative `../videos/` |
 | 16 | `ffmpeg_hpe/run_experiment_bcc.sh` + `shared/perf_monitor/` | Host-PID monitor consumed a container-namespace PID, producing near-zero CPU and tiny memory for active HPE runs | ✅ Fixed — BCC rig now writes the host PID from `docker inspect` and measures the HPE process directly |
 | 17 | `ffmpeg_hpe/validate_run.py` | `bcc_port_detection` regex only matched old log-grep format `"Monitoring HPE traffic on port"`, but `run_experiment_bcc.sh` writes `"BCC detected HPE video port:"` when `$detected_port` is set — caused spurious FAIL on every BCC run | ✅ Fixed — regex now accepts both formats |
 
@@ -308,3 +358,7 @@ all major subsystems. Note: wiki contains stale references to the `cuda-dev` arc
 | `b6a9fd2` | Replace `pidstat 1 1` (blocks 1s) with `/proc/$PID/stat` delta — preserves 500ms sampling cadence |
 | `3c006cf` | Fix `run_experiment.sh` result collection: correct filenames for bcc-tracer and perf_monitor output, add HPE output copy step, guard `docker exec` calls against `set -e` |
 | `7493830` | Expand README: newcomer orientation, experiment rigs table, known issues table |
+| `aa9fc36` | Improve ffmpeg_hpe plot scripts: add markers, datetime formatting |
+| `09d4d71` | Fix rtsp-ipcam volume mount: hardcoded absolute → relative |
+| `ee014d5` | Add Measure_plot_cpu_perf README |
+| `fee2ed4` | Update root-level docs and scripts: gcc-9→gcc, drop use_pooled_heatmaps, add wiki generators |
