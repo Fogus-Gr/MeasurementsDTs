@@ -34,6 +34,30 @@ recent-dash/segments/manifest.mpd
 `recent-dash/segments/.gitkeep` is tracked only to preserve the restore
 location after clone or migration. Do not commit the actual segment files.
 
+The default run uses the restored asset file `manifest.mpd`, which exposes all
+available video representations from 360p through 2160p plus audio. This is the
+unrestricted full-MPD path: the player sees every representation, and its own
+DASH adaptive bitrate logic decides which representation to request.
+
+Fixed-resolution single-representation manifests are also available for
+controlled tests:
+
+```bash
+DASH_MANIFEST=manifest_single.mpd ./run_experiment.sh
+DASH_MANIFEST=manifest_1080.mpd ./run_experiment.sh
+DASH_MANIFEST=manifest_1440.mpd ./run_experiment.sh
+DASH_MANIFEST=manifest_2160.mpd ./run_experiment.sh
+```
+
+These fixed manifests are intentionally separate from the full-MPD run. They
+remove the multi-representation choice from the player, so a
+`DASH_MANIFEST=manifest_2160.mpd` run proves the "specific resolution without
+multi-representation ABR" path: the player can only request 2160p video
+segments because that is the only video representation in the MPD. It does not
+prove that the player's ABR selected 2160p from the unrestricted full MPD; that
+is validated by a separate `DASH_MANIFEST=manifest.mpd` run and the resolutions
+observed in `served_segments.log`.
+
 ## Services
 
 `docker-compose.yml` starts six services:
@@ -41,11 +65,60 @@ location after clone or migration. Do not commit the actual segment files.
 | Service | Purpose |
 |---|---|
 | `http_server` | Origin HTTP server for DASH content. |
-| `http_proxy` | DASH caching/ABR proxy under measurement. |
+| `http_proxy` | DASH caching proxy under measurement. |
 | `http_client` | Player-facing HTTP endpoint that exposes the DASH manifest. |
-| `mpv` | Headless DASH player container that fetches the manifest from `http_client` and drives traffic. |
+| `cvlc` | Headless VLC DASH player container that fetches the manifest from `http_client` and drives traffic. |
 | `perf_monitor` | Reads proxy PIDs from `./pids/dash.pid` and writes CPU/RSS samples to `perf_metrics.csv`. |
 | `trace_container` | Captures DASH-only TCP payload bytes and writes `trace.csv`. |
+
+## ABR and Container Flow
+
+ABR means adaptive bitrate streaming. In DASH, the MPD can advertise multiple
+representations of the same content, such as 360p, 720p, 1080p, 1440p, and
+2160p. A DASH player chooses which representation to request based on its
+buffer, network throughput, decoding capacity, and its own selection rules. In
+this rig, ABR decisions are made by the player (`cvlc`), not by
+`http_proxy`, `http_client`, or `trace_container`.
+
+The request path is:
+
+```text
+cvlc -> http_client -> http_proxy -> http_server
+```
+
+The involved containers are:
+
+- `cvlc`: fetches `http://http_client/manifest.mpd` and requests media
+  segments. This is the component that performs DASH representation selection
+  when the MPD contains multiple representations.
+- `http_client`: exposes the active MPD to the player. It should mount only the
+  selected MPD file, not the full segment tree, so segment requests still flow
+  through the proxy path.
+- `http_proxy`: the caching/proxy component under measurement. Its
+  `SERVICE_ADDITIONAL_PARAMETERS` configure proxy behavior, not the player
+  resolution.
+- `http_server`: origin server for the DASH segment files.
+- `trace_container`: observes traffic and writes `trace.csv` plus
+  `served_segments.log`; it does not choose or serve resolutions.
+- `perf_monitor`: samples CPU and memory for the proxy PIDs listed in
+  `./pids/dash.pid`.
+
+For the unrestricted ABR experiment, use the full MPD:
+
+```bash
+DASH_MANIFEST=manifest.mpd ./run_experiment.sh
+```
+
+For a fixed-resolution control run, use one of the single-representation MPDs:
+
+```bash
+DASH_MANIFEST=manifest_2160.mpd ./run_experiment.sh
+```
+
+Interpretation is different for the two cases. A full-MPD run answers "which
+resolutions did the player request when all options were available?" A
+fixed-resolution run answers "does the rig correctly drive and measure one
+specific representation without multi-representation ABR?"
 
 ## Run
 
@@ -59,6 +132,17 @@ The default run duration is 500 seconds. Override it with:
 ```bash
 EXPERIMENT_DURATION_SECONDS=120 ./run_experiment.sh
 ```
+
+Choose the active MPD with `DASH_MANIFEST`:
+
+```bash
+DASH_MANIFEST=manifest.mpd EXPERIMENT_DURATION_SECONDS=660 ./run_experiment.sh
+DASH_MANIFEST=manifest_2160.mpd EXPERIMENT_DURATION_SECONDS=120 ./run_experiment.sh
+```
+
+The runner writes the effective Compose environment into each result directory
+as `compose.env`, which is useful when validating that overrides reached Docker
+Compose.
 
 Readiness checks wait up to 60 seconds by default and poll every 2 seconds:
 
@@ -76,7 +160,8 @@ Optional first argument changes the result-directory label:
 
 The runner performs one complete experiment lifecycle:
 
-1. Checks host prerequisites and verifies `segments/manifest.mpd` exists.
+1. Checks host prerequisites and verifies the active `segments/$DASH_MANIFEST`
+   file exists.
 2. Creates a timestamped result directory.
 3. Cleans previous transient CSV files from local output folders.
 4. Runs `docker compose down --remove-orphans`.
@@ -85,8 +170,9 @@ The runner performs one complete experiment lifecycle:
 7. Detects proxy host PIDs and writes `./pids/dash.pid`.
 8. Resolves Docker-network IPs for server, proxy, and client.
 9. Starts `perf_monitor`.
-10. Starts the containerized `mpv` player unless `ENABLE_DASH_PLAYER=0`.
-11. Resolves the player container IP, starts `trace_container`, and records `proxy -> http_client` traffic.
+10. Starts the containerized `cvlc` player unless `ENABLE_DASH_PLAYER=0`.
+11. Resolves the player container IP, starts `trace_container`, and records
+    proxy byte traffic plus player-requested segment names.
 12. Prints the proxy URL and player URL.
 13. Sleeps for `EXPERIMENT_DURATION_SECONDS`.
 14. Copies CSVs and logs into the timestamped result directory.
@@ -105,10 +191,14 @@ player to fetch the manifest from `http_client` and the media segments through
 
 Use one of these:
 
-- Let the default containerized `mpv` service fetch the manifest and segments
+- Let the default containerized `cvlc` service fetch the manifest and segments
   from `http_client`.
 - Set `ENABLE_DASH_PLAYER=0` if you want to use a host player against
   `http://localhost:8881/manifest.mpd`.
+
+The proxy's `-n` parameter is a request-count termination limit, not a
+resolution selector. Keep it comfortably above the number of manifest, init,
+audio, and video requests expected for a run; the default is `-n 1000`.
 
 ## DASH-Only Network Tracing
 
@@ -161,8 +251,13 @@ the environment.
 | `PERF_MONITOR_INTERVAL_SECONDS` | `0.5` | Sampling interval for `/proc` CPU deltas. |
 
 The trace output also includes `served_segments.log`, a request log with the
-segment names observed during the run. `results.txt` derives the unique
-resolution IDs from that same log.
+player-requested segment names and explicit resolution IDs:
+
+```text
+timestamp_ms,resolution,segment
+```
+
+`results.txt` derives the unique video resolution IDs from that same log.
 
 ### Interpreting CPU Utilization
 
@@ -198,8 +293,8 @@ results_<label>_<cpu_model>_<timestamp>/
   results.txt
 ```
 
-If you disable the containerized player, open the printed URL in VLC, `mpv`,
-or another DASH-capable player:
+If you disable the containerized player, open the printed URL in VLC or another
+DASH-capable player:
 
 ```text
 http://localhost:8881/manifest.mpd

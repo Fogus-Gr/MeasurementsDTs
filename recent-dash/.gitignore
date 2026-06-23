@@ -1,6 +1,10 @@
 /.DS_Store
 segments/*
 !segments/.gitkeep
+!segments/manifest_single.mpd
+!segments/manifest_1080.mpd
+!segments/manifest_1440.mpd
+!segments/manifest_2160.mpd
 captures/
 pids/
 traces/
