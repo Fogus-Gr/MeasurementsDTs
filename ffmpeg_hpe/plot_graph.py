@@ -28,13 +28,13 @@ def plot_metrics(csv_file):
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 9), sharex=True)
 
-    ax1.plot(df["timestamp"], df[cpu_col], label="CPU")
+    ax1.plot(df["timestamp"], df[cpu_col], label="CPU", marker='.')
     ax1.set_title("CPU Usage Over Time")
     ax1.set_ylabel("CPU (%)")
     ax1.grid(True)
     ax1.legend()
 
-    ax2.plot(df["timestamp"], df[mem_col] / 1024, label="Memory")
+    ax2.plot(df["timestamp"], df[mem_col] / 1024, label="Memory", marker='.')
     ax2.set_title("Memory Usage Over Time")
     ax2.set_ylabel("Memory (MB)")
     ax2.grid(True)
